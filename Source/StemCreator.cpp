@@ -35,13 +35,13 @@ juce::File StemCreator::venv() const
 	return venvFolder;
 }
 
-int StemCreator::add (const juce::File& input, const juce::String& artist, const juce::String& album, const juce::String& track)
+int StemCreator::add (const juce::File& input, const juce::String& folder, const juce::String& track)
 {
 	int id = 0;
 	{
 		std::lock_guard<std::mutex> guard (lock);
 		lastError.clear();
-		id = queue.add (input.getFullPathName().toStdString(), artist.toStdString(), album.toStdString(), track.toStdString());
+		id = queue.add (input.getFullPathName().toStdString(), folder.toStdString(), track.toStdString());
 	}
 	wake.signal();
 	return id;
@@ -164,7 +164,7 @@ bool StemCreator::runJob (const StemJobEntry& job, juce::String& error)
 				   separateEnvironment (fast), onLine, error))
 		return cleanUp(), false;
 
-	const auto plan = planStemJob (library.getFullPathName().toStdString(), job.artist, job.album, job.track,
+	const auto plan = planStemJob (library.getFullPathName().toStdString(), job.folder, job.track,
 								   input.getFileName().toStdString(),
 								   [] (const std::string& path) { return juce::File (path).exists(); });
 
@@ -184,7 +184,7 @@ bool StemCreator::runJob (const StemJobEntry& job, juce::String& error)
 	}
 
 	// The original first: the copy is the slow part (a stick, a big FLAC), and
-	// a cancel during it must still leave the album untouched.
+	// a cancel during it must still leave the folder untouched.
 	const juce::File original (plan.originalPath);
 	original.getParentDirectory().createDirectory();
 	if (! input.copyFileTo (original))

@@ -30,7 +30,8 @@ public:
 	juce::File venv() const;
 	bool isInstalled() const { return venv().getChildFile ("bin/demucs").existsAsFile(); }
 
-	int add (const juce::File& input, const juce::String& artist, const juce::String& album, const juce::String& track);
+	// `folder`: the target, relative to the library (StemJob.h).
+	int add (const juce::File& input, const juce::String& folder, const juce::String& track);
 	void cancel (int id);
 	void cancelRunning();
 

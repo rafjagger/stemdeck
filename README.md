@@ -109,9 +109,11 @@ box filters as you type. Load a set with the **Laden in A / B** buttons, by doub
 ### Creating stems from stereo files
 
 Drop stereo files, or a whole folder, on the library, or press **Stems erstellen…**. FLAC, WAV,
-MP3, AIFF, OGG, M4A and Opus work. StemDeck asks once for artist and album (preset from the
-folders the files lie in: `…/Artist/Album/track.flac`); files dropped from several folders keep
-the artist and album of their own folder, without a question. Each track becomes a set:
+MP3, AIFF, OGG, M4A and Opus work. StemDeck asks once for the whole batch: the **target
+folder**, relative to the library — typed (`Artist/Album`) or picked with **Durchsuchen…**, and
+empty for the library folder itself. It is preset from where the files lie: `Artist/Album` for
+`…/Artist/Album/*.flac`, only `Artist` when they come from several of its albums. Every track
+of the batch lands in that one folder and becomes a set:
 
 ```
 stems/Artist/Album/Title - 1 - drums.flac

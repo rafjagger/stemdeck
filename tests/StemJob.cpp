@@ -30,10 +30,10 @@ namespace
 
 // ── The layout ──────────────────────────────────────────────────────────
 
-TEST (StemJob, AJobLandsInArtistAlbum)
+TEST (StemJob, AJobLandsInItsTargetFolder)
 {
-	const auto plan = planStemJob ("/lib", "Burial", "Untrue", "Archangel", "Archangel.flac", nothingExists);
-	EXPECT_EQ (plan.albumFolder, "/lib/Burial/Untrue");
+	const auto plan = planStemJob ("/lib", "Burial/Untrue", "Archangel", "Archangel.flac", nothingExists);
+	EXPECT_EQ (plan.folder, "/lib/Burial/Untrue");
 	EXPECT_EQ (plan.track, "Archangel");
 	EXPECT_EQ (plan.stemPaths[0], "/lib/Burial/Untrue/Archangel - 1 - drums.flac");
 	EXPECT_EQ (plan.stemPaths[3], "/lib/Burial/Untrue/Archangel - 4 - vocals.flac");
@@ -44,17 +44,38 @@ TEST (StemJob, AJobLandsInArtistAlbum)
 TEST (StemJob, ATakenTrackNameGetsANumber)
 {
 	const std::set<std::string> taken { "/lib/A/B/Intro - 1 - drums.flac", "/lib/A/B/Intro (2) - 1 - drums.flac" };
-	const auto plan = planStemJob ("/lib", "A", "B", "Intro", "intro.mp3",
+	const auto plan = planStemJob ("/lib", "A/B", "Intro", "intro.mp3",
 								   [&taken] (const std::string& p) { return taken.count (p) > 0; });
 	EXPECT_EQ (plan.track, "Intro (3)");
 	EXPECT_EQ (plan.originalPath, "/lib/A/B/originals/Intro (3).mp3");
 }
 
-TEST (StemJob, NoArtistOrAlbumIsUnknown)
+TEST (StemJob, NoTargetFolderIsTheLibraryItself)
 {
-	const auto plan = planStemJob ("/lib", "", " ", "Track/1", "t.wav", nothingExists);
-	EXPECT_EQ (plan.albumFolder, "/lib/Unknown Artist/Unknown Album");
+	const auto plan = planStemJob ("/lib", " ", "Track/1", "t.wav", nothingExists);
+	EXPECT_EQ (plan.folder, "/lib");
 	EXPECT_EQ (plan.track, "Track_1");
+	EXPECT_EQ (plan.originalPath, "/lib/originals/Track_1.wav");
+}
+
+TEST (StemJob, ATypedFolderStaysInsideTheLibrary)
+{
+	EXPECT_EQ (sanitiseFolder ("Burial/Untrue"), "Burial/Untrue");
+	EXPECT_EQ (sanitiseFolder ("/Burial//Untrue/"), "Burial/Untrue");
+	EXPECT_EQ (sanitiseFolder ("../../etc"), "etc");
+	EXPECT_EQ (sanitiseFolder ("A\\B"), "A/B");
+	EXPECT_EQ (sanitiseFolder ("  "), "");
+	EXPECT_EQ (planStemJob ("/lib", "../x", "t", "t.flac", nothingExists).folder, "/lib/x");
+}
+
+TEST (StemJob, TheSuggestedFolderIsArtistAlbumOfOneFolder)
+{
+	EXPECT_EQ (suggestTargetFolder ({ "/music/Burial/Untrue/1.flac", "/music/Burial/Untrue/2.flac" }), "Burial/Untrue");
+	EXPECT_EQ (suggestTargetFolder ({ "/music/Burial/Untrue/1.flac", "/music/Burial/Rival/2.flac" }), "Burial")
+		<< "several albums: only the artist they share";
+	EXPECT_EQ (suggestTargetFolder ({ "/a/1.flac", "/b/2.flac" }), "");
+	EXPECT_EQ (suggestTargetFolder ({ "/Untrue/1.flac" }), "Untrue");
+	EXPECT_EQ (suggestTargetFolder ({}), "");
 }
 
 TEST (StemJob, StemsKeepTheOriginalsFormatWhereItPlays)
@@ -66,7 +87,7 @@ TEST (StemJob, StemsKeepTheOriginalsFormatWhereItPlays)
 	EXPECT_EQ (stemExtensionFor ("a.mp3"), "flac") << "JUCE here reads no MP3";
 	EXPECT_EQ (stemExtensionFor ("a.m4a"), "flac");
 	EXPECT_EQ (stemExtensionFor ("a.opus"), "flac");
-	EXPECT_EQ (planStemJob ("/lib", "A", "B", "t", "t.wav", nothingExists).stemPaths[1], "/lib/A/B/t - 2 - bass.wav");
+	EXPECT_EQ (planStemJob ("/lib", "A/B", "t", "t.wav", nothingExists).stemPaths[1], "/lib/A/B/t - 2 - bass.wav");
 }
 
 // ── The command lines ───────────────────────────────────────────────────
@@ -131,8 +152,8 @@ TEST (StemJob, OtherLinesAreNoProgress)
 TEST (StemJob, JobsRunOneAtATimeInOrder)
 {
 	StemJobQueue q;
-	const auto a = q.add ("a.flac", "A", "B", "a");
-	const auto b = q.add ("b.flac", "A", "B", "b");
+	const auto a = q.add ("a.flac", "A/B", "a");
+	const auto b = q.add ("b.flac", "A/B", "b");
 	EXPECT_EQ (q.startNext(), a);
 	EXPECT_FALSE (q.startNext().has_value()) << "one at a time";
 	q.finished (a, true, "");
@@ -143,8 +164,8 @@ TEST (StemJob, JobsRunOneAtATimeInOrder)
 TEST (StemJob, AFailureDoesNotStopTheNext)
 {
 	StemJobQueue q;
-	const auto a = q.add ("a.xyz", "A", "B", "a");
-	const auto b = q.add ("b.flac", "A", "B", "b");
+	const auto a = q.add ("a.xyz", "A/B", "a");
+	const auto b = q.add ("b.flac", "A/B", "b");
 	q.startNext();
 	q.finished (a, false, "ffmpeg: Invalid data found when processing input");
 	EXPECT_EQ (q.find (a)->state, JobState::failed);
@@ -155,8 +176,8 @@ TEST (StemJob, AFailureDoesNotStopTheNext)
 TEST (StemJob, CancellingAWaitingJobRemovesIt)
 {
 	StemJobQueue q;
-	q.add ("a.flac", "A", "B", "a");
-	const auto b = q.add ("b.flac", "A", "B", "b");
+	q.add ("a.flac", "A/B", "a");
+	const auto b = q.add ("b.flac", "A/B", "b");
 	q.startNext();
 	EXPECT_EQ (q.cancel (b), StemJobQueue::Cancel::removed);
 	EXPECT_EQ (q.find (b), nullptr);
@@ -165,7 +186,7 @@ TEST (StemJob, CancellingAWaitingJobRemovesIt)
 TEST (StemJob, CancellingTheRunningJobKillsItOnce)
 {
 	StemJobQueue q;
-	const auto a = q.add ("a.flac", "A", "B", "a");
+	const auto a = q.add ("a.flac", "A/B", "a");
 	q.startNext();
 	EXPECT_EQ (q.cancel (a), StemJobQueue::Cancel::kill);
 	EXPECT_EQ (q.find (a)->state, JobState::cancelled);
@@ -181,7 +202,8 @@ TEST (StemJob, TheTypicalFormatsAreAccepted)
 
 TEST (StemJob, OtherFilesAndStemsAreNot)
 {
-	for (const auto* name : { "cover.jpg", "notes.txt", "flac", "Title - 1.drums.wav", "Title - 4.vocals.flac" })
+	for (const auto* name : { "cover.jpg", "notes.txt", "flac", "Title - 1.drums.wav", "Title - 4.vocals.flac",
+							   "Title - 1 - drums.flac", "A - B - 3 - other.ogg" })
 		EXPECT_FALSE (isSeparableAudioFile (name)) << name;
 }
 

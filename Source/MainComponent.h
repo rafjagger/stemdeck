@@ -70,6 +70,7 @@ private:
 	void changeListenerCallback (juce::ChangeBroadcaster*) override;
 	void timerCallback() override;
 	void createStems (const juce::Array<juce::File>& files);
+	void askTargetFolder (const juce::Array<juce::File>& files, const juce::String& preset);
 	void updateCreatorStatus();
 	void updateDeviceStatus();
 	void showAudioSettings();
@@ -97,6 +98,7 @@ private:
 	StemLibrary library { formatManager };
 	StemCreator stemCreator;
 	std::unique_ptr<juce::AlertWindow> stemDialog;
+	std::unique_ptr<juce::FileChooser> folderChooser;
 
 	std::array<StemThumbnails*, numDecks> thumbs { &thumbsA, &thumbsB };
 	std::array<ScrollingWaveform*, numDecks> waves { &waveA, &waveB };

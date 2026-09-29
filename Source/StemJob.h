@@ -10,12 +10,13 @@
 // files go, the command lines it runs, the progress it reports and the queue
 // it waits in. StemCreator (JUCE) runs what these say.
 
-// Where one separated track lands:
-//   <library>/<Artist>/<Album>/<Track> - 1.drums.wav .. 4.vocals.wav
-//   <library>/<Artist>/<Album>/originals/<Track>.<original's extension>
+// Where one separated track lands, in the target folder chosen for the batch
+// (relative to the library, usually Artist/Album):
+//   <library>/<folder>/<Track> - 1 - drums.<ext> .. - 4 - vocals.<ext>
+//   <library>/<folder>/originals/<Track>.<original's extension>
 struct StemJobPlan
 {
-	std::string albumFolder;
+	std::string folder;                   // absolute
 	std::string track;                    // after sanitising and "(2)" if taken
 	std::array<std::string, 4> stemPaths; // bus order: drums, bass, other, vocals
 	std::string stemExtension;            // "flac", "wav", ... (stemExtensionFor)
@@ -23,8 +24,7 @@ struct StemJobPlan
 };
 
 // `exists` answers whether a path is already taken (the library as it is).
-StemJobPlan planStemJob (const std::string& library, const std::string& artist, const std::string& album,
-						 const std::string& track, const std::string& originalFileName,
+StemJobPlan planStemJob (const std::string& library, const std::string& folder, const std::string& track, const std::string& originalFileName,
 						 const std::function<bool (const std::string&)>& exists);
 
 // ffmpeg: any input to the 44.1 kHz stereo float WAV the engine reads.
@@ -69,10 +69,20 @@ bool shouldOfferForSeparation (const std::string& path, const std::string& libra
 struct ArtistAlbum { std::string artist, album; };
 ArtistAlbum guessArtistAlbum (const std::string& path);
 
+// A target folder typed by hand, safe below the library: each level
+// sanitised, empty levels, "." and ".." dropped, '/'-joined. "" is the
+// library itself.
+std::string sanitiseFolder (const std::string& folder);
+
+// The target folder offered for a batch: "Artist/Album" when the files lie in
+// one folder (.../Artist/Album/*.flac); from several folders (an artist's
+// folder dropped whole) only the one they share: "Artist".
+std::string suggestTargetFolder (const std::vector<std::string>& paths);
+
 struct StemJobEntry
 {
 	int id = 0;
-	std::string input, artist, album, track;
+	std::string input, folder, track;
 	JobState state = JobState::queued;
 	std::string message;
 };
@@ -80,7 +90,7 @@ struct StemJobEntry
 class StemJobQueue
 {
 public:
-	int add (const std::string& input, const std::string& artist, const std::string& album, const std::string& track);
+	int add (const std::string& input, const std::string& folder, const std::string& track);
 	std::optional<int> startNext();                   // nothing while one runs
 	void finished (int id, bool ok, const std::string& message);
 

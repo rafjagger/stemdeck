@@ -282,11 +282,12 @@ passes the beat on to A³ Motion.
   the master to turn MASTER off (StemDeck then leaves the Pioneer network if it is not
   following either). With no master chosen, the only playing deck becomes master by itself —
   but not under **SYNC: PIO** (a real CDJ may hold master, and two masters would flip every
-  listener's clock) and not once MASTER was turned off by hand.
+  listener's clock) and not once MASTER was turned off by hand. **Stopping the master while the
+  other deck plays hands MASTER over to it**, as pausing the sync master does on a CDJ-3000.
 - StemDeck sends, as virtual CDJ 6: a **beat packet on every beat** of the master deck (tempo =
   the track's BPM × the tempo fader, beat in the bar counted from the grid's first beat) and a
-  **status packet every 200 ms** (master, playing or not, tempo, beat). A stopped master stays
-  master and simply sends no beats.
+  **status packet every 200 ms** (master, playing or not, tempo, beat). A stopped master with
+  no other deck playing stays master and simply sends no beats.
 - Everything goes out as **broadcast**, so a listener on the same machine hears it whichever
   program started first (unicast would reach only one of them).
 - A separate thread times the beats to about a millisecond, from the deck's position carried to

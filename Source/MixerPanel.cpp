@@ -1,5 +1,6 @@
 #include "MixerPanel.h"
 #include "Theme.h"
+#include "MeterBallistics.h"
 
 namespace
 {
@@ -14,9 +15,9 @@ namespace
 //==============================================================================
 void LevelMeter::setLevel (float newPeak)
 {
-	const auto next = juce::jmax (newPeak, level * 0.85f); // fast attack, slow release
+	const auto next = nextMeterLevel (level, newPeak);
 
-	if (std::abs (next - level) > 0.001f)
+	if (next != level)
 	{
 		level = next;
 		repaint();

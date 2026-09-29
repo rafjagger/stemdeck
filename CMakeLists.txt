@@ -39,7 +39,8 @@ target_sources(StemDeck PRIVATE
     Source/StemNames.cpp
     Source/StemJob.cpp
     Source/StemCreator.cpp
-    Source/ProcessGroup.cpp)
+    Source/ProcessGroup.cpp
+    Source/MeterBallistics.cpp)
 
 target_compile_definitions(StemDeck PRIVATE
     JUCE_WEB_BROWSER=0

@@ -77,6 +77,7 @@ MainComponent::MainComponent()
 	castButton.setColour (juce::TextButton::buttonOnColourId, Theme::mute);
 	castButton.onClick = [this] { toggleScreencast(); };
 	addAndMakeVisible (castButton);
+	addChildComponent (castView);
 
 	recButton.setMouseClickGrabsKeyboardFocus (false);
 	recButton.setColour (juce::TextButton::buttonOnColourId, Theme::mute);
@@ -718,7 +719,7 @@ void MainComponent::toggleScreencast()
 
 	const auto host = settings().getValue ("screencastHost", "a3nuc1_mango");
 	const auto script = juce::File::getCurrentWorkingDirectory().getChildFile ("tools/screencast.sh");
-	if (const auto error = screencast.start (script, host, settings().getBoolValue ("screencastView", true)); error.isNotEmpty())
+	if (const auto error = screencast.start (script, host); error.isNotEmpty())
 		juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Screencast", error);
 	castButton.setTooltip ("Screencast von " + host
 						   + juce::String::fromUTF8 (" nach recordings/ \xe2\x80\x93 den Ton dr\xc3\xbc" "ben selbst an screencast:input_1/2 verbinden"));
@@ -728,6 +729,20 @@ void MainComponent::updateRecorder()
 {
 	const auto casting = screencast.isRunning();
 	castButton.setToggleState (casting, juce::dontSendNotification);
+
+	if (casting != castView.isVisible())
+	{
+		castView.image = {};
+		castFramesShown = -1;
+		castView.setVisible (casting);
+		resized();
+	}
+	if (casting && screencast.getFrameCount() != castFramesShown)
+	{
+		castFramesShown = screencast.getFrameCount();
+		castView.image = screencast.getFrame();
+		castView.repaint();
+	}
 	if (casting)
 	{
 		const auto seconds = (int) screencast.getSeconds();
@@ -1274,9 +1289,16 @@ void MainComponent::resized()
 	area.removeFromTop (4);
 
 	const auto waveHeight = juce::jlimit (70, 130, getHeight() / 10);
-	waveA.setBounds (area.removeFromTop (waveHeight));
-	area.removeFromTop (3);
-	waveB.setBounds (area.removeFromTop (waveHeight));
+	auto waves = area.removeFromTop (waveHeight * 2 + 3);
+	if (castView.isVisible())
+	{
+		// The screencast beside the waveforms, as tall as both, in its own shape.
+		castView.setBounds (waves.removeFromRight (waves.getHeight() * Screencast::frameWidth / Screencast::frameHeight));
+		waves.removeFromRight (6);
+	}
+	waveA.setBounds (waves.removeFromTop (waveHeight));
+	waves.removeFromTop (3);
+	waveB.setBounds (waves);
 	area.removeFromTop (6);
 
 	auto middle = area.removeFromTop (juce::jmin (460, area.getHeight() - 150));

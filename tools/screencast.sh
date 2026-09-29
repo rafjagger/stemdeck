@@ -17,6 +17,12 @@
 # was danach den Bildschirm las. Die Übertragung geht
 # durch ssh (keine Ports, verschlüsselt), hier wird nicht neu kodiert.
 #
+# Hier wird NIE Ton abgespielt: ein neuer Audio-Ausgang im laufenden Graphen
+# beendet zita-j2n (2026-09-29). Der Ton geht nur in die Datei.
+#
+# PREVIEW=240x320: statt des ffplay-Fensters rohe BGRA-Bilder dieser Größe
+# (15 fps) auf stdout -- so zeigt StemDeck den Screencast in seinem Fenster.
+#
 # Das Live-Fenster darf man schließen, die Aufnahme läuft weiter. Strg+C
 # beendet sie; die .ts-Datei wird dann zu .mp4 umverpackt (verlustfrei).
 set -euo pipefail
@@ -50,13 +56,22 @@ echo "Aufnahme: $OUT  (Strg+C beendet)" >&2
 # Strg+C geht an alle drei (ssh, tee, ffplay); danach wird hier umverpackt.
 trap ':' INT
 
-if [[ -n "${NOVIEW:-}" ]]; then
+if [[ -n "${PREVIEW:-}" ]]; then
+    W="${PREVIEW%x*}"; H="${PREVIEW#*x}"
+    ssh -o BatchMode=yes "$HOST" "bash -c $(printf '%q' "$REMOTE")" 2> >(grep -v '^Jack:' >&2) \
+        | tee -p "$OUT" \
+        | ffmpeg -hide_banner -loglevel error -nostdin -fflags nobuffer -flags low_delay \
+                 -probesize 500000 -analyzeduration 500000 -i - -an \
+                 -vf "fps=15,scale=$W:$H:force_original_aspect_ratio=decrease,pad=$W:$H:(ow-iw)/2:(oh-ih)/2" \
+                 -pix_fmt bgra -f rawvideo - \
+        || true
+elif [[ -n "${NOVIEW:-}" ]]; then
     ssh -o BatchMode=yes "$HOST" "bash -c $(printf '%q' "$REMOTE")" 2> >(grep -v '^Jack:' >&2) > "$OUT" || true
 else
     # tee -p: wird das Live-Fenster geschlossen, schreibt tee trotzdem weiter.
     ssh -o BatchMode=yes "$HOST" "bash -c $(printf '%q' "$REMOTE")" 2> >(grep -v '^Jack:' >&2) \
         | tee -p "$OUT" \
-        | ffplay -hide_banner -loglevel error -fflags nobuffer -flags low_delay -framedrop \
+        | ffplay -hide_banner -loglevel error -an -fflags nobuffer -flags low_delay -framedrop \
                  -window_title "Screencast $HOST" - \
         || true
 fi

@@ -197,11 +197,29 @@ private:
 	juce::TextButton recButton { "REC" };
 
 	// CAST: tools/screencast.sh against the host in the setting
-	// screencastHost (default a3nuc1_mango), with its live view unless
-	// screencastView is 0.
+	// screencastHost (default a3nuc1_mango); its picture beside the
+	// waveforms while it runs.
 	Screencast screencast;
 	juce::TextButton castButton { "CAST" };
 	void toggleScreencast();
+
+	struct CastView : public juce::Component
+	{
+		juce::Image image;
+		void paint (juce::Graphics& g) override
+		{
+			g.fillAll (juce::Colours::black);
+			if (image.isValid())
+				g.drawImage (image, getLocalBounds().toFloat(), juce::RectanglePlacement::centred);
+			else
+			{
+				g.setColour (juce::Colours::grey);
+				g.drawText ("CAST ...", getLocalBounds(), juce::Justification::centred);
+			}
+		}
+	};
+	CastView castView;
+	int castFramesShown = -1;
 	LevelMeter recMeterL, recMeterR;
 	void toggleRecording();
 	void updateRecorder();

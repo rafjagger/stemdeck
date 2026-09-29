@@ -44,6 +44,8 @@ private:
 class ChannelStrip : public juce::Component
 {
 public:
+	// Where its volume fader stands, for the deck beside it to line up with.
+	juce::Rectangle<int> faderBounds() const { return fader.getBounds(); }
 	ChannelStrip (StemDeckPlayer& player, int deckIndex);
 
 	void setStemNames (const std::array<juce::String, StemSet::numStems>& names);
@@ -96,6 +98,11 @@ public:
 
 	ChannelStrip& strip (int deckIndex) { return deckIndex == 0 ? stripA : stripB; }
 	const ChannelStrip& strip (int deckIndex) const { return deckIndex == 0 ? stripA : stripB; }
+	// A deck's volume fader in this panel's coordinates.
+	juce::Rectangle<int> faderArea (int deckIndex) const
+	{
+		return strip (deckIndex).faderBounds() + strip (deckIndex).getPosition();
+	}
 	void refresh();
 	void setOutputLevel (int channel, float peak) { outputMeters.setLevel (channel, peak); }
 

@@ -1,4 +1,5 @@
 #include "StemDeckPlayer.h"
+#include "GridEdit.h"
 #include "Buses.h"
 
 StemDeckPlayer::StemDeckPlayer (juce::AudioFormatManager& fm) : formatManager (fm)
@@ -127,8 +128,12 @@ double StemDeckPlayer::getLength() const
 	return (double) lengthInSamples.load() / fileSampleRate.load();
 }
 
-void StemDeckPlayer::setLoop (double startSeconds, double endSeconds)
+void StemDeckPlayer::setLoop (double requestedStart, double requestedEnd)
 {
+	// On the beat grid, from wherever it comes: the overview drag, the
+	// controller's loop in/out, a restored session (2026-09-30).
+	const auto snapped = GridEdit::snappedLoop ({ gridBpm.load(), gridFirstBeat.load() }, requestedStart, requestedEnd);
+	const auto startSeconds = snapped.start, endSeconds = snapped.end;
 	const auto rate = fileSampleRate.load();
 	const auto length = lengthInSamples.load();
 	const auto start = juce::jlimit ((juce::int64) 0, length, (juce::int64) (startSeconds * rate));

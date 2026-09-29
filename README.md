@@ -67,30 +67,36 @@ ports, xruns) and the SYNC source. **Settings** holds where the stem library is 
 
 ### Decks
 
-<!-- IMAGE: one deck close-up: title, overview waveform with a loop set, CUE/PLAY, jog wheel, BPM readout with "Original", SYNC, range button, tempo fader -->
+<!-- IMAGE: one deck close-up: title, overview waveform with a loop set, BPM readout with "Original", CUE/PLAY, and at the foot the tempo fader with LOOP OFF/REPEAT, SYNC/MASTER, range/VINYL, GRID -->
 ![A deck](docs/stemdeck-deck.png)
 
-Laid out like a CDJ:
+Laid out like a CDJ, in one column for the rig's 768x1024 screen; the jog wheels are the
+controller's (SCS.3d), not on the screen:
 
 - **CUE** works like a CDJ (Mixxx's CDJ mode): while playing, it jumps back to the cue point and
   stops; while stopped, it sets the cue point, or, if already on it, plays for as long as it is
   held.
 - **PLAY** starts and pauses.
-- **Overview waveform** (four stem lanes): click to jump, drag to set a loop. **LOOP OFF** clears
+- **Overview waveform** (four stem lanes): click to jump, drag to set a loop. A loop's in and
+  out snap to the nearest beats of the grid, however it is set (drag, the controller's loop
+  in/out, a restored session); inside one beat it becomes a one-beat loop. **LOOP OFF** clears
   it; **REPEAT** starts the track over at its end.
-- **Jog wheel**: in **VINYL** mode the platter scratches, forwards or backwards; the outer ring
-  bends the pitch while playing and searches while stopped. The mouse wheel nudges or fine-searches.
-- **Tempo fader** with a range button cycling ±8 / ±16 / ±50 %.
+- **Jog wheel** (the controller's): in **VINYL** mode the platter scratches, forwards or
+  backwards; the outer ring bends the pitch while playing and searches while stopped.
+- **Tempo fader** at the foot, level with the mixer's volume faders and as tall, with a range
+  button cycling ±8 / ±16 / ±50 %.
 - **BPM**: the current tempo, with the track's own tempo ("Original") below. It comes from a
   tempo analysis that runs in the background when a set is loaded; it assumes a constant tempo,
   sums all four stems, and caches its result, so each set is analysed once.
 - **SYNC**: see [Sync](#sync).
 - **GRID**: Grid Adjust, as on a CDJ-3000, for a beat grid the analysis got wrong. While it is
-  on, turning the jog wheel moves the whole grid (a turn is 100 ms, a mouse wheel notch about
-  2 ms), and a row of buttons appears under the wheel:
+  on, turning the controller's jog wheel moves the whole grid (a turn is 100 ms), and two rows of
+  buttons appear above CUE and PLAY:
   - **‹1/2** / **1/2›** move the grid half a beat — for an analysis that took the off-beats;
   - **SNAP** puts the downbeat (the 1 of the bar) on the cue point: set CUE on the real first
     beat of a bar, press SNAP;
+  - **SET 1** puts the downbeat where the playhead is: press it on a bar's first beat as it
+    plays, or after stopping on one;
   - **SHIFT** takes over what you aligned by ear, as SHIFT GRID on a CDJ-3000: with SYNC on,
     bend the deck with the jog ring — SYNC then follows only the tempo (the button reads
     **SYNC BPM**) and leaves the beat to you — bring the beats together by ear against the
@@ -326,7 +332,7 @@ Both decks may be synced at once, each with its own half/same/double choice.
 - If the master falls silent, the tempo is held (readout: **held**) and the phase left alone
   until beats return.
 - It aligns the **beat, not the bar**: the track's grid knows beats, not where the "1" is. Set
-  the downbeat with the jog, as on a CDJ.
+  the downbeat with GRID's **SET 1** or **SNAP**.
 
 ---
 

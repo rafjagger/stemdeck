@@ -521,6 +521,14 @@ void MainComponent::editGrid (int deckIndex, DeckPanel::GridAction action, doubl
 		case Action::halfBack:    grid = GridEdit::shiftHalfBeat (grid, false); break;
 		case Action::halfForward: grid = GridEdit::shiftHalfBeat (grid, true); break;
 		case Action::snapToCue:   grid = GridEdit::snapToCue (grid, player.getCuePoint()); break;
+		case Action::downbeatAtPlayhead:
+		{
+			// Where the playhead is now, carried from the last audio block.
+			const auto now = juce::Time::getMillisecondCounterHiRes() / 1000.0;
+			grid = GridEdit::snapToCue (grid, positionAt (player.getPosition(), player.getPositionStamp(), now,
+														  player.getEffectiveRate(), player.isPlaying() && ! player.isScratching()));
+			break;
+		}
 		case Action::shiftToLeader:
 		{
 			// The leader: the Pioneer master under SYNC: PIO, else the other deck.
@@ -1026,9 +1034,9 @@ void MainComponent::updateDeviceStatus()
 		if (running)
 			text << "JACK: " << jack.getClientName() << "  |  " << juce::String (jack.getSampleRate(), 0) << " Hz, "
 				 << jack.getBufferSize() << " Samples  |  " << jack.getNumPorts() << " Ports, "
-				 << jack.getNumConnectedPorts() << " verbunden  |  Xruns: " << jack.getXrunCount();
+				 << jack.getNumConnectedPorts() << " connected  |  Xruns: " << jack.getXrunCount();
 		else
-			text = "JACK-Server wurde beendet - bitte StemDeck neu starten";
+			text = "The JACK server has stopped - please restart StemDeck";
 
 		deviceStatus.setText (text, juce::dontSendNotification);
 		deviceStatus.setColour (juce::Label::textColourId, running ? Theme::textDim : Theme::mute);
@@ -1244,11 +1252,12 @@ void MainComponent::resized()
 	topBar.removeFromRight (6);
 	autoDjButton.setBounds (topBar.removeFromRight (100));
 	topBar.removeFromRight (6);
+	// The input meters left of REC, where the eye comes from.
+	recButton.setBounds (topBar.removeFromRight (100));
+	topBar.removeFromRight (4);
 	recMeterR.setBounds (topBar.removeFromRight (6).reduced (0, 3));
 	topBar.removeFromRight (2);
 	recMeterL.setBounds (topBar.removeFromRight (6).reduced (0, 3));
-	topBar.removeFromRight (4);
-	recButton.setBounds (topBar.removeFromRight (100));
 	topBar.removeFromRight (6);
 	pioPlayer.setBounds (topBar.removeFromRight (90));
 	pioStatus.setBounds (topBar.removeFromRight (220));
@@ -1270,6 +1279,14 @@ void MainComponent::resized()
 	deckA.setBounds (middle.removeFromLeft (deckWidth));
 	deckB.setBounds (middle.removeFromRight (deckWidth));
 	mixer.setBounds (middle);
+
+	// The pitch faders line up with the mixer's volume faders.
+	for (int d = 0; d < numDecks; ++d)
+	{
+		const auto fader = getLocalArea (&mixer, mixer.faderArea (d));
+		auto& deck = *decks[(size_t) d];
+		deck.setTempoSpan (fader.getY() - deck.getY(), fader.getBottom() - deck.getY());
+	}
 	area.removeFromTop (6);
 
 	library.setBounds (area);

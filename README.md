@@ -81,6 +81,29 @@ widget tree, plus `FileDragAndDropTarget` for imports, backed by a `std::vector<
 
 ---
 
+## PIO clock: following the CDJs
+
+With **SYNC: PIO** in the top bar, SYNC on a deck follows the Pioneer Pro DJ Link tempo master
+instead of the other deck: its tempo (BPM including pitch) and its beat. Both decks may be synced
+at once, each choosing half, same or double tempo for itself. **SYNC: DECK** is the classic
+deck-to-deck sync.
+
+- StemDeck joins the Pioneer network as a virtual CDJ, **number 6** (setting `pioDevice`), and
+  listens on UDP 50000-50002. The sockets use `SO_REUSEADDR`, so it can run on the same machine
+  as beat-analyzer (which is number 7) and both get the broadcast beats.
+- The master is read from the CDJs' status packets. Those are partly sent to one address; on a
+  machine shared with beat-analyzer they may not arrive here. Without them for two seconds the
+  readout says **no master info** and StemDeck follows the player chosen beside it (preset: the
+  first one heard).
+- If the master falls silent, the tempo is held and the phase is left alone until beats return.
+- It aligns the **beat, not the bar**: the track's grid knows beats, not where "1" is. Set the
+  downbeat with the jog, as on a CDJ.
+- The logic is pure and unit-tested (`Source/ProLinkPackets`, `PioneerClock`, `FollowLeader`;
+  build with `-DSTEMDECK_TESTS=ON`, run `ctest`). The network thread is `ProLinkReceiver`, a port
+  of beat-analyzer's `PioneerReceiver`.
+
+---
+
 ## What I'd Do Differently
 
 Reading this back some years later, the architecture holds up better than the details:
@@ -104,6 +127,11 @@ Reading this back some years later, the architecture holds up better than the de
 ---
 
 ## Building
+
+`./start.sh` configures (CMake's default generator), builds and starts StemDeck. JUCE must be
+findable by CMake; if it is installed outside the standard paths, export
+`CMAKE_PREFIX_PATH=/path/to/juce` first. Tests: `cmake -S . -B build -DSTEMDECK_TESTS=ON` and
+`ctest --test-dir build`.
 
 This repository contains the application source only. To build it, create a JUCE GUI
 Application project (Projucer), add the `Source/` files to it, and enable the

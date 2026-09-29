@@ -154,6 +154,27 @@ Both decks may be synced at once, each with its own half/same/double choice.
 
 ---
 
+### MASTER: StemDeck as the tempo master
+
+No CDJs on the link? Then StemDeck is the CDJ. Each deck has a **MASTER** button, as on a CDJ:
+the master deck's beat goes out to the Pioneer network, and anything following the Pro DJ Link
+tempo master follows StemDeck — in the A³ system that is beat-analyzer in clock mode 2, which
+passes the beat on to A³ Motion.
+
+- Press MASTER on a deck to make it master; press it on the other deck to hand over. With no
+  master chosen, the only playing deck becomes master by itself.
+- StemDeck sends, as virtual CDJ 6: a **beat packet on every beat** of the master deck (tempo =
+  the track's BPM × the tempo fader, beat in the bar counted from the grid's first beat) and a
+  **status packet every 200 ms** (master, playing or not, tempo, beat). A stopped master stays
+  master and simply sends no beats.
+- Everything goes out as **broadcast**, so a listener on the same machine hears it whichever
+  program started first (unicast would reach only one of them).
+- A separate thread times the beats to about a millisecond, from the deck's position carried to
+  "now"; the 60 Hz screen timer would be up to 16 ms off.
+- The readout in the top bar says `PIO master: A` (or B) while StemDeck sends.
+- The packets follow the layout [prolink-connect](https://github.com/EvanPurkhiser/prolink-connect)
+  reads, so tools built on it (e.g. prolink-tools) see StemDeck like a CDJ.
+
 ## Build and run
 
 Linux. You need:

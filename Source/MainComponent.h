@@ -11,6 +11,8 @@
 #include "Theme.h"
 #include "TempoAnalysis.h"
 #include "FollowLeader.h"
+#include "PioneerClock.h"
+#include "ProLinkReceiver.h"
 
 //==============================================================================
 // Two stem decks and a mixer, laid out like Mixxx: scrolling waveforms on top,
@@ -53,6 +55,9 @@ private:
 	void setSync (int deckIndex, bool enabled);
 	void updateSync();
 	double applyFollow (int deckIndex, FollowInput in);
+	void setSyncSource (bool pio);
+	void followPioneer();
+	void updatePioneerStatus();
 	void loadDroppedSet (const juce::String& setId, int deckIndex);
 	void initialiseAudio();
 	void initialiseDeviceManager();
@@ -103,6 +108,17 @@ private:
 	// The deck with SYNC on follows the other one's tempo and beat phase.
 	int syncFollower = -1;
 	double syncMultiple = 1.0; // 0.5 / 1 / 2 when the tempos are an octave apart
+
+	// SYNC source PIO (2026-09-29): every deck with SYNC on follows the Pioneer
+	// tempo master instead of the other deck, each with its own octave multiple.
+	bool pioSource = false;
+	std::array<bool, numDecks> pioSynced {};
+	std::array<double, numDecks> pioMultiple {};
+	ProLinkReceiver proLink;
+	PioneerClock pioClock;
+	juce::TextButton syncSourceButton { "SYNC: DECK" };
+	juce::Label pioStatus;
+	juce::ComboBox pioPlayer;
 
 	JackOutput jack;
 	bool usingJack = false;

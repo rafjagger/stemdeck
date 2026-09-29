@@ -49,6 +49,25 @@ MainComponent::MainComponent()
 	deviceStatus.setColour (juce::Label::textColourId, Theme::textDim);
 	addAndMakeVisible (deviceStatus);
 
+	// SYNC source: the other deck, or the Pioneer tempo master (PIO).
+	syncSourceButton.setClickingTogglesState (true);
+	syncSourceButton.setMouseClickGrabsKeyboardFocus (false);
+	syncSourceButton.onClick = [this] { setSyncSource (syncSourceButton.getToggleState()); };
+	addAndMakeVisible (syncSourceButton);
+	pioStatus.setColour (juce::Label::textColourId, Theme::textDim);
+	addAndMakeVisible (pioStatus);
+	for (int player = 1; player <= 4; ++player)
+		pioPlayer.addItem ("CDJ " + juce::String (player), player);
+	pioPlayer.setTooltip ("No master info: the player to follow");
+	pioPlayer.onChange = [this]
+	{
+		pioClock.choosePlayer (pioPlayer.getSelectedId());
+		appProperties.getUserSettings()->setValue ("pioPlayer", pioPlayer.getSelectedId());
+	};
+	addChildComponent (pioPlayer);
+	if (const auto player = appProperties.getUserSettings()->getIntValue ("pioPlayer", 0); player > 0)
+		pioClock.choosePlayer (player);
+
 	// Mixxx-like keys: D/L play, S/K cue (hold to preview), 1-4 / 7-0 stem mutes.
 	const auto bind = [this] (int key, std::function<void (bool)> action) { keyBindings.push_back ({ key, std::move (action) }); };
 	bind ('d', [this] (bool down) { if (down) deckA.togglePlay(); });
@@ -64,6 +83,13 @@ MainComponent::MainComponent()
 
 	initialiseAudio();
 
+	if (appProperties.getUserSettings()->getValue ("syncSource") == "pio")
+	{
+		syncSourceButton.setToggleState (true, juce::dontSendNotification);
+		setSyncSource (true);
+	}
+	updatePioneerStatus();
+
 	setWantsKeyboardFocus (true);
 	setSize (1500, 960);
 	startTimerHz (60);
@@ -72,6 +98,7 @@ MainComponent::MainComponent()
 MainComponent::~MainComponent()
 {
 	stopTimer();
+	proLink.stop();
 	analysisPool.removeAllJobs (true, 5000);
 	jack.close();
 	deviceManager.removeChangeListener (this);
@@ -157,6 +184,16 @@ void MainComponent::startAnalysis (const StemSet& set, int deckIndex)
 //==============================================================================
 void MainComponent::setSync (int deckIndex, bool enabled)
 {
+	if (pioSource)
+	{
+		// Every deck follows the master on its own; both may be on at once.
+		pioSynced[(size_t) deckIndex] = enabled;
+		pioMultiple[(size_t) deckIndex] = 0.0; // chosen on the first update
+		if (! enabled)
+			players[(size_t) deckIndex]->setSyncNudge (1.0);
+		return;
+	}
+
 	if (enabled)
 	{
 		// Only one follower: the other deck becomes the leader.
@@ -177,6 +214,12 @@ void MainComponent::setSync (int deckIndex, bool enabled)
 // Keeps the follower at the leader's tempo and nudges its beats into phase.
 void MainComponent::updateSync()
 {
+	if (pioSource)
+	{
+		followPioneer();
+		return;
+	}
+
 	if (syncFollower < 0)
 		return;
 
@@ -196,6 +239,91 @@ void MainComponent::updateSync()
 	in.multiple = syncMultiple;
 
 	syncMultiple = applyFollow (syncFollower, in);
+}
+
+void MainComponent::setSyncSource (bool pio)
+{
+	// Whatever was synced stops: a deck that followed the other deck must not
+	// suddenly follow a CDJ, or the other way round, without being asked.
+	for (int d = 0; d < numDecks; ++d)
+	{
+		decks[(size_t) d]->setSyncEnabled (false);
+		players[(size_t) d]->setSyncNudge (1.0);
+	}
+	syncFollower = -1;
+	pioSynced = {};
+
+	pioSource = pio;
+	syncSourceButton.setButtonText (pio ? "SYNC: PIO" : "SYNC: DECK");
+	appProperties.getUserSettings()->setValue ("syncSource", pio ? "pio" : "deck");
+
+	if (pio)
+		proLink.start (appProperties.getUserSettings()->getIntValue ("pioDevice", 6));
+	else
+		proLink.stop();
+
+	updatePioneerStatus();
+}
+
+// Every deck with SYNC on against the Pioneer clock.
+void MainComponent::followPioneer()
+{
+	for (auto& event : proLink.drain())
+	{
+		if (const auto* beat = std::get_if<prolink::BeatPacket> (&event.packet))
+			pioClock.onBeat (*beat, event.seconds);
+		else if (const auto* status = std::get_if<prolink::StatusPacket> (&event.packet))
+			pioClock.onStatus (*status, event.seconds);
+	}
+
+	const auto now = juce::Time::getMillisecondCounterHiRes() / 1000.0;
+	if (pioClock.bpm() <= 0.0)
+		return; // nothing heard yet: nothing to follow
+
+	for (int d = 0; d < numDecks; ++d)
+	{
+		if (! pioSynced[(size_t) d] || ! players[(size_t) d]->getBeatGrid().isValid())
+			continue;
+
+		FollowInput in;
+		in.leaderBpm = pioClock.bpm();
+		in.leaderBeatPhase = pioClock.beatPhaseAt (now);
+		in.leaderPlaying = pioClock.isLive (now); // silent master: tempo held, phase left alone
+		in.anyScratching = players[(size_t) d]->isScratching();
+		in.multiple = pioMultiple[(size_t) d];
+
+		pioMultiple[(size_t) d] = applyFollow (d, in);
+	}
+}
+
+void MainComponent::updatePioneerStatus()
+{
+	pioStatus.setVisible (pioSource);
+	if (! pioSource)
+	{
+		pioPlayer.setVisible (false);
+		return;
+	}
+
+	const auto now = juce::Time::getMillisecondCounterHiRes() / 1000.0;
+	const auto error = proLink.error();
+	const auto noMasterInfo = proLink.isRunning() && pioClock.bpm() > 0.0 && ! pioClock.hasMasterInfo (now);
+	pioPlayer.setVisible (noMasterInfo);
+	if (noMasterInfo && pioPlayer.getSelectedId() != pioClock.chosenPlayer())
+		pioPlayer.setSelectedId (pioClock.chosenPlayer(), juce::dontSendNotification);
+
+	juce::String text;
+	if (! error.empty())
+		text = "PIO: " + juce::String (error);
+	else if (pioClock.bpm() <= 0.0)
+		text = juce::String::fromUTF8 ("PIO \xe2\x80\x93");
+	else if (noMasterInfo)
+		text = juce::String::fromUTF8 ("PIO: no master info \xc2\xb7 follow");
+	else
+		text = "PIO " + juce::String (pioClock.bpm(), 1) + juce::String::fromUTF8 (" \xc2\xb7 ")
+			 + (pioClock.isLive (now) ? "CDJ " + juce::String (pioClock.leader (now)) : juce::String ("held"));
+
+	pioStatus.setText (text, juce::dontSendNotification);
 }
 
 // One synced deck against its leader: the rules in followLeader(), the
@@ -346,6 +474,7 @@ void MainComponent::timerCallback()
 
 	mixer.refresh();
 	updateSync();
+	updatePioneerStatus();
 
 	for (int ch = 0; ch < numOutputChannels; ++ch)
 		mixer.setOutputLevel (ch, outputPeaks[(size_t) ch].exchange (0.0f));
@@ -451,6 +580,10 @@ void MainComponent::resized()
 
 	auto topBar = area.removeFromTop (30);
 	audioSettingsButton.setBounds (topBar.removeFromRight (160));
+	topBar.removeFromRight (6);
+	syncSourceButton.setBounds (topBar.removeFromRight (110));
+	pioPlayer.setBounds (topBar.removeFromRight (90));
+	pioStatus.setBounds (topBar.removeFromRight (220));
 	deviceStatus.setBounds (topBar);
 	area.removeFromTop (4);
 

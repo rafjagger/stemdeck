@@ -30,7 +30,8 @@ target_sources(StemDeck PRIVATE
     Source/JackOutput.cpp
     Source/ProLinkPackets.cpp
     Source/PioneerClock.cpp
-    Source/FollowLeader.cpp)
+    Source/FollowLeader.cpp
+    Source/ProLinkReceiver.cpp)
 
 target_compile_definitions(StemDeck PRIVATE
     JUCE_WEB_BROWSER=0

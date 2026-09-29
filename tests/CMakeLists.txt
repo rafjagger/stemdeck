@@ -5,6 +5,8 @@ add_executable(stemdeck-tests
     GridEdit.cpp
     AutoDj.cpp
     RecordingName.cpp
+    Scs3d.cpp
+    ${CMAKE_SOURCE_DIR}/Source/Scs3d.cpp
     ${CMAKE_SOURCE_DIR}/Source/AutoDj.cpp
     ${CMAKE_SOURCE_DIR}/Source/GridEdit.cpp
     ProLinkPackets.cpp

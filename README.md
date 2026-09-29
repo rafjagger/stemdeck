@@ -103,6 +103,25 @@ Laid out like a CDJ:
 The scrolling waveforms scroll past a fixed playhead; drag to move through the track, mouse wheel
 to zoom.
 
+### Stanton SCS.3d controllers
+
+Up to two **Stanton SCS.3d DaScratch** are taken up as they are plugged in (looked for every
+three seconds), one per deck; the A/B light on each says which. The first found is deck A — set
+`<VALUE name="scs3dSwap" val="1"/>` in `~/.config/StemDeck/StemDeck.settings` to swap them.
+
+| SCS.3d | StemDeck |
+|---|---|
+| **FX LOOP VINYL EQ** | mute stem 1–4 (red: muted, blue: playing) |
+| **TRIG** | loop in: marks the point (blue) |
+| **DECK** | loop out: loops from the mark to here (red); while looping, loop off |
+| **GAIN** slider | channel fader; the LED bar shows it |
+| **PITCH** slider | tempo, relative (no jump when you touch it); the LEDs show it from the middle |
+| **circle** | scratch pad: touch holds the record, turning scratches (128 steps a turn at 33⅓), letting go lets it run on; one light goes round with the platter |
+| **PLAY CUE SYNC TAP** | play, cue (CDJ), SYNC (purple: bent, tempo only), MASTER |
+
+The controller moves the on-screen controls, so everything stays in step either way. The
+protocol (sysex setup, IDs, LEDs) follows Mixxx's SCS.3d mapping.
+
 ### Auto-DJ
 
 **AUTO DJ** in the top bar plays on its own, track after track, mixed like a DJ would:

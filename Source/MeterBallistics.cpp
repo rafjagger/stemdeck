@@ -15,3 +15,8 @@ float nextMeterLevel (float shownLevel, float newPeak)
 	// The release is geometric and never reaches zero on its own.
 	return next < silence ? 0.0f : next;
 }
+
+int meterSegments (float heightPixels)
+{
+	return std::clamp ((int) (heightPixels / 3.0f), 1, 24);
+}

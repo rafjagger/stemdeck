@@ -5,6 +5,8 @@
 #include "TempoAnalysis.h"
 #include "Session.h"
 
+#include <set>
+
 // Table of the complete stem sets found in a folder. Sets are loaded with the
 // deck buttons, by double-click (first deck that is not playing) or by
 // dragging a row onto a deck.
@@ -26,6 +28,10 @@ public:
 
 	// Looks up a set by the id carried in drag-and-drop descriptions.
 	const StemSet* findSet (const juce::String& setId) const;
+
+	// A set picked at random from those the search shows, not one of
+	// `played`; when every one was, from all of them again. Null: none shown.
+	const StemSet* randomVisibleSet (const std::set<juce::String>& played) const;
 
 	// Sort order, search and selection, for the session.
 	void saveState (LibrarySession& state) const;

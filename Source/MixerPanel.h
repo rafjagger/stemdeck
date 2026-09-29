@@ -50,6 +50,9 @@ public:
 	void toggleMute (int stem);
 	void refresh(); // meters, called by the main timer
 
+	// The channel fader, moved as by hand (the Auto-DJ's crossfade).
+	void setFaderDb (double db) { fader.setValue (db, juce::sendNotificationSync); }
+
 	// Knobs, mutes, bus switches, fader and PHONES, for the session.
 	void saveState (DeckSession& state) const;
 	void restoreState (const DeckSession& state);

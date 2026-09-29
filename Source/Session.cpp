@@ -5,6 +5,7 @@ std::unique_ptr<juce::XmlElement> Session::toXml() const
 	auto xml = std::make_unique<juce::XmlElement> ("StemDeckSession");
 	xml->setAttribute ("masterDeck", masterDeck);
 	xml->setAttribute ("masterTurnedOff", masterTurnedOff);
+	xml->setAttribute ("autoDj", autoDj);
 
 	for (size_t d = 0; d < decks.size(); ++d)
 	{
@@ -57,6 +58,7 @@ Session Session::fromXml (const juce::XmlElement& xml)
 	Session session;
 	session.masterDeck = xml.getIntAttribute ("masterDeck", -1);
 	session.masterTurnedOff = xml.getBoolAttribute ("masterTurnedOff");
+	session.autoDj = xml.getBoolAttribute ("autoDj");
 
 	for (auto* e : xml.getChildWithTagNameIterator ("Deck"))
 	{

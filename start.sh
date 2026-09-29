@@ -17,12 +17,14 @@ cd "$(dirname "$(readlink -f "$0")")"
 BUILD_DIR=build
 APP="$BUILD_DIR/StemDeck_artefacts/Release/StemDeck"
 
-if [[ ! -f "$BUILD_DIR/build.ninja" ]]; then
-    cmake -S . -B "$BUILD_DIR" -G Ninja -DCMAKE_BUILD_TYPE=Release
+# CMake's default generator: Ninja is not installed everywhere StemDeck runs
+# (the Core NUC has none).
+if [[ ! -f "$BUILD_DIR/CMakeCache.txt" ]]; then
+    cmake -S . -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release
 fi
 
 # Inkrementell: kompiliert nur, wenn sich etwas geändert hat
-cmake --build "$BUILD_DIR"
+cmake --build "$BUILD_DIR" -j"$(nproc)"
 
 if ! pgrep -x 'jackd|jackdbus' >/dev/null && command -v pw-jack >/dev/null && pgrep -x pipewire >/dev/null; then
     exec pw-jack "$APP" "$@"

@@ -25,22 +25,22 @@ namespace
 	const char* const stemNames[] = { "drums", "bass", "other", "vocals" };
 }
 
-StemJobPlan planStemJob (const std::string& library, const std::string& artist, const std::string& album,
-						 const std::string& track, const std::string& originalFileName,
+StemJobPlan planStemJob (const std::string& library, const std::string& folder, const std::string& track, const std::string& originalFileName,
 						 const std::function<bool (const std::string&)>& exists)
 {
 	StemJobPlan plan;
-	plan.albumFolder = library + "/" + sanitiseName (artist, "Unknown Artist") + "/" + sanitiseName (album, "Unknown Album");
+	const auto relative = sanitiseFolder (folder);
+	plan.folder = relative.empty() ? library : library + "/" + relative;
 
 	plan.stemExtension = stemExtensionFor (originalFileName);
 	const auto base = sanitiseName (track, "Untitled");
 	plan.track = base;
-	for (int n = 2; exists (plan.albumFolder + "/" + stemFileName (plan.track, 0, plan.stemExtension)); ++n)
+	for (int n = 2; exists (plan.folder + "/" + stemFileName (plan.track, 0, plan.stemExtension)); ++n)
 		plan.track = base + " (" + std::to_string (n) + ")";
 
 	for (int stem = 0; stem < 4; ++stem)
-		plan.stemPaths[(size_t) stem] = plan.albumFolder + "/" + stemFileName (plan.track, stem, plan.stemExtension);
-	plan.originalPath = plan.albumFolder + "/originals/" + plan.track + extensionOf (originalFileName);
+		plan.stemPaths[(size_t) stem] = plan.folder + "/" + stemFileName (plan.track, stem, plan.stemExtension);
+	plan.originalPath = plan.folder + "/originals/" + plan.track + extensionOf (originalFileName);
 	return plan;
 }
 
@@ -120,9 +120,9 @@ std::optional<double> parseDemucsProgress (const std::string& line)
 	return std::stoi (last.substr (digits, bar - digits)) / 100.0;
 }
 
-int StemJobQueue::add (const std::string& input, const std::string& artist, const std::string& album, const std::string& track)
+int StemJobQueue::add (const std::string& input, const std::string& folder, const std::string& track)
 {
-	entries.push_back ({ nextId, input, artist, album, track, JobState::queued, {} });
+	entries.push_back ({ nextId, input, folder, track, JobState::queued, {} });
 	return nextId++;
 }
 
@@ -195,9 +195,11 @@ bool isSeparableAudioFile (const std::string& fileName)
 	if (std::find (std::begin (formats), std::end (formats), extension) == std::end (formats))
 		return false;
 
+	// What the stem creator writes: "- 1 - drums.flac", before that "- 1.drums.wav".
 	for (int stem = 0; stem < 4; ++stem)
-		if (name.find ("- " + std::to_string (stem + 1) + "." + stemNames[stem] + ".") != std::string::npos)
-			return false;
+		for (const auto* between : { " - ", "." })
+			if (name.find ("- " + std::to_string (stem + 1) + between + stemNames[stem] + ".") != std::string::npos)
+				return false;
 	return true;
 }
 
@@ -223,4 +225,42 @@ bool shouldOfferForSeparation (const std::string& path, const std::string& libra
 		root.pop_back();
 	const auto insideLibrary = path.size() > root.size() && path.compare (0, root.size(), root) == 0 && path[root.size()] == '/';
 	return ! insideLibrary && isSeparableAudioFile (path.substr (path.rfind ('/') + 1));
+}
+
+std::string sanitiseFolder (const std::string& folder)
+{
+	std::string clean;
+	for (size_t start = 0; start <= folder.size();)
+	{
+		auto end = folder.find_first_of ("/\\", start);
+		if (end == std::string::npos)
+			end = folder.size();
+		const auto level = sanitiseName (folder.substr (start, end - start), "");
+		if (! level.empty())
+			clean += (clean.empty() ? "" : "/") + level;
+		start = end + 1;
+	}
+	return clean;
+}
+
+std::string suggestTargetFolder (const std::vector<std::string>& paths)
+{
+	if (paths.empty())
+		return {};
+
+	// The folder every path lies in.
+	const auto first = paths.front().substr (0, paths.front().rfind ('/') + 1);
+	auto common = first;
+	bool oneFolder = true;
+	for (const auto& path : paths)
+	{
+		oneFolder = oneFolder && path.substr (0, path.rfind ('/') + 1) == first;
+		while (! common.empty() && path.compare (0, common.size(), common) != 0)
+			common = common.substr (0, common.rfind ('/', common.size() - 2) + 1);
+	}
+
+	const auto guess = guessArtistAlbum (common);
+	if (! oneFolder || guess.artist.empty())
+		return sanitiseFolder (guess.album);
+	return sanitiseFolder (guess.artist + "/" + guess.album);
 }

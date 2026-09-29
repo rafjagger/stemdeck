@@ -367,9 +367,8 @@ void MainComponent::updatePioneerStatus()
 }
 
 //==============================================================================
-// One question for files from one folder; files from several folders (an
-// artist's folder dropped whole) each keep the artist and album their own
-// folders suggest, so albums are not merged into one.
+// One question for the whole batch: the folder it goes to, below the library.
+// Every track lands there, named after its file.
 void MainComponent::createStems (const juce::Array<juce::File>& files)
 {
 	if (! stemCreator.isInstalled())
@@ -382,37 +381,56 @@ void MainComponent::createStems (const juce::Array<juce::File>& files)
 		return;
 	}
 
-	const auto addAll = [this, files] (const juce::String* artist, const juce::String* album)
-	{
-		for (const auto& f : files)
-		{
-			const auto guess = guessArtistAlbum (f.getFullPathName().toStdString());
-			stemCreator.add (f, artist != nullptr ? *artist : juce::String (guess.artist),
-							 album != nullptr ? *album : juce::String (guess.album), f.getFileNameWithoutExtension());
-		}
-	};
-
+	std::vector<std::string> paths;
 	for (const auto& f : files)
-		if (f.getParentDirectory() != files.getFirst().getParentDirectory())
-			return addAll (nullptr, nullptr);
+		paths.push_back (f.getFullPathName().toStdString());
+	askTargetFolder (files, juce::String (suggestTargetFolder (paths)));
+}
 
-	const auto guess = guessArtistAlbum (files.getFirst().getFullPathName().toStdString());
+void MainComponent::askTargetFolder (const juce::Array<juce::File>& files, const juce::String& preset)
+{
 	const auto count = files.size() == 1 ? files.getFirst().getFileNameWithoutExtension()
 										 : juce::String (files.size()) + " Tracks";
-	stemDialog = std::make_unique<juce::AlertWindow> ("Stems erstellen", count, juce::MessageBoxIconType::NoIcon, this);
-	stemDialog->addTextEditor ("artist", juce::String (guess.artist), "Artist");
-	stemDialog->addTextEditor ("album", juce::String (guess.album), "Album");
+	const auto library = this->library.getFolder();
+
+	stemDialog = std::make_unique<juce::AlertWindow> ("Stems erstellen",
+		count + juce::String::fromUTF8 ("\n\nZielordner in ") + library.getFullPathName()
+			  + juce::String::fromUTF8 (":\n(Artist/Album \xe2\x80\x93 leer: direkt in den Library-Ordner)"),
+		juce::MessageBoxIconType::NoIcon, this);
+	stemDialog->addTextEditor ("folder", preset, "Zielordner");
 	stemDialog->addButton ("Erstellen", 1, juce::KeyPress (juce::KeyPress::returnKey));
+	stemDialog->addButton (juce::String::fromUTF8 ("Durchsuchen\xe2\x80\xa6"), 2);
 	stemDialog->addButton ("Abbrechen", 0, juce::KeyPress (juce::KeyPress::escapeKey));
-	stemDialog->enterModalState (true, juce::ModalCallbackFunction::create ([this, addAll] (int result)
+	stemDialog->enterModalState (true, juce::ModalCallbackFunction::create ([this, files, library] (int result)
 	{
+		const auto typed = stemDialog->getTextEditorContents ("folder").trim();
+		stemDialog.reset();
+
 		if (result == 1)
 		{
-			const auto artist = stemDialog->getTextEditorContents ("artist").trim();
-			const auto album = stemDialog->getTextEditorContents ("album").trim();
-			addAll (&artist, &album);
+			const auto folder = juce::String (sanitiseFolder (typed.toStdString()));
+			for (const auto& f : files)
+				stemCreator.add (f, folder, f.getFileNameWithoutExtension());
 		}
-		stemDialog.reset();
+		else if (result == 2)
+		{
+			const auto start = library.getChildFile (juce::String (sanitiseFolder (typed.toStdString())));
+			folderChooser = std::make_unique<juce::FileChooser> ("Zielordner", start.isDirectory() ? start : library);
+			folderChooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories,
+				[this, files, library, typed] (const juce::FileChooser& fc)
+				{
+					const auto chosen = fc.getResult();
+					if (chosen == juce::File())
+						return askTargetFolder (files, typed);   // closed: back to the question
+					if (chosen != library && ! chosen.isAChildOf (library))
+					{
+						juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Stems erstellen",
+							juce::String::fromUTF8 ("Der Zielordner muss im Library-Ordner liegen:\n") + library.getFullPathName());
+						return askTargetFolder (files, typed);
+					}
+					askTargetFolder (files, chosen == library ? juce::String() : chosen.getRelativePathFrom (library));
+				});
+		}
 	}));
 }
 

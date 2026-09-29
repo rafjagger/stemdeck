@@ -49,6 +49,11 @@ public:
 	void toggleMute (int stem);
 	void refresh(); // meters, called by the main timer
 
+	// Room left free beside the fader on the side towards the mixer's middle,
+	// for the output meters; where that room is, in this strip's coordinates.
+	void setMeterReserve (int width) { meterReserve = width; resized(); }
+	juce::Rectangle<int> getMeterZone() const { return meterZone; }
+
 	void paint (juce::Graphics& g) override;
 	void resized() override;
 
@@ -62,6 +67,10 @@ private:
 	juce::OwnedArray<juce::Label> stemLabels;
 	juce::Slider fader { juce::Slider::LinearVertical, juce::Slider::NoTextBox };
 	LevelMeter meter;
+
+	int meterReserve = 0;
+	juce::Rectangle<int> meterZone;
+	std::array<juce::Rectangle<int>, StemSet::numStems> stemFrames;
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ChannelStrip)
 };

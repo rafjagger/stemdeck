@@ -109,22 +109,35 @@ TEST (StemJob, AnyFormatIsDecodedToOneWav)
 	EXPECT_TRUE (contains (argv, "pcm_f32le"));
 }
 
-TEST (StemJob, OneCoreIsCpuZeroWithOneThreadAtIdle)
+TEST (StemJob, SeparationRunsIdleBesideTheAudioCpu)
 {
-	const auto argv = separateCommand ("/venv", "/stage/input.wav", "/stage", 1);
-	EXPECT_TRUE (inOrder (argv, { "systemd-run", "--user", "--scope", "MemoryMax=6G", "taskset", "-c", "0",
+	const auto argv = separateCommand ("/venv", "/stage/input.wav", "/stage", separatorCpus (6, 0));
+	EXPECT_TRUE (inOrder (argv, { "systemd-run", "--user", "--scope", "MemoryMax=6G", "taskset", "-c", "0,2-5",
 								  "chrt", "-i", "0", "nice", "-n", "19", "ionice", "-c", "3", "/venv/bin/demucs" }));
 	EXPECT_TRUE (inOrder (argv, { "-n", "htdemucs", "--int24", "--clip-mode", "clamp", "-o", "/stage", "/stage/input.wav" }));
-	EXPECT_TRUE (contains (separateEnvironment (1), "OMP_NUM_THREADS=1"));
-	EXPECT_TRUE (inOrder (separateCommand ("/venv", "/s/i.wav", "/s", 0), { "taskset", "-c", "0", "chrt" })) << "never none";
+	EXPECT_TRUE (contains (separateEnvironment (5), "OMP_NUM_THREADS=5"));
+	EXPECT_TRUE (contains (separateEnvironment (5), "MKL_NUM_THREADS=5"));
+	EXPECT_TRUE (contains (separateEnvironment (0), "OMP_NUM_THREADS=1")) << "never none";
 }
 
-TEST (StemJob, AllCoresRunStillIdle)
+TEST (StemJob, TheSeparatorNeverTakesTheAudioCpu)
 {
-	const auto argv = separateCommand ("/venv", "/stage/input.wav", "/stage", 6);
-	EXPECT_TRUE (inOrder (argv, { "taskset", "-c", "0-5", "chrt", "-i", "0", "nice", "-n", "19" }));
-	EXPECT_TRUE (contains (separateEnvironment (6), "OMP_NUM_THREADS=6"));
-	EXPECT_TRUE (contains (separateEnvironment (6), "MKL_NUM_THREADS=6"));
+	EXPECT_EQ (audioCpu, 1);
+	const auto all = separatorCpus (6, 0);
+	EXPECT_EQ (all.list, "0,2-5");
+	EXPECT_EQ (all.count, 5);
+	EXPECT_EQ (separatorCpus (4, 0).list, "0,2-3");
+	EXPECT_EQ (separatorCpus (3, 0).list, "0,2");
+	EXPECT_EQ (separatorCpus (2, 0).list, "0");
+	EXPECT_EQ (separatorCpus (1, 0).list, "0") << "one CPU: nothing else to take";
+}
+
+TEST (StemJob, SeparatorCoresCanBeLimited)
+{
+	EXPECT_EQ (separatorCpus (6, 1).list, "0") << "the live rig: CPU 0 only";
+	EXPECT_EQ (separatorCpus (6, 1).count, 1);
+	EXPECT_EQ (separatorCpus (6, 3).list, "0,2-3");
+	EXPECT_EQ (separatorCpus (6, 99).list, "0,2-5");
 }
 
 TEST (StemJob, DemucsWritesIntoItsModelFolder)

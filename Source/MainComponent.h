@@ -184,7 +184,8 @@ private:
 	// is A unless the setting scs3dSwap says otherwise. Looked for again every
 	// few seconds, so one plugged in later is taken up.
 	std::vector<std::unique_ptr<Scs3dDevice>> controllers;
-	std::array<double, numDecks> controllerLoopIn { -1.0, -1.0 };
+	std::array<double, numDecks> controllerLoopIn { -1.0, -1.0 };       // marked, waiting for out
+	std::array<juce::Range<double>, numDecks> controllerLoop;          // the last loop, to go back to
 	int controllerScanCountdown = 0;
 	void scanControllers();
 	void handleController (int deckIndex, const scs3d::Event& event);

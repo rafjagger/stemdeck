@@ -111,12 +111,14 @@ three seconds), one per deck; the A/B light on each says which. The first found 
 
 | SCS.3d | StemDeck |
 |---|---|
-| **FX LOOP VINYL EQ** | mute stem 1–4 (red: muted, blue: playing) |
-| **TRIG** | loop in: marks the point (blue) |
-| **DECK** | loop out: loops from the mark to here (red); while looping, loop off |
+| top buttons **1 2 5 6** (FX LOOP TRIG DECK) | mute stem 1–4 (red: muted, blue: playing) |
+| **3** (VINYL) | loop in, pressed again: loop out (blue: in marked, purple: looping) |
+| **4** (EQ) | loop off, and on again from its start (red: looping, blue: a loop to go back to) |
+| **top left / top right** of the circle | library: previous / next set |
+| tap the **centre** of the circle | load the selected set — not onto a deck that is playing |
 | **GAIN** slider | channel fader; the LED bar shows it |
 | **PITCH** slider | tempo, relative (no jump when you touch it); the LEDs show it from the middle |
-| **circle** | scratch pad: touch holds the record, turning scratches (128 steps a turn at 33⅓), letting go lets it run on; one light goes round with the platter |
+| the **ring** of the circle | scratch pad: touch holds the record, turning scratches (128 steps a turn at 33⅓), letting go lets it run on; one light goes round with the platter |
 | **PLAY CUE SYNC TAP** | play, cue (CDJ), SYNC (purple: bent, tempo only), MASTER |
 
 The controller moves the on-screen controls, so everything stays in step either way. The

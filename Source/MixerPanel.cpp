@@ -177,7 +177,10 @@ void ChannelStrip::setStemNames (const std::array<juce::String, StemSet::numStem
 {
 	for (int s = 0; s < StemSet::numStems; ++s)
 	{
-		stemLabels[s]->setText (juce::String (s + 1) + " " + names[(size_t) s], juce::dontSendNotification);
+		// "1 - drums" already carries its number; "DUB" or "Vox" gets one.
+		const auto& name = names[(size_t) s];
+		const auto numbered = juce::CharacterFunctions::isDigit (name[0]);
+		stemLabels[s]->setText (numbered ? name : juce::String (s + 1) + " " + name, juce::dontSendNotification);
 		stemLabels[s]->setTooltip (names[(size_t) s]);
 	}
 }

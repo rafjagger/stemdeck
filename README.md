@@ -90,9 +90,12 @@ Laid out like a CDJ:
   - **‹1/2** / **1/2›** move the grid half a beat — for an analysis that took the off-beats;
   - **SNAP** puts the downbeat (the 1 of the bar) on the cue point: set CUE on the real first
     beat of a bar, press SNAP;
-  - **SHIFT** takes over what you aligned by ear: with SYNC off, bring the beats together with
-    the jog ring against the other deck (or the Pioneer master under SYNC: PIO), then press
-    SHIFT — the grid moves so that this deck is where the leader is in its beat;
+  - **SHIFT** takes over what you aligned by ear, as SHIFT GRID on a CDJ-3000: with SYNC on,
+    bend the deck with the jog ring — SYNC then follows only the tempo (the button reads
+    **SYNC BPM**) and leaves the beat to you — bring the beats together by ear against the
+    leader (the other deck, or the Pioneer master under SYNC: PIO), then press SHIFT. The grid
+    moves to where you put the beat, and SYNC follows the beat again. It works with SYNC off
+    too;
   - **RESET** brings back the grid as analysed.
 
   A corrected grid is kept in `analysis.xml` beside the analysed one and used from then on.

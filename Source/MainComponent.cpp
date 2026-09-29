@@ -224,8 +224,18 @@ void MainComponent::startAnalysis (const StemSet& set, int deckIndex)
 }
 
 //==============================================================================
+void MainComponent::setSyncBent (int deckIndex, bool bent)
+{
+	syncBent[(size_t) deckIndex] = bent;
+	decks[(size_t) deckIndex]->setSyncBpmOnly (bent);
+	if (bent)
+		players[(size_t) deckIndex]->setSyncNudge (1.0);
+}
+
 void MainComponent::setSync (int deckIndex, bool enabled)
 {
+	setSyncBent (deckIndex, false);
+
 	if (pioSource)
 	{
 		// Every deck follows the master on its own; both may be on at once.
@@ -535,6 +545,10 @@ void MainComponent::editGrid (int deckIndex, DeckPanel::GridAction action, doubl
 	const BeatGrid edited { grid.bpm, grid.firstBeat };
 	player.setBeatGrid (edited);
 	analysisCache->storeCorrected (*set, edited);
+
+	// SHIFT GRID ends a bend: the grid now says what the ear did, the beat follows again.
+	if (action == Action::shiftToLeader)
+		setSyncBent (deckIndex, false);
 }
 
 void MainComponent::setAutoDj (bool on)
@@ -738,6 +752,11 @@ double MainComponent::applyFollow (int deckIndex, FollowInput in, double followe
 {
 	auto& follower = *players[(size_t) deckIndex];
 	const auto grid = follower.getBeatGrid();
+
+	if (std::abs (follower.getPitchBend() - 1.0) > 1e-4 && ! syncBent[(size_t) deckIndex])
+		setSyncBent (deckIndex, true);
+	if (syncBent[(size_t) deckIndex])
+		in.leaderPlaying = false;   // the tempo only: the beat is the hand's
 
 	in.followerGridBpm = grid.bpm;
 	in.followerBeatPhase = grid.beatsAt (followerPosition);

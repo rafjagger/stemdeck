@@ -134,6 +134,13 @@ private:
 	std::array<juce::String, numDecks> loadedSetIds; // StemLibrary's id: the first stem's path
 	std::array<std::optional<StemSet>, numDecks> loadedSets;
 
+	// As on a CDJ-3000: bending a synced deck with the jog ring stops it
+	// following the leader's beat -- the tempo still follows -- so it can be
+	// aligned by ear; SHIFT GRID puts that into the grid and the beat follows
+	// again. Also ends with SYNC going off or on.
+	std::array<bool, numDecks> syncBent {};
+	void setSyncBent (int deckIndex, bool bent);
+
 	// Grid Adjust on a deck (DeckPanel::GridAction): edits its grid, keeps the
 	// correction in the analysis cache (written with the session).
 	void editGrid (int deckIndex, DeckPanel::GridAction action, double seconds);

@@ -131,7 +131,8 @@ ChannelStrip::ChannelStrip (StemDeckPlayer& p, int index) : player (p), deckInde
 
 		for (int bus = 0; bus < buses::count; ++bus)
 		{
-			auto* button = busButtons.add (new juce::TextButton (juce::String (bus + 1)));   // 5 = AUX, 6 = PH
+			const auto label = bus == buses::aux ? juce::String ("A") : bus == buses::phones ? juce::String ("P") : juce::String (bus + 1);
+			auto* button = busButtons.add (new juce::TextButton (label));
 			button->setClickingTogglesState (true);
 			button->setToggleState (player.isStemOnBus (s, bus), juce::dontSendNotification);
 			button->setColour (juce::TextButton::buttonOnColourId, busColour (bus, s));

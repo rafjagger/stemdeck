@@ -4,6 +4,7 @@ add_executable(stemdeck-tests
     Buses.cpp
     GridEdit.cpp
     AutoDj.cpp
+    RecordingName.cpp
     ${CMAKE_SOURCE_DIR}/Source/AutoDj.cpp
     ${CMAKE_SOURCE_DIR}/Source/GridEdit.cpp
     ProLinkPackets.cpp

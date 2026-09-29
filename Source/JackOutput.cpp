@@ -5,7 +5,8 @@ JackOutput::~JackOutput()
 	close();
 }
 
-juce::String JackOutput::open (const juce::String& name, const juce::StringArray& portNames, juce::AudioSource& audioSource)
+juce::String JackOutput::open (const juce::String& name, const juce::StringArray& portNames, juce::AudioSource& audioSource,
+								const juce::StringArray& inputNames, InputSink* inputSink)
 {
 	close();
 
@@ -41,6 +42,22 @@ juce::String JackOutput::open (const juce::String& name, const juce::StringArray
 
 	channelPointers.resize (ports.size());
 
+	for (const auto& portName : inputNames)
+	{
+		auto* port = jack_port_register (client, portName.toRawUTF8(), JACK_DEFAULT_AUDIO_TYPE, JackPortIsInput, 0);
+
+		if (port == nullptr)
+		{
+			close();
+			return "JACK-Port konnte nicht angelegt werden: " + portName;
+		}
+
+		inputs.push_back (port);
+	}
+
+	inputPointers.resize (inputs.size());
+	sink = inputSink;
+
 	sampleRate = (double) jack_get_sample_rate (client);
 	bufferSize = jack_get_buffer_size (client);
 	source->prepareToPlay ((int) bufferSize.load(), sampleRate.load());
@@ -65,6 +82,8 @@ void JackOutput::close()
 	jack_client_close (client);
 	client = nullptr;
 	ports.clear();
+	inputs.clear();
+	sink = nullptr;
 
 	if (source != nullptr)
 		source->releaseResources();
@@ -97,6 +116,13 @@ int JackOutput::processCallback (jack_nframes_t numFrames, void* arg)
 	// Wraps the port buffers directly; no allocation for up to 32 channels.
 	juce::AudioBuffer<float> buffer (self.channelPointers.data(), (int) self.channelPointers.size(), (int) numFrames);
 	self.source->getNextAudioBlock (juce::AudioSourceChannelInfo (&buffer, 0, (int) numFrames));
+
+	if (self.sink != nullptr && ! self.inputs.empty())
+	{
+		for (size_t i = 0; i < self.inputs.size(); ++i)
+			self.inputPointers[i] = static_cast<const float*> (jack_port_get_buffer (self.inputs[i], numFrames));
+		self.sink->inputBlock (self.inputPointers.data(), (int) self.inputPointers.size(), (int) numFrames);
+	}
 	return 0;
 }
 

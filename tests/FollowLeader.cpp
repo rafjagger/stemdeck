@@ -96,3 +96,23 @@ TEST (FollowLeader, NoPhaseWhileNotPlayingOrScratching)
 		EXPECT_TRUE (r.tempo.has_value()) << "the tempo still follows";
 	}
 }
+
+// Review 2026-09-29: a deck's position moves once per audio block, the Pioneer
+// phase is computed for "now". Compared raw, the gap jitters by up to one block
+// and the nudge wobbles the pitch. The position is carried forward to "now".
+TEST (FollowLeader, ThePositionIsCarriedForwardToNow)
+{
+	EXPECT_NEAR (positionAt (10.0, 100.000, 100.010, 1.0, true), 10.010, 1e-9);
+	EXPECT_NEAR (positionAt (10.0, 100.000, 100.010, 1.02, true), 10.0102, 1e-9);
+}
+
+TEST (FollowLeader, AStoppedDeckIsNotCarried)
+{
+	EXPECT_DOUBLE_EQ (positionAt (10.0, 100.0, 100.5, 1.0, false), 10.0);
+}
+
+TEST (FollowLeader, ACarryIsNeverBackwardsNorLongerThanABlockCouldBe)
+{
+	EXPECT_DOUBLE_EQ (positionAt (10.0, 100.0, 99.9, 1.0, true), 10.0) << "stamp from the future";
+	EXPECT_NEAR (positionAt (10.0, 100.0, 105.0, 1.0, true), 10.1, 1e-9) << "a stale stamp is capped at 100 ms";
+}

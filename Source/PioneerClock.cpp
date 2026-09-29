@@ -13,7 +13,9 @@ void PioneerClock::onStatus (const prolink::StatusPacket& status, double seconds
 void PioneerClock::onBeat (const prolink::BeatPacket& beat, double seconds)
 {
 	// Nobody to follow yet: the first player heard is the choice, and stays it.
-	if (chosen == 0 && ! hasMasterInfo (seconds))
+	// Also with status packets but no master (paused, or the mixer is master):
+	// following nothing would strand the deck.
+	if (chosen == 0 && ! hasMaster (seconds))
 		chosen = beat.device;
 
 	if (beat.device != leader (seconds))
@@ -30,9 +32,7 @@ void PioneerClock::choosePlayer (int device)
 
 int PioneerClock::leader (double seconds) const
 {
-	if (hasMasterInfo (seconds) && master != 0)
-		return master;
-	return chosen;
+	return hasMaster (seconds) ? master : chosen;
 }
 
 bool PioneerClock::hasMasterInfo (double seconds) const
@@ -50,4 +50,9 @@ double PioneerClock::beatPhaseAt (double seconds) const
 	if (lastBeat < 0.0 || tempo <= 0.0)
 		return 0.0;
 	return (seconds - lastBeat) * tempo / 60.0;
+}
+
+bool PioneerClock::hasMaster (double seconds) const
+{
+	return hasMasterInfo (seconds) && master != 0;
 }

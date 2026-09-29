@@ -34,3 +34,9 @@ struct FollowResult
 };
 
 FollowResult followLeader (const FollowInput& in);
+
+// A deck's position carried from when the audio thread last moved it
+// (`stampSeconds`) to `nowSeconds` at `rate` track-seconds per second -- so it
+// can be set against a leader phase computed for now. Not while stopped or
+// scratching; never backwards; at most 100 ms, longer than any audio block.
+double positionAt (double position, double stampSeconds, double nowSeconds, double rate, bool moving);

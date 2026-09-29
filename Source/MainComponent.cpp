@@ -238,7 +238,8 @@ void MainComponent::updateSync()
 	in.anyScratching = follower.isScratching() || leader.isScratching();
 	in.multiple = syncMultiple;
 
-	syncMultiple = applyFollow (syncFollower, in);
+	// Both positions move with the same audio block, so they compare as read.
+	syncMultiple = applyFollow (syncFollower, in, follower.getPosition());
 }
 
 void MainComponent::setSyncSource (bool pio)
@@ -292,12 +293,26 @@ void MainComponent::followPioneer()
 		in.anyScratching = players[(size_t) d]->isScratching();
 		in.multiple = pioMultiple[(size_t) d];
 
-		pioMultiple[(size_t) d] = applyFollow (d, in);
+		// The Pioneer phase is for now; the deck's position is from its last
+		// audio block. Carried forward, or the gap jitters by up to a block
+		// and the nudge wobbles the pitch.
+		auto& player = *players[(size_t) d];
+		const auto position = positionAt (player.getPosition(), player.getPositionStamp(), now,
+										  player.getEffectiveRate(), player.isPlaying() && ! player.isScratching());
+		pioMultiple[(size_t) d] = applyFollow (d, in, position);
 	}
 }
 
 void MainComponent::updatePioneerStatus()
 {
+	// PIO chosen but not listening -- the network was not up yet at start-up,
+	// or the ports were busy: try again every two seconds, and say why meanwhile.
+	if (pioSource && ! proLink.isRunning() && --pioRetryCountdown <= 0)
+	{
+		pioRetryCountdown = 120;
+		proLink.start (appProperties.getUserSettings()->getIntValue ("pioDevice", 6));
+	}
+
 	pioStatus.setVisible (pioSource);
 	if (! pioSource)
 	{
@@ -307,7 +322,7 @@ void MainComponent::updatePioneerStatus()
 
 	const auto now = juce::Time::getMillisecondCounterHiRes() / 1000.0;
 	const auto error = proLink.error();
-	const auto noMasterInfo = proLink.isRunning() && pioClock.bpm() > 0.0 && ! pioClock.hasMasterInfo (now);
+	const auto noMasterInfo = proLink.isRunning() && pioClock.bpm() > 0.0 && ! pioClock.hasMaster (now);
 	pioPlayer.setVisible (noMasterInfo);
 	if (noMasterInfo && pioPlayer.getSelectedId() != pioClock.chosenPlayer())
 		pioPlayer.setSelectedId (pioClock.chosenPlayer(), juce::dontSendNotification);
@@ -318,7 +333,7 @@ void MainComponent::updatePioneerStatus()
 	else if (pioClock.bpm() <= 0.0)
 		text = juce::String::fromUTF8 ("PIO \xe2\x80\x93");
 	else if (noMasterInfo)
-		text = juce::String::fromUTF8 ("PIO: no master info \xc2\xb7 follow");
+		text = juce::String::fromUTF8 ("PIO: no master \xc2\xb7 follow");
 	else
 		text = "PIO " + juce::String (pioClock.bpm(), 1) + juce::String::fromUTF8 (" \xc2\xb7 ")
 			 + (pioClock.isLive (now) ? "CDJ " + juce::String (pioClock.leader (now)) : juce::String ("held"));
@@ -328,13 +343,13 @@ void MainComponent::updatePioneerStatus()
 
 // One synced deck against its leader: the rules in followLeader(), the
 // result put on the deck.
-double MainComponent::applyFollow (int deckIndex, FollowInput in)
+double MainComponent::applyFollow (int deckIndex, FollowInput in, double followerPosition)
 {
 	auto& follower = *players[(size_t) deckIndex];
 	const auto grid = follower.getBeatGrid();
 
 	in.followerGridBpm = grid.bpm;
-	in.followerBeatPhase = grid.beatsAt (follower.getPosition());
+	in.followerBeatPhase = grid.beatsAt (followerPosition);
 	in.followerSpeed = follower.getSpeed();
 	in.followerEffectiveRate = follower.getEffectiveRate();
 	in.followerPlaying = follower.isPlaying();

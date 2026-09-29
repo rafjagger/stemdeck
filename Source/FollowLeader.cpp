@@ -42,3 +42,11 @@ FollowResult followLeader (const FollowInput& in)
 
 	return out;
 }
+
+double positionAt (double position, double stampSeconds, double nowSeconds, double rate, bool moving)
+{
+	constexpr double longestCarry = 0.1;
+	if (! moving)
+		return position;
+	return position + std::clamp (nowSeconds - stampSeconds, 0.0, longestCarry) * rate;
+}

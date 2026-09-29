@@ -10,8 +10,9 @@
 // Who leads: the device whose status says it is master and playing. Status
 // packets are partly sent to one address, and on the Core NUC StemDeck shares
 // that address with beat-analyzer, so they may never arrive here. Without a
-// status packet for two seconds there is no master info, and the chosen
-// player leads -- or, when none was chosen, the first player that sent a beat.
+// status packet for two seconds there is no master info; with no master known
+// either way, the chosen player leads -- or, when none was chosen, the first
+// player that sent a beat.
 class PioneerClock
 {
 public:
@@ -24,6 +25,7 @@ public:
 
 	int leader (double seconds) const;          // 0 = nobody
 	bool hasMasterInfo (double seconds) const;  // a status packet within `silence`
+	bool hasMaster (double seconds) const;      // ...and one of them is master and playing
 	bool isLive (double seconds) const;         // a leader beat within `silence`
 	double bpm() const { return tempo; }        // held when silent; 0 = never heard
 	double beatPhaseAt (double seconds) const;  // beats since the leader's last beat

@@ -54,7 +54,7 @@ private:
 	void startAnalysis (const StemSet& set, int deckIndex);
 	void setSync (int deckIndex, bool enabled);
 	void updateSync();
-	double applyFollow (int deckIndex, FollowInput in);
+	double applyFollow (int deckIndex, FollowInput in, double followerPosition);
 	void setSyncSource (bool pio);
 	void followPioneer();
 	void updatePioneerStatus();
@@ -119,6 +119,7 @@ private:
 	juce::TextButton syncSourceButton { "SYNC: DECK" };
 	juce::Label pioStatus;
 	juce::ComboBox pioPlayer;
+	int pioRetryCountdown = 0; // timer ticks until the next start attempt
 
 	JackOutput jack;
 	bool usingJack = false;

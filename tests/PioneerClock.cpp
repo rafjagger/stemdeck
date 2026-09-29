@@ -106,3 +106,27 @@ TEST (PioneerClock, AMasterHandoverFollowsTheNewMaster)
 	EXPECT_DOUBLE_EQ (clock.bpm(), 128.0);
 	EXPECT_NEAR (clock.beatPhaseAt (10.4), 0.0, 1e-9) << "the phase starts from 4's beat, not 2's";
 }
+
+// Review 2026-09-29: status packets arrive, but nobody is master and playing
+// (the master paused, or the master is the mixer): the chosen or the first
+// player still leads -- following nothing would leave the deck stranded.
+TEST (PioneerClock, WithStatusButNoMasterTheFirstBeaterLeads)
+{
+	PioneerClock clock;
+	clock.onStatus (status (2, false, true), 9.9);
+	clock.onBeat (beat (2, 124.0), 10.0);
+	EXPECT_TRUE (clock.hasMasterInfo (10.0));
+	EXPECT_FALSE (clock.hasMaster (10.0));
+	EXPECT_EQ (clock.leader (10.0), 2);
+	EXPECT_DOUBLE_EQ (clock.bpm(), 124.0);
+}
+
+TEST (PioneerClock, APausedMasterHandsTheLeadToTheChosenPlayer)
+{
+	PioneerClock clock;
+	clock.choosePlayer (3);
+	clock.onStatus (status (2, true), 9.9);
+	EXPECT_EQ (clock.leader (9.9), 2);
+	clock.onStatus (status (2, true, false), 10.0); // master, but paused
+	EXPECT_EQ (clock.leader (10.0), 3);
+}

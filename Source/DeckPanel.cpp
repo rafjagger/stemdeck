@@ -136,6 +136,29 @@ void DeckPanel::setTempoFromSync (double rate)
 	tempo.setValue (rate, juce::sendNotificationSync);
 }
 
+void DeckPanel::saveState (DeckSession& state) const
+{
+	state.tempo = tempo.getValue();
+	state.tempoRange = tempoRange;
+	state.vinyl = vinylButton.getToggleState();
+	state.repeat = repeatButton.getToggleState();
+	state.sync = syncButton.getToggleState();
+}
+
+void DeckPanel::restoreState (const DeckSession& state)
+{
+	setTempoRange (std::find (std::begin (tempoRanges), std::end (tempoRanges), state.tempoRange) != std::end (tempoRanges)
+					   ? state.tempoRange : tempoRanges[0]);
+	{
+		// Not a hand on the fader: SYNC is restored after it.
+		const juce::ScopedValueSetter<bool> svs (settingTempoFromSync, true);
+		tempo.setValue (state.tempo, juce::sendNotificationSync);
+	}
+	vinylButton.setToggleState (state.vinyl, juce::sendNotificationSync);
+	repeatButton.setToggleState (state.repeat, juce::sendNotificationSync);
+	syncButton.setToggleState (state.sync, juce::dontSendNotification);
+}
+
 void DeckPanel::setSet (const StemSet& set)
 {
 	titleLabel.setText (set.name, juce::dontSendNotification);

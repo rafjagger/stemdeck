@@ -65,16 +65,26 @@ public:
                               DocumentWindow::allButtons)
         {
             setUsingNativeTitleBar (true);
-            setContentOwned (new MainComponent(), true);
+            auto* content = new MainComponent();
+            setContentOwned (content, true);
 
            #if JUCE_IOS || JUCE_ANDROID
             setFullScreen (true);
            #else
             setResizable (true, true);
             centreWithSize (getWidth(), getHeight());
+            // Where it was last time (StemDeck.settings).
+            if (const auto state = content->settings().getValue ("windowState"); state.isNotEmpty())
+                restoreWindowStateFromString (state);
            #endif
 
             setVisible (true);
+        }
+
+        ~MainWindow() override
+        {
+            if (auto* content = dynamic_cast<MainComponent*> (getContentComponent()))
+                content->settings().setValue ("windowState", getWindowStateAsString());
         }
 
         void closeButtonPressed() override

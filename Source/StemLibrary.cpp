@@ -126,6 +126,30 @@ double StemLibrary::bpmOf (const StemSet& set) const
 	return 0.0;
 }
 
+void StemLibrary::saveState (LibrarySession& state) const
+{
+	state.sortColumn = sortColumn;
+	state.sortForwards = sortForwards;
+	state.search = searchBox.getText();
+	const auto row = table.getSelectedRow();
+	state.selectedSetId = row >= 0 && row < (int) visibleSets.size() ? idFor (*visibleSets[(size_t) row]) : juce::String();
+}
+
+void StemLibrary::restoreState (const LibrarySession& state)
+{
+	if (state.sortColumn > 0)
+		table.getHeader().setSortColumnId (state.sortColumn, state.sortForwards);   // sorts through sortOrderChanged
+	searchBox.setText (state.search, true);                                          // filters through onTextChange
+
+	for (int row = 0; row < (int) visibleSets.size(); ++row)
+		if (idFor (*visibleSets[(size_t) row]) == state.selectedSetId)
+		{
+			table.selectRow (row);
+			table.scrollToEnsureRowIsOnscreen (row);
+			break;
+		}
+}
+
 void StemLibrary::sortOrderChanged (int columnId, bool forwards)
 {
 	sortColumn = columnId;

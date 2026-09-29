@@ -2,6 +2,7 @@
 
 #include <JuceHeader.h>
 #include "StemJob.h"
+#include "ProcessGroup.h"
 
 #include <atomic>
 #include <mutex>
@@ -13,8 +14,8 @@
 // rules are in StemJob.h). Nothing lands in the library before a job is
 // complete: the work happens in ~/.cache/StemDeck/jobs/<id>/.
 //
-// Each command runs as its own process group, so pausing (while a deck
-// plays), cancelling and quitting reach everything it started.
+// The commands run through ProcessGroup, so pausing (while a deck plays),
+// cancelling and quitting reach everything they started.
 class StemCreator : private juce::Thread
 {
 public:
@@ -30,7 +31,7 @@ public:
 	void cancel (int id);
 	void cancelRunning();
 
-	// While a deck plays or StemDeck is the tempo master: stopped, not killed.
+	// While a deck plays: stopped, not killed.
 	void setPaused (bool shouldPause);
 
 	struct Status
@@ -51,7 +52,7 @@ private:
 	bool runJob (const StemJobEntry& job, juce::String& error);
 	bool execute (const std::vector<std::string>& argv, const std::vector<std::string>& environment,
 				  const std::function<void (const std::string&)>& onLine, juce::String& error);
-	void signalChild (int signal);
+	bool stopRequested() const { return cancelRequested || threadShouldExit(); }
 
 	mutable std::mutex lock;
 	StemJobQueue queue;
@@ -59,6 +60,6 @@ private:
 	juce::String runningTrack, lastError;
 	double progress = 0.0;
 	std::atomic<bool> fast { false }, paused { false }, cancelRequested { false };
-	std::atomic<int> childGroup { -1 };
+	ProcessGroup processes;
 	juce::WaitableEvent wake;
 };

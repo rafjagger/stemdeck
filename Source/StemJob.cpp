@@ -189,3 +189,12 @@ ArtistAlbum guessArtistAlbum (const std::string& path)
 		guess.artist = folders[folders.size() - 2];
 	return guess;
 }
+
+bool shouldOfferForSeparation (const std::string& path, const std::string& libraryFolder)
+{
+	auto root = libraryFolder;
+	while (root.size() > 1 && root.back() == '/')
+		root.pop_back();
+	const auto insideLibrary = path.size() > root.size() && path.compare (0, root.size(), root) == 0 && path[root.size()] == '/';
+	return ! insideLibrary && isSeparableAudioFile (path.substr (path.rfind ('/') + 1));
+}

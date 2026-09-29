@@ -61,7 +61,7 @@ private:
 	void chooseFolder();
 	void chooseFilesForStems();
 	void setDropHighlight (bool on);
-	static juce::Array<juce::File> separableFiles (const juce::StringArray& paths);
+	juce::Array<juce::File> separableFiles (const juce::StringArray& paths) const;
 
 	juce::AudioFormatManager& formatManager;
 	juce::File folder;

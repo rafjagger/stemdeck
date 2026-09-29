@@ -1,11 +1,5 @@
 #include "StemCreator.h"
 
-#include <cerrno>
-#include <csignal>
-#include <cstring>
-#include <fcntl.h>
-#include <poll.h>
-#include <sys/wait.h>
 #include <unistd.h>
 
 StemCreator::StemCreator() : juce::Thread ("Stem creator")
@@ -18,7 +12,7 @@ StemCreator::~StemCreator()
 {
 	signalThreadShouldExit();
 	cancelRequested = true;
-	signalChild (SIGKILL);   // nothing of a job outlives StemDeck; SIGKILL reaches stopped processes too
+	processes.kill();   // nothing of a job outlives StemDeck; SIGKILL reaches stopped processes too
 	wake.signal();
 	stopThread (5000);
 }
@@ -53,7 +47,7 @@ void StemCreator::cancel (int id)
 	if (queue.cancel (id) == StemJobQueue::Cancel::kill)
 	{
 		cancelRequested = true;
-		signalChild (SIGKILL);
+		processes.kill();
 	}
 }
 
@@ -70,9 +64,8 @@ void StemCreator::cancelRunning()
 
 void StemCreator::setPaused (bool shouldPause)
 {
-	if (paused.exchange (shouldPause) == shouldPause)
-		return;
-	signalChild (shouldPause ? SIGSTOP : SIGCONT);
+	paused = shouldPause;
+	processes.setPaused (shouldPause);
 }
 
 StemCreator::Status StemCreator::status() const
@@ -90,12 +83,6 @@ StemCreator::Status StemCreator::status() const
 	return s;
 }
 
-void StemCreator::signalChild (int signal)
-{
-	if (const auto group = childGroup.load(); group > 0)
-		::kill (-group, signal);
-}
-
 void StemCreator::run()
 {
 	while (! threadShouldExit())
@@ -105,6 +92,7 @@ void StemCreator::run()
 			std::lock_guard<std::mutex> guard (lock);
 			if (const auto id = queue.startNext())
 			{
+				cancelRequested = false;
 				job = *queue.find (*id);
 				runningTrack = juce::String (job->track);
 				progress = 0.0;
@@ -117,7 +105,6 @@ void StemCreator::run()
 			continue;
 		}
 
-		cancelRequested = false;
 		juce::String error;
 		const auto ok = runJob (*job, error);
 
@@ -150,7 +137,7 @@ bool StemCreator::runJob (const StemJobEntry& job, juce::String& error)
 
 	// Staging outside the library, so no half-made set is ever scanned.
 	const auto staging = juce::File::getSpecialLocation (juce::File::userHomeDirectory)
-							 .getChildFile (".cache/StemDeck/jobs/" + juce::String (job.id));
+							 .getChildFile (".cache/StemDeck/jobs/" + juce::String ((int) getpid()) + "-" + juce::String (job.id));
 	staging.deleteRecursively();
 	staging.createDirectory();
 	const auto cleanUp = [&staging] { staging.deleteRecursively(); };
@@ -175,7 +162,20 @@ bool StemCreator::runJob (const StemJobEntry& job, juce::String& error)
 								   input.getFileName().toStdString(),
 								   [] (const std::string& path) { return juce::File (path).exists(); });
 
-	juce::File (plan.albumFolder).createDirectory();
+	// The original first: the copy is the slow part (a stick, a big FLAC), and
+	// a cancel during it must still leave the album untouched.
+	const juce::File original (plan.originalPath);
+	original.getParentDirectory().createDirectory();
+	if (! input.copyFileTo (original))
+		return (error = "could not copy the original"), cleanUp(), false;
+
+	if (stopRequested())
+	{
+		original.deleteFile();
+		return (error = "cancelled"), cleanUp(), false;
+	}
+
+	// From here on the set goes in: four renames, too quick to cancel.
 	for (int stem = 0; stem < 4; ++stem)
 	{
 		const juce::File from (demucsOutputFile (staging.getFullPathName().toStdString(), wav, stem));
@@ -183,14 +183,11 @@ bool StemCreator::runJob (const StemJobEntry& job, juce::String& error)
 		{
 			for (int s = 0; s < stem; ++s)
 				juce::File (plan.stemPaths[(size_t) s]).deleteFile();  // no three-stem set
+			original.deleteFile();
 			error = "could not move " + from.getFileName();
 			return cleanUp(), false;
 		}
 	}
-
-	const juce::File original (plan.originalPath);
-	original.getParentDirectory().createDirectory();
-	input.copyFileTo (original);  // copied: the source may be on a stick or still in use
 	cleanUp();
 
 	const juce::File firstStem (plan.stemPaths[0]);
@@ -201,83 +198,12 @@ bool StemCreator::runJob (const StemJobEntry& job, juce::String& error)
 bool StemCreator::execute (const std::vector<std::string>& argv, const std::vector<std::string>& environment,
 						   const std::function<void (const std::string&)>& onLine, juce::String& error)
 {
-	int out[2];
-	if (pipe (out) != 0)
-		return (error = "no pipe"), false;
-
-	std::vector<char*> args;
-	for (const auto& a : argv)
-		args.push_back (const_cast<char*> (a.c_str()));
-	args.push_back (nullptr);
-
-	const auto pid = fork();
-	if (pid < 0)
-	{
-		close (out[0]);
-		close (out[1]);
-		return (error = "cannot start " + juce::String (argv[0])), false;
-	}
-
-	if (pid == 0)
-	{
-		// Its own process group, so one signal reaches everything it starts.
-		setpgid (0, 0);
-		dup2 (out[1], STDOUT_FILENO);
-		dup2 (out[1], STDERR_FILENO);
-		close (out[0]);
-		close (out[1]);
-		for (const auto& e : environment)
-			putenv (const_cast<char*> (e.c_str()));
-		execvp (args[0], args.data());
-		const auto message = std::string ("cannot run ") + args[0] + ": " + std::strerror (errno) + "\n";
-		(void) ::write (STDERR_FILENO, message.data(), message.size());
-		_exit (127);
-	}
-
-	setpgid (pid, pid);
-	childGroup = pid;
-	if (paused)
-		::kill (-pid, SIGSTOP);
-	close (out[1]);
-
-	std::string pending, lastLine;
-	char buffer[4096];
-	for (;;)
-	{
-		pollfd fd { out[0], POLLIN, 0 };
-		if (poll (&fd, 1, 200) > 0)
-		{
-			const auto n = read (out[0], buffer, sizeof (buffer));
-			if (n <= 0)
-				break;
-			pending.append (buffer, (size_t) n);
-			// tqdm ends its updates with '\r', everything else with '\n'.
-			for (auto end = pending.find_first_of ("\r\n"); end != std::string::npos; end = pending.find_first_of ("\r\n"))
-			{
-				const auto line = pending.substr (0, end);
-				pending.erase (0, end + 1);
-				if (! line.empty())
-				{
-					if (onLine)
-						onLine (line);
-					if (line.find ("%|") == std::string::npos)
-						lastLine = line;
-				}
-			}
-		}
-		if (cancelRequested || threadShouldExit())
-			::kill (-pid, SIGKILL);
-	}
-	close (out[0]);
-
-	int statusCode = 0;
-	waitpid (pid, &statusCode, 0);
-	childGroup = -1;
-
-	if (cancelRequested || threadShouldExit())
-		return (error = "cancelled"), false;
-	if (WIFEXITED (statusCode) && WEXITSTATUS (statusCode) == 0)
+	std::string lastLine;
+	const auto result = processes.run (argv, environment, onLine, [this] { return stopRequested(); }, lastLine);
+	if (result == ProcessGroup::Result::ok)
 		return true;
+	if (result == ProcessGroup::Result::stopped)
+		return (error = "cancelled"), false;
 
 	error = juce::String (argv[0] == "systemd-run" ? "demucs" : argv[0]) + ": "
 		  + (lastLine.empty() ? juce::String ("failed") : juce::String (lastLine));

@@ -178,3 +178,17 @@ TEST (StemJob, AShallowPathGuessesWhatItHas)
 	EXPECT_EQ (guessArtistAlbum ("/Untrue/track.flac").album, "Untrue");
 	EXPECT_EQ (guessArtistAlbum ("/Untrue/track.flac").artist, "");
 }
+
+TEST (StemJob, FilesInTheLibraryAreNotOfferedAgain)
+{
+	EXPECT_FALSE (shouldOfferForSeparation ("/lib/Burial/Untrue/originals/Archangel.flac", "/lib"));
+	EXPECT_FALSE (shouldOfferForSeparation ("/lib/Burial/Untrue/Archangel-001.wav", "/lib"));
+	EXPECT_FALSE (shouldOfferForSeparation ("/lib/Burial/Untrue/cover.jpg", "/lib"));
+}
+
+TEST (StemJob, FilesOutsideTheLibraryAreOffered)
+{
+	EXPECT_TRUE (shouldOfferForSeparation ("/music/Burial/Untrue/Archangel.flac", "/lib"));
+	EXPECT_TRUE (shouldOfferForSeparation ("/library2/Archangel.flac", "/lib"));   // a sibling, not inside
+	EXPECT_FALSE (shouldOfferForSeparation ("/music/notes.txt", "/lib"));
+}

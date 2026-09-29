@@ -277,8 +277,13 @@ void StemLibrary::setCreatorStatus (const juce::String& text, bool canCancel)
 	resized();
 }
 
-juce::Array<juce::File> StemLibrary::separableFiles (const juce::StringArray& paths)
+juce::Array<juce::File> StemLibrary::separableFiles (const juce::StringArray& paths) const
 {
+	const auto offered = [this] (const juce::File& f)
+	{
+		return shouldOfferForSeparation (f.getFullPathName().toStdString(), folder.getFullPathName().toStdString());
+	};
+
 	juce::Array<juce::File> found;
 	for (const auto& path : paths)
 	{
@@ -286,10 +291,10 @@ juce::Array<juce::File> StemLibrary::separableFiles (const juce::StringArray& pa
 		if (f.isDirectory())
 		{
 			for (const auto& entry : juce::RangedDirectoryIterator (f, true, "*", juce::File::findFiles))
-				if (isSeparableAudioFile (entry.getFile().getFileName().toStdString()))
+				if (offered (entry.getFile()))
 					found.add (entry.getFile());
 		}
-		else if (isSeparableAudioFile (f.getFileName().toStdString()))
+		else if (offered (f))
 			found.add (f);
 	}
 	found.sort();

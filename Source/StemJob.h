@@ -49,6 +49,11 @@ enum class JobState { queued, running, done, failed, cancelled };
 // Stems already made ("Title - 1.drums.wav") are not taken again.
 bool isSeparableAudioFile (const std::string& fileName);
 
+// A dropped file is offered for separation when it is separable and not
+// already in the library (its originals, its sets): dropping the library
+// folder on itself must not queue it all again.
+bool shouldOfferForSeparation (const std::string& path, const std::string& libraryFolder);
+
 // Artist and album preset from where a file lies (.../Artist/Album/track.flac);
 // empty where the path has no such level.
 struct ArtistAlbum { std::string artist, album; };

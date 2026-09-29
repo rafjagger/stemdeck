@@ -46,7 +46,8 @@ target_sources(StemDeck PRIVATE
     Source/AutoDj.cpp
     Source/Recorder.cpp
     Source/Scs3d.cpp
-    Source/Scs3dDevice.cpp)
+    Source/Scs3dDevice.cpp
+    Source/Screencast.cpp)
 
 target_compile_definitions(StemDeck PRIVATE
     JUCE_WEB_BROWSER=0

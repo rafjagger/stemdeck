@@ -201,42 +201,30 @@ private:
 	// waveforms while it runs.
 	Screencast screencast;
 	juce::TextButton castButton { "CAST" };
+	juce::TextButton castRecordButton { juce::String::fromUTF8 ("\xe2\x97\x8f") };   // CAST also records
 	void toggleScreencast();
 
-	// The picture, and the sound's level beside it (L, R).
+	// The cast's picture; its sound's level is in the top bar (castMeterL/R).
 	struct CastView : public juce::Component
 	{
-		static constexpr int meterWidth = 8;
 		juce::Image image;
-		LevelMeter meterL, meterR;
-
-		CastView() { addAndMakeVisible (meterL); addAndMakeVisible (meterR); }
-
-		juce::Rectangle<int> pictureArea() const { return getLocalBounds().withTrimmedRight (2 * meterWidth + 6); }
-
-		void resized() override
-		{
-			auto meters = getLocalBounds().removeFromRight (2 * meterWidth + 2);
-			meterR.setBounds (meters.removeFromRight (meterWidth));
-			meters.removeFromRight (2);
-			meterL.setBounds (meters.removeFromRight (meterWidth));
-		}
 
 		void paint (juce::Graphics& g) override
 		{
-			g.setColour (juce::Colours::black);
-			g.fillRect (pictureArea());
+			g.fillAll (juce::Colours::black);
 			if (image.isValid())
-				g.drawImage (image, pictureArea().toFloat(), juce::RectanglePlacement::centred);
+				g.drawImage (image, getLocalBounds().toFloat(), juce::RectanglePlacement::centred);
 			else
 			{
 				g.setColour (juce::Colours::grey);
-				g.drawText ("CAST ...", pictureArea(), juce::Justification::centred);
+				g.drawText ("CAST ...", getLocalBounds(), juce::Justification::centred);
 			}
 		}
 	};
+	LevelMeter castMeterL, castMeterR;   // always there, beside CAST
 	CastView castView;
 	int castFramesShown = -1;
+	bool castRecordingNow = false;   // how the running cast was started
 	LevelMeter recMeterL, recMeterR;
 	void toggleRecording();
 	void updateRecorder();

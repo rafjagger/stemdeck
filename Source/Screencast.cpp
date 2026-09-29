@@ -26,7 +26,7 @@ Screencast::~Screencast()
 		close (soundFd);
 }
 
-juce::String Screencast::start (const juce::File& script, const juce::String& host)
+juce::String Screencast::start (const juce::File& script, const juce::String& host, bool record)
 {
 	if (child > 0)
 		return {};
@@ -74,6 +74,8 @@ juce::String Screencast::start (const juce::File& script, const juce::String& ho
 		else
 			dup2 (sound[1], 3);
 		setenv ("PREVIEW", preview.c_str(), 1);
+		if (! record)
+			setenv ("NOREC", "1", 1);
 		execl ("/bin/bash", "bash", path.c_str(), hostName.c_str(), (char*) nullptr);
 		_exit (127);
 	}

@@ -14,8 +14,8 @@
 // rules are in StemJob.h). Nothing lands in the library before a job is
 // complete: the work happens in ~/.cache/StemDeck/jobs/<id>/.
 //
-// The commands run through ProcessGroup, so pausing (while a deck plays),
-// cancelling and quitting reach everything they started.
+// The commands run through ProcessGroup, so cancelling and quitting reach
+// everything they started. They run beside the decks, never on the audio CPU.
 class StemCreator : private juce::Thread
 {
 public:
@@ -25,8 +25,9 @@ public:
 	void setLibraryFolder (const juce::File& folder);
 	// Where the separator's venv lives (tools/setup-separator.sh makes it).
 	void setVenv (const juce::File& venv);
-	// How many CPU cores Demucs may use (from CPU 0); all of them by default.
-	void setCores (int count) { cores = juce::jmax (1, count); }
+	// How many CPU cores Demucs may use -- never the audio CPU (StemJob.h);
+	// 0, the default, is all the others.
+	void setMaxCores (int count) { maxCores = juce::jmax (0, count); }
 	// Where the separator should be, and whether it is there.
 	juce::File venv() const;
 	bool isInstalled() const { return venv().getChildFile ("bin/demucs").existsAsFile(); }
@@ -36,12 +37,9 @@ public:
 	void cancel (int id);
 	void cancelRunning();
 
-	// While a deck plays: stopped, not killed.
-	void setPaused (bool shouldPause);
-
 	struct Status
 	{
-		bool running = false, paused = false;
+		bool running = false;
 		juce::String track;
 		double progress = 0.0;  // of the separation
 		int waiting = 0;
@@ -64,8 +62,8 @@ private:
 	juce::File libraryFolder, venvFolder;
 	juce::String runningTrack, lastError;
 	double progress = 0.0;
-	std::atomic<int> cores { juce::jmax (1, juce::SystemStats::getNumCpus()) };
-	std::atomic<bool> paused { false }, cancelRequested { false };
+	std::atomic<int> maxCores { 0 };
+	std::atomic<bool> cancelRequested { false };
 	ProcessGroup processes;
 	juce::WaitableEvent wake;
 };

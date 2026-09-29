@@ -39,11 +39,25 @@ std::vector<std::string> encodeCommand (const std::string& stemWav, const std::s
 
 std::vector<std::string> decodeCommand (const std::string& input, const std::string& outputWav);
 
-// Demucs htdemucs at idle priority on CPUs 0 .. cores-1 with as many threads,
-// memory capped, 24-bit clamped output into `stagingDir`.
+// The CPU StemDeck's audio thread is pinned to. The separator keeps off it,
+// so a deck plays on while a track is separated.
+constexpr int audioCpu = 1;
+
+// The CPUs the separator may use: every one but audioCpu (CPU 0 first), at
+// most `maxCores` of them (0: no limit). As taskset wants it ("0,2-5") and
+// how many. A single-CPU machine has only CPU 0 to offer.
+struct SeparatorCpus
+{
+	std::string list;
+	int count = 1;
+};
+SeparatorCpus separatorCpus (int numCpus, int maxCores);
+
+// Demucs htdemucs at idle priority on `cpus` with as many threads, memory
+// capped, 24-bit clamped output into `stagingDir`.
 std::vector<std::string> separateCommand (const std::string& venv, const std::string& inputWav,
-										  const std::string& stagingDir, int cores);
-std::vector<std::string> separateEnvironment (int cores);
+										  const std::string& stagingDir, const SeparatorCpus& cpus);
+std::vector<std::string> separateEnvironment (int threads);
 
 // Where Demucs writes stem `stem` (0 drums .. 3 vocals) of `inputWav`.
 std::string demucsOutputFile (const std::string& stagingDir, const std::string& inputWav, int stem);

@@ -68,18 +68,11 @@ void StemCreator::cancelRunning()
 		cancel (*id);
 }
 
-void StemCreator::setPaused (bool shouldPause)
-{
-	paused = shouldPause;
-	processes.setPaused (shouldPause);
-}
-
 StemCreator::Status StemCreator::status() const
 {
 	std::lock_guard<std::mutex> guard (lock);
 	Status s;
 	s.running = queue.running().has_value();
-	s.paused = paused.load();
 	s.track = runningTrack;
 	s.progress = progress;
 	s.lastError = lastError;
@@ -160,8 +153,9 @@ bool StemCreator::runJob (const StemJobEntry& job, juce::String& error)
 			progress = *p;
 		}
 	};
-	if (! execute (separateCommand (venv.getFullPathName().toStdString(), wav, staging.getFullPathName().toStdString(), cores),
-				   separateEnvironment (cores), onLine, error))
+	const auto cpus = separatorCpus (juce::SystemStats::getNumCpus(), maxCores);
+	if (! execute (separateCommand (venv.getFullPathName().toStdString(), wav, staging.getFullPathName().toStdString(), cpus),
+				   separateEnvironment (cpus.count), onLine, error))
 		return cleanUp(), false;
 
 	const auto plan = planStemJob (library.getFullPathName().toStdString(), job.folder, job.track,

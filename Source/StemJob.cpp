@@ -76,14 +76,12 @@ std::vector<std::string> decodeCommand (const std::string& input, const std::str
 }
 
 std::vector<std::string> separateCommand (const std::string& venv, const std::string& inputWav,
-										  const std::string& stagingDir, int cores)
+										  const std::string& stagingDir, const SeparatorCpus& cpus)
 {
 	// A scope with a memory cap (the user manager may set it without sudo);
 	// idle scheduling lets everything else -- the audio, the UI -- go first.
-	// One core is CPU 0, the one without real-time audio on the rig.
-	cores = std::max (1, cores);
 	return { "systemd-run", "--user", "--scope", "--quiet", "-p", "MemoryMax=6G", "-p", "CPUWeight=idle",
-			 "taskset", "-c", cores == 1 ? std::string ("0") : "0-" + std::to_string (cores - 1),
+			 "taskset", "-c", cpus.list,
 			 "chrt", "-i", "0",
 			 "nice", "-n", "19",
 			 "ionice", "-c", "3",
@@ -91,10 +89,37 @@ std::vector<std::string> separateCommand (const std::string& venv, const std::st
 			 "-o", stagingDir, inputWav };
 }
 
-std::vector<std::string> separateEnvironment (int cores)
+SeparatorCpus separatorCpus (int numCpus, int maxCores)
 {
-	const auto threads = std::to_string (std::max (1, cores));
-	return { "OMP_NUM_THREADS=" + threads, "MKL_NUM_THREADS=" + threads };
+	std::vector<int> cpus;
+	for (int cpu = 0; cpu < numCpus; ++cpu)
+		if (cpu != audioCpu)
+			cpus.push_back (cpu);
+	if (cpus.empty())
+		cpus.push_back (0);
+	if (maxCores > 0 && (int) cpus.size() > maxCores)
+		cpus.resize ((size_t) maxCores);
+
+	// Runs of neighbours as "a-b": 0,2,3,4,5 -> "0,2-5".
+	SeparatorCpus result;
+	for (size_t i = 0; i < cpus.size();)
+	{
+		auto j = i;
+		while (j + 1 < cpus.size() && cpus[j + 1] == cpus[j] + 1)
+			++j;
+		result.list += (result.list.empty() ? "" : ",") + std::to_string (cpus[i]);
+		if (j > i)
+			result.list += "-" + std::to_string (cpus[j]);
+		i = j + 1;
+	}
+	result.count = (int) cpus.size();
+	return result;
+}
+
+std::vector<std::string> separateEnvironment (int threads)
+{
+	const auto count = std::to_string (std::max (1, threads));
+	return { "OMP_NUM_THREADS=" + count, "MKL_NUM_THREADS=" + count };
 }
 
 std::string demucsOutputFile (const std::string& stagingDir, const std::string& inputWav, int stem)

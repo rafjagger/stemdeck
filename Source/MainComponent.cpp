@@ -1,4 +1,8 @@
 #include "MainComponent.h"
+#include "StemJob.h"
+
+#include <pthread.h>
+#include <sched.h>
 
 //==============================================================================
 MainComponent::MainComponent()
@@ -53,9 +57,9 @@ MainComponent::MainComponent()
 	};
 	if (const auto venv = appProperties.getUserSettings()->getValue ("separatorVenv"); juce::File::isAbsolutePath (venv))
 		stemCreator.setVenv (venv);
-	// All cores unless the settings say fewer (1 on the live rig: CPU 0 only).
+	// All cores but the audio CPU, unless the settings say fewer.
 	if (const auto cores = appProperties.getUserSettings()->getIntValue ("separatorCores"); cores > 0)
-		stemCreator.setCores (cores);
+		stemCreator.setMaxCores (cores);
 
 	// Last used folder, otherwise ./stems next to where the app was started.
 	// A saved folder that is gone (the checkout moved) falls back too, or the
@@ -439,16 +443,12 @@ void MainComponent::askTargetFolder (const juce::Array<juce::File>& files, const
 
 void MainComponent::updateCreatorStatus()
 {
-	const auto playing = decksPlaying();
-	stemCreator.setPaused (playing[0] || playing[1]);
-
+	// No pause while a deck plays: the separator keeps off the audio CPU.
 	const auto status = stemCreator.status();
 	juce::String text;
 	if (status.running)
 	{
 		text = "Stems: " + status.track + "  " + juce::String (juce::roundToInt (status.progress * 100.0)) + " %";
-		if (status.paused)
-			text << "  (pausiert, ein Deck spielt)";
 		if (status.waiting > 0)
 			text << "  +" << status.waiting << " wartend";
 	}
@@ -683,6 +683,17 @@ void MainComponent::prepareToPlay (int samplesPerBlockExpected, double sampleRat
 
 void MainComponent::getNextAudioBlock (const juce::AudioSourceChannelInfo& bufferToFill)
 {
+	// The audio thread gets the CPU the stem separator stays off (StemJob.h),
+	// so a deck plays on while a track is separated. Once per thread: JACK
+	// and the ALSA fallback each have their own.
+	static thread_local const bool pinned = [] {
+		cpu_set_t cpus;
+		CPU_ZERO (&cpus);
+		CPU_SET (audioCpu, &cpus);
+		return pthread_setaffinity_np (pthread_self(), sizeof (cpus), &cpus) == 0;
+	}();
+	juce::ignoreUnused (pinned);
+
 	auto& out = *bufferToFill.buffer;
 	const auto numSamples = bufferToFill.numSamples;
 	const auto numOut = out.getNumChannels();

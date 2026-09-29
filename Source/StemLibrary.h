@@ -29,6 +29,11 @@ public:
 	// Looks up a set by the id carried in drag-and-drop descriptions.
 	const StemSet* findSet (const juce::String& setId) const;
 
+	// A set id as the session keeps it: relative to the library folder, so a
+	// moved checkout or library still finds its sets; and back.
+	juce::String storedId (const juce::String& setId) const;
+	juce::String idFromStored (const juce::String& stored) const;
+
 	// A set picked at random from those the search shows, not one of
 	// `played`; when every one was, from all of them again. Null: none shown.
 	const StemSet* randomVisibleSet (const std::set<juce::String>& played) const;

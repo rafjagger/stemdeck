@@ -139,13 +139,24 @@ const StemSet* StemLibrary::randomVisibleSet (const std::set<juce::String>& play
 	return from[(size_t) juce::Random::getSystemRandom().nextInt ((int) from.size())];
 }
 
+juce::String StemLibrary::storedId (const juce::String& setId) const
+{
+	const juce::File file (setId);
+	return setId.isNotEmpty() && file.isAChildOf (folder) ? file.getRelativePathFrom (folder) : setId;
+}
+
+juce::String StemLibrary::idFromStored (const juce::String& stored) const
+{
+	return stored.isEmpty() || juce::File::isAbsolutePath (stored) ? stored : folder.getChildFile (stored).getFullPathName();
+}
+
 void StemLibrary::saveState (LibrarySession& state) const
 {
 	state.sortColumn = sortColumn;
 	state.sortForwards = sortForwards;
 	state.search = searchBox.getText();
 	const auto row = table.getSelectedRow();
-	state.selectedSetId = row >= 0 && row < (int) visibleSets.size() ? idFor (*visibleSets[(size_t) row]) : juce::String();
+	state.selectedSetId = row >= 0 && row < (int) visibleSets.size() ? storedId (idFor (*visibleSets[(size_t) row])) : juce::String();
 }
 
 void StemLibrary::restoreState (const LibrarySession& state)
@@ -155,7 +166,7 @@ void StemLibrary::restoreState (const LibrarySession& state)
 	searchBox.setText (state.search, true);                                          // filters through onTextChange
 
 	for (int row = 0; row < (int) visibleSets.size(); ++row)
-		if (idFor (*visibleSets[(size_t) row]) == state.selectedSetId)
+		if (idFor (*visibleSets[(size_t) row]) == idFromStored (state.selectedSetId))
 		{
 			table.selectRow (row);
 			table.scrollToEnsureRowIsOnscreen (row);

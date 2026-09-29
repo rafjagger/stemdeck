@@ -21,7 +21,7 @@ struct StemMixState
 
 struct DeckSession
 {
-	juce::String setId;     // the set's first stem file; empty: deck empty
+	juce::String setId;     // the set's first stem file, relative to the library; empty: deck empty
 	double position = 0.0;
 	bool playing = false;
 	double cuePoint = 0.0;

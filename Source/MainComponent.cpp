@@ -463,7 +463,7 @@ Session MainComponent::gatherSession() const
 	{
 		auto& deck = session.decks[(size_t) d];
 		const auto& player = *players[(size_t) d];
-		deck.setId = loadedSetIds[(size_t) d];
+		deck.setId = library.storedId (loadedSetIds[(size_t) d]);
 		deck.position = player.getPosition();
 		deck.playing = player.isPlaying();
 		deck.cuePoint = player.getCuePoint();
@@ -643,7 +643,7 @@ void MainComponent::restoreSession()
 
 		if (deck.setId.isEmpty())
 			continue;
-		if (const auto* set = library.findSet (deck.setId))
+		if (const auto* set = library.findSet (library.idFromStored (deck.setId)))
 			loadSet (*set, d);
 		if (! player.isLoaded())
 			continue;

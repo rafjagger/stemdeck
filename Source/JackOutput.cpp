@@ -34,7 +34,7 @@ juce::String JackOutput::open (const juce::String& name, const juce::StringArray
 		if (port == nullptr)
 		{
 			close();
-			return "JACK-Port konnte nicht angelegt werden: " + portName;
+			return "Cannot register the JACK port: " + portName;
 		}
 
 		ports.push_back (port);
@@ -49,7 +49,7 @@ juce::String JackOutput::open (const juce::String& name, const juce::StringArray
 		if (port == nullptr)
 		{
 			close();
-			return "JACK-Port konnte nicht angelegt werden: " + portName;
+			return "Cannot register the JACK port: " + portName;
 		}
 
 		inputs.push_back (port);
@@ -65,7 +65,7 @@ juce::String JackOutput::open (const juce::String& name, const juce::StringArray
 	if (jack_activate (client) != 0)
 	{
 		close();
-		return "JACK-Client konnte nicht aktiviert werden";
+		return "Cannot activate the JACK client";
 	}
 
 	return {};

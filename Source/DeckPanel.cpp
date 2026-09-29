@@ -10,7 +10,7 @@ DeckPanel::DeckPanel (StemDeckPlayer& p, StemThumbnails& thumbnails, int index)
 	: player (p), deckIndex (index), overview (p, thumbnails), jog (p, index)
 {
 	titleLabel.setFont (juce::FontOptions (18.0f, juce::Font::bold));
-	titleLabel.setText ("Leer - Set hierher ziehen", juce::dontSendNotification);
+	titleLabel.setText ("Empty - drag a set here", juce::dontSendNotification);
 	titleLabel.setMinimumHorizontalScale (0.7f);
 	stemsLabel.setColour (juce::Label::textColourId, Theme::textDim);
 	elapsedLabel.setFont (juce::FontOptions (20.0f));
@@ -28,7 +28,10 @@ DeckPanel::DeckPanel (StemDeckPlayer& p, StemThumbnails& thumbnails, int index)
 		addAndMakeVisible (l);
 
 	addAndMakeVisible (overview);
-	addAndMakeVisible (jog);
+	// Not on the screen since 2026-09-29: at 768 px a deck column has no room
+	// for it, and the controller's jog wheels do the job. Still here, hidden:
+	// vinyl mode and grid adjust are wired through it.
+	addChildComponent (jog);
 
 	// Cue reacts to press and release, not to clicks.
 	cueButton.onStateChange = [this]
@@ -45,20 +48,20 @@ DeckPanel::DeckPanel (StemDeckPlayer& p, StemThumbnails& thumbnails, int index)
 	playButton.onClick = [this] { togglePlay(); };
 	playButton.setColour (juce::TextButton::buttonOnColourId, Theme::play);
 	loopOffButton.onClick = [this] { player.clearLoop(); };
-	loopOffButton.setTooltip (juce::String::fromUTF8 ("Loop setzen: in der \xc3\x9c" "bersicht ziehen"));
+	loopOffButton.setTooltip (juce::String ("Set a loop: drag in the overview"));
 	loopOffButton.setColour (juce::TextButton::buttonOnColourId, Theme::loop);
 
 	repeatButton.setClickingTogglesState (true);
 	repeatButton.setColour (juce::TextButton::buttonOnColourId, Theme::play.darker (0.3f));
-	repeatButton.setTooltip ("Am Ende des Tracks wieder von vorne");
+	repeatButton.setTooltip ("Start over at the end of the track");
 	repeatButton.onClick = [this] { player.setRepeat (repeatButton.getToggleState()); };
 
 	syncButton.setClickingTogglesState (true);
 	syncButton.setColour (juce::TextButton::buttonOnColourId, Theme::deck (deckIndex));
-	syncButton.setTooltip ("Tempo und Beats an das andere Deck koppeln");
+	syncButton.setTooltip ("Lock tempo and beats to the other deck");
 	syncButton.onClick = [this] { if (onSyncToggled) onSyncToggled (syncButton.getToggleState()); };
 	masterButton.setColour (juce::TextButton::buttonOnColourId, Theme::deck (deckIndex));
-	masterButton.setTooltip ("Dieses Deck gibt den Takt ins Pioneer-Netz (wie MASTER am CDJ)");
+	masterButton.setTooltip ("This deck gives the beat to the Pioneer network (like MASTER on a CDJ)");
 	masterButton.onClick = [this] { if (onMasterPressed) onMasterPressed(); };
 
 	rangeButton.setTooltip ("Tempo-Bereich umschalten");
@@ -83,7 +86,7 @@ DeckPanel::DeckPanel (StemDeckPlayer& p, StemThumbnails& thumbnails, int index)
 
 	gridButton.setClickingTogglesState (true);
 	gridButton.setColour (juce::TextButton::buttonOnColourId, Theme::loop);
-	gridButton.setTooltip ("Grid Adjust: Jogwheel verschiebt das Beatgrid (wie CDJ-3000)");
+	gridButton.setTooltip ("Grid Adjust: the controller's jog wheel moves the beat grid (like a CDJ-3000)");
 	gridButton.onClick = [this] { setGridMode (gridButton.getToggleState()); };
 	jog.onGridShift = [this] (double seconds) { if (onGridEdit) onGridEdit (GridAction::shift, seconds); };
 
@@ -94,10 +97,10 @@ DeckPanel::DeckPanel (StemDeckPlayer& p, StemThumbnails& thumbnails, int index)
 		b.onClick = [this, action] { if (onGridEdit) onGridEdit (action, 0.0); };
 		addChildComponent (b);
 	};
-	gridAction (halfBackButton, GridAction::halfBack, "Grid einen halben Beat fr\xc3\xbc" "her");
-	gridAction (halfForwardButton, GridAction::halfForward, "Grid einen halben Beat sp\xc3\xa4ter");
-	gridAction (snapButton, GridAction::snapToCue, "SNAP GRID (CUE): die Eins des Takts auf den Cue-Punkt");
-	gridAction (shiftButton, GridAction::shiftToLeader, "SHIFT GRID: den nach Geh\xc3\xb6r angeglichenen Beat ins Grid \xc3\xbc" "bernehmen");
+	gridAction (halfBackButton, GridAction::halfBack, "Grid half a beat earlier");
+	gridAction (halfForwardButton, GridAction::halfForward, "Grid half a beat later");
+	gridAction (snapButton, GridAction::snapToCue, "SNAP GRID (CUE): the bar's one onto the cue point");
+	gridAction (shiftButton, GridAction::shiftToLeader, "SHIFT GRID: take the beat matched by ear into the grid");
 	gridAction (resetGridButton, GridAction::reset, "Grid wie analysiert");
 
 	tempo.setValue (1.0, juce::dontSendNotification);
@@ -279,12 +282,12 @@ void DeckPanel::paint (juce::Graphics& g)
 
 void DeckPanel::resized()
 {
-	auto area = getLocalBounds().reduced (12);
+	auto area = getLocalBounds().reduced (6);
 
 	// Tempo fader on the outer edge, as in Mixxx.
-	auto tempoArea = deckIndex == 0 ? area.removeFromLeft (64) : area.removeFromRight (64);
+	auto tempoArea = deckIndex == 0 ? area.removeFromLeft (52) : area.removeFromRight (52);
 	tempo.setBounds (tempoArea);
-	deckIndex == 0 ? area.removeFromLeft (10) : area.removeFromRight (10);
+	deckIndex == 0 ? area.removeFromLeft (6) : area.removeFromRight (6);
 
 	titleLabel.setBounds (area.removeFromTop (24));
 	stemsLabel.setBounds (area.removeFromTop (18));
@@ -296,44 +299,48 @@ void DeckPanel::resized()
 	overview.setBounds (area.removeFromTop (juce::jlimit (40, 70, area.getHeight() / 4)));
 	area.removeFromTop (10);
 
-	// Transport | jog | BPM, sync, range, vinyl
-	auto left = area.removeFromLeft (84);
-	auto right = area.removeFromRight (84);
+	// One column, top to bottom (2026-09-29, the rig's 768x1024 screen): BPM,
+	// the two big transport keys, then the small keys two to a row.
+	const auto gap = 6, smallButton = 28;
+	bpmLabel.setBounds (area.removeFromTop (26));
+	bpmInfoLabel.setBounds (area.removeFromTop (14));
+	area.removeFromTop (gap);
 
-	const auto buttonGap = 8, smallButton = 28, smallGap = 6;
-	const auto smallButtons = 2 * smallButton + smallGap;
-	const auto bigButton = juce::jmin (64, (left.getHeight() - smallButtons - 2 * buttonGap) / 2);
-	cueButton.setBounds (left.removeFromTop (bigButton));
-	left.removeFromTop (buttonGap);
-	playButton.setBounds (left.removeFromTop (bigButton));
-	left.removeFromTop (buttonGap);
-	loopOffButton.setBounds (left.removeFromTop (smallButton));
-	left.removeFromTop (smallGap);
-	repeatButton.setBounds (left.removeFromTop (smallButton));
+	const auto pairRow = [&area, gap, smallButton] (juce::Component& a, juce::Component* b)
+	{
+		auto row = area.removeFromTop (smallButton);
+		area.removeFromTop (gap);
+		if (b == nullptr)
+		{
+			a.setBounds (row);
+			return;
+		}
+		a.setBounds (row.removeFromLeft ((row.getWidth() - gap) / 2));
+		row.removeFromLeft (gap);
+		b->setBounds (row);
+	};
 
-	bpmLabel.setBounds (right.removeFromTop (30));
-	bpmInfoLabel.setBounds (right.removeFromTop (16));
-	right.removeFromTop (8);
-	syncButton.setBounds (right.removeFromTop (40));
-	right.removeFromTop (6);
-	masterButton.setBounds (right.removeFromTop (28));
-	right.removeFromTop (8);
-	rangeButton.setBounds (right.removeFromTop (28));
-	right.removeFromTop (6);
-	vinylButton.setBounds (right.removeFromTop (28));
-	right.removeFromTop (6);
-	gridButton.setBounds (right.removeFromTop (28));
+	const auto gridRows = gridButton.getToggleState() ? 2 : 0;
+	const auto smallRows = 4 + gridRows;
+	const auto bigButton = juce::jlimit (32, 56, (area.getHeight() - smallRows * (smallButton + gap) - 2 * gap) / 2);
+	cueButton.setBounds (area.removeFromTop (bigButton));
+	area.removeFromTop (gap);
+	playButton.setBounds (area.removeFromTop (bigButton));
+	area.removeFromTop (gap);
 
-	// Grid Adjust: its buttons in a row under the jog wheel.
+	pairRow (loopOffButton, &repeatButton);
+	pairRow (syncButton, &masterButton);
+	pairRow (rangeButton, &vinylButton);
+	pairRow (gridButton, nullptr);
+
+	// Grid Adjust, under GRID while it is on; moving the grid itself is the
+	// controller's jog wheel now.
 	if (gridButton.getToggleState())
 	{
-		auto row = area.removeFromBottom (28);
-		area.removeFromBottom (6);
-		const auto width = row.getWidth() / 5;
-		for (auto* b : { &halfBackButton, &halfForwardButton, &snapButton, &shiftButton, &resetGridButton })
-			b->setBounds (row.removeFromLeft (width).reduced (2, 0));
+		pairRow (halfBackButton, &halfForwardButton);
+		auto row = area.removeFromTop (smallButton);
+		const auto width = row.getWidth() / 3;
+		for (auto* b : { &snapButton, &shiftButton, &resetGridButton })
+			b->setBounds (row.removeFromLeft (width).reduced (1, 0));
 	}
-
-	const auto jogSize = juce::jmin (area.getWidth() - 16, area.getHeight());
-	jog.setBounds (area.withSizeKeepingCentre (jogSize, jogSize));
 }

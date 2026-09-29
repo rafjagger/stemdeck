@@ -70,32 +70,11 @@ MainComponent::MainComponent()
 	audioSettingsButton.onClick = [this] { showAudioSettings(); };
 	audioSettingsButton.setMouseClickGrabsKeyboardFocus (false);
 	addAndMakeVisible (audioSettingsButton);
+	settingsButton.onClick = [this] { showSettings(); };
+	settingsButton.setMouseClickGrabsKeyboardFocus (false);
+	addAndMakeVisible (settingsButton);
 	deviceStatus.setColour (juce::Label::textColourId, Theme::textDim);
 	addAndMakeVisible (deviceStatus);
-
-	castButton.setMouseClickGrabsKeyboardFocus (false);
-	castButton.setColour (juce::TextButton::buttonOnColourId, Theme::mute);
-	castButton.onClick = [this] { toggleScreencast(); };
-	addAndMakeVisible (castButton);
-
-	castRecordButton.setClickingTogglesState (true);
-	castRecordButton.setMouseClickGrabsKeyboardFocus (false);
-	castRecordButton.setColour (juce::TextButton::buttonOnColourId, Theme::mute);
-	castRecordButton.setToggleState (settings().getBoolValue ("screencastRecord", false), juce::dontSendNotification);
-	castRecordButton.setTooltip (juce::String::fromUTF8 ("An: CAST nimmt auch auf (recordings/). Aus: nur ansehen. Gilt ab dem n\xc3\xa4" "chsten Start."));
-	castRecordButton.onClick = [this] { settings().setValue ("screencastRecord", castRecordButton.getToggleState()); };
-	addAndMakeVisible (castRecordButton);
-	addAndMakeVisible (castMeterL);
-	addAndMakeVisible (castMeterR);
-
-	screenButton.setMouseClickGrabsKeyboardFocus (false);
-	screenButton.setColour (juce::TextButton::buttonOnColourId, Theme::mute);
-	screenButton.setTooltip (juce::String::fromUTF8 ("Diesen Bildschirm aufnehmen, nach recordings/ \xe2\x80\x93 den Ton an screencast:input_1/2 hier selbst verbinden"));
-	screenButton.onClick = [this] { toggleScreenRecording(); };
-	addAndMakeVisible (screenButton);
-	addAndMakeVisible (screenMeterL);
-	addAndMakeVisible (screenMeterR);
-	addChildComponent (castView);
 
 	recButton.setMouseClickGrabsKeyboardFocus (false);
 	recButton.setColour (juce::TextButton::buttonOnColourId, Theme::mute);
@@ -107,7 +86,7 @@ MainComponent::MainComponent()
 	autoDjButton.setClickingTogglesState (true);
 	autoDjButton.setMouseClickGrabsKeyboardFocus (false);
 	autoDjButton.setColour (juce::TextButton::buttonOnColourId, Theme::play);
-	autoDjButton.setTooltip (juce::String::fromUTF8 ("Auto-DJ: spielt zuf\xc3\xa4llig aus der Library-Auswahl (Suche/Filter) und mischt taktgenau \xc3\xbc" "ber 16 Takte"));
+	autoDjButton.setTooltip (juce::String ("Auto DJ: plays at random from the library as searched/filtered and mixes on the beat over 16 bars"));
 	autoDjButton.onClick = [this] { setAutoDj (autoDjButton.getToggleState()); };
 	addAndMakeVisible (autoDjButton);
 
@@ -195,7 +174,7 @@ void MainComponent::loadSet (const StemSet& set, int deckIndex)
 
 	if (error.isNotEmpty())
 	{
-		juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Set konnte nicht geladen werden", error);
+		juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Cannot load the set", error);
 		return;
 	}
 
@@ -432,11 +411,11 @@ void MainComponent::createStems (const juce::Array<juce::File>& files)
 {
 	if (! stemCreator.isInstalled())
 	{
-		juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Stems erstellen",
-			"Der Stem-Separator (Demucs) ist nicht installiert:\n" + stemCreator.venv().getChildFile ("bin/demucs").getFullPathName()
-			+ juce::String::fromUTF8 (" fehlt.\n\nEinmalig einrichten (ca. 1 GB):\n"
-									  "  sudo apt install ffmpeg python3-venv\n"
-									  "  tools/setup-separator.sh"));
+		juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Create stems",
+			"The stem separator (Demucs) is not installed:\n" + stemCreator.venv().getChildFile ("bin/demucs").getFullPathName()
+			+ juce::String (" is missing.\n\nSet it up once (about 1 GB):\n"
+							"  sudo apt install ffmpeg python3-venv\n"
+							"  tools/setup-separator.sh"));
 		return;
 	}
 
@@ -449,17 +428,17 @@ void MainComponent::createStems (const juce::Array<juce::File>& files)
 void MainComponent::askTargetFolder (const juce::Array<juce::File>& files, const juce::String& preset)
 {
 	const auto count = files.size() == 1 ? files.getFirst().getFileNameWithoutExtension()
-										 : juce::String (files.size()) + " Tracks";
+										 : juce::String (files.size()) + " tracks";
 	const auto libraryFolder = library.getFolder();
 
-	stemDialog = std::make_unique<juce::AlertWindow> ("Stems erstellen",
-		count + juce::String::fromUTF8 ("\n\nZielordner in ") + libraryFolder.getFullPathName()
-			  + juce::String::fromUTF8 (":\n(Artist/Album \xe2\x80\x93 leer: direkt in den Library-Ordner)"),
+	stemDialog = std::make_unique<juce::AlertWindow> ("Create stems",
+		count + juce::String ("\n\nTarget folder in ") + libraryFolder.getFullPathName()
+			  + juce::String::fromUTF8 (":\n(Artist/Album \xe2\x80\x93 empty: straight into the library folder)"),
 		juce::MessageBoxIconType::NoIcon, this);
-	stemDialog->addTextEditor ("folder", preset, "Zielordner");
-	stemDialog->addButton ("Erstellen", 1, juce::KeyPress (juce::KeyPress::returnKey));
-	stemDialog->addButton (juce::String::fromUTF8 ("Durchsuchen\xe2\x80\xa6"), 2);
-	stemDialog->addButton ("Abbrechen", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+	stemDialog->addTextEditor ("folder", preset, "Target folder");
+	stemDialog->addButton ("Create", 1, juce::KeyPress (juce::KeyPress::returnKey));
+	stemDialog->addButton (juce::String::fromUTF8 ("Browse\xe2\x80\xa6"), 2);
+	stemDialog->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
 	stemDialog->enterModalState (true, juce::ModalCallbackFunction::create ([this, files, libraryFolder] (int result)
 	{
 		const auto typed = stemDialog->getTextEditorContents ("folder").trim();
@@ -474,7 +453,7 @@ void MainComponent::askTargetFolder (const juce::Array<juce::File>& files, const
 		else if (result == 2)
 		{
 			const auto start = libraryFolder.getChildFile (juce::String (sanitiseFolder (typed.toStdString())));
-			folderChooser = std::make_unique<juce::FileChooser> ("Zielordner", start.isDirectory() ? start : libraryFolder);
+			folderChooser = std::make_unique<juce::FileChooser> ("Target folder", start.isDirectory() ? start : libraryFolder);
 			folderChooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories,
 				[this, files, libraryFolder, typed] (const juce::FileChooser& fc)
 				{
@@ -483,8 +462,8 @@ void MainComponent::askTargetFolder (const juce::Array<juce::File>& files, const
 						return askTargetFolder (files, typed);   // closed: back to the question
 					if (chosen != libraryFolder && ! chosen.isAChildOf (libraryFolder))
 					{
-						juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Stems erstellen",
-							juce::String::fromUTF8 ("Der Zielordner muss im Library-Ordner liegen:\n") + libraryFolder.getFullPathName());
+						juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Create stems",
+							juce::String ("The target folder has to be inside the library folder:\n") + libraryFolder.getFullPathName());
 						return askTargetFolder (files, typed);
 					}
 					askTargetFolder (files, chosen == libraryFolder ? juce::String() : chosen.getRelativePathFrom (libraryFolder));
@@ -722,88 +701,13 @@ void MainComponent::toggleRecording()
 	}
 	else if (const auto error = recorder.start (Recorder::defaultFolder(), jack.getSampleRate()); error.isNotEmpty())
 	{
-		juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Aufnahme", error);
+		juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Recording", error);
 	}
 	updateRecorder();
 }
 
-void MainComponent::toggleScreencast()
-{
-	if (screencast.isRunning())
-	{
-		screencast.stop();   // the script finishes the file; the button follows in updateRecorder()
-		return;
-	}
-
-	const auto host = settings().getValue ("screencastHost", "a3nuc1_mango");
-	const auto script = juce::File::getCurrentWorkingDirectory().getChildFile ("tools/screencast.sh");
-	castRecordingNow = castRecordButton.getToggleState();
-	if (const auto error = screencast.start (script, host, castRecordingNow); error.isNotEmpty())
-		juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Screencast", error);
-	castButton.setTooltip ("Screencast von " + host
-						   + (castRecordButton.getToggleState() ? juce::String (", mit Aufnahme nach recordings/") : juce::String (", nur ansehen"))
-						   + juce::String::fromUTF8 (" \xe2\x80\x93 den Ton dr\xc3\xbc" "ben selbst an screencast:input_1/2 verbinden"));
-}
-
-void MainComponent::toggleScreenRecording()
-{
-	if (screenRecording.isRunning())
-	{
-		screenRecording.stop();
-		return;
-	}
-	const auto script = juce::File::getCurrentWorkingDirectory().getChildFile ("tools/screencast.sh");
-	if (const auto error = screenRecording.start (script, "local", true); error.isNotEmpty())
-		juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Bildschirmaufnahme", error);
-}
-
 void MainComponent::updateRecorder()
 {
-	screenMeterL.setLevel (screenRecording.popPeak (0));
-	screenMeterR.setLevel (screenRecording.popPeak (1));
-	const auto screening = screenRecording.isRunning();
-	screenButton.setToggleState (screening, juce::dontSendNotification);
-	if (screening)
-	{
-		const auto seconds = (int) screenRecording.getSeconds();
-		screenButton.setButtonText (juce::String::fromUTF8 ("\xe2\x97\x8f SCREEN ") + juce::String (seconds / 60) + ":" + juce::String (seconds % 60).paddedLeft ('0', 2));
-	}
-	else
-	{
-		screenButton.setButtonText ("SCREEN");
-	}
-
-	const auto casting = screencast.isRunning();
-	castButton.setToggleState (casting, juce::dontSendNotification);
-
-	if (casting != castView.isVisible())
-	{
-		castView.image = {};
-		castFramesShown = -1;
-		castView.setVisible (casting);
-		resized();
-	}
-	castMeterL.setLevel (screencast.popPeak (0));
-	castMeterR.setLevel (screencast.popPeak (1));
-	if (casting && screencast.getFrameCount() != castFramesShown)
-	{
-		castFramesShown = screencast.getFrameCount();
-		castView.image = screencast.getFrame();
-		castView.repaint();
-	}
-	if (casting)
-	{
-		const auto seconds = (int) screencast.getSeconds();
-		castButton.setButtonText ((castRecordingNow ? juce::String::fromUTF8 ("\xe2\x97\x8f CAST ") : juce::String ("CAST "))
-								  + juce::String (seconds / 60) + ":" + juce::String (seconds % 60).paddedLeft ('0', 2));
-	}
-	else
-	{
-		castButton.setButtonText ("CAST");
-		if (castButton.getTooltip().isEmpty())
-			castButton.setTooltip ("Screencast des entfernten Rechners (screencastHost) aufnehmen und live zeigen");
-	}
-
 	recMeterL.setLevel (recorder.popPeak (0));
 	recMeterR.setLevel (recorder.popPeak (1));
 
@@ -815,15 +719,15 @@ void MainComponent::updateRecorder()
 		recButton.setButtonText (juce::String::fromUTF8 ("\xe2\x97\x8f ") + juce::String (seconds / 60) + ":" + juce::String (seconds % 60).paddedLeft ('0', 2)
 								 + (recorder.hasDropped() ? " !" : ""));
 		recButton.setTooltip (recorder.getFile().getFullPathName()
-							  + (recorder.hasDropped() ? juce::String::fromUTF8 ("\n! Die Platte kam nicht mit: L\xc3\xbc" "cken in der Aufnahme") : juce::String()));
+							  + (recorder.hasDropped() ? juce::String ("\n! The disk fell behind: gaps in the recording") : juce::String()));
 	}
 	else
 	{
 		recButton.setButtonText ("REC");
 		if (! usingJack)
-			recButton.setTooltip (juce::String::fromUTF8 ("Aufnahme nur unter JACK (Eing\xc3\xa4nge rec_L / rec_R)"));
+			recButton.setTooltip (juce::String ("Recording needs JACK (inputs rec_L / rec_R)"));
 		else if (recButton.getTooltip().isEmpty())
-			recButton.setTooltip (juce::String::fromUTF8 ("Nimmt die JACK-Eing\xc3\xa4nge StemDeck:rec_L / rec_R als FLAC auf, nach ")
+			recButton.setTooltip (juce::String ("Records the JACK inputs StemDeck:rec_L / rec_R as FLAC into ")
 								  + Recorder::defaultFolder().getFullPathName());
 	}
 }
@@ -979,10 +883,10 @@ void MainComponent::updateCreatorStatus()
 	{
 		text = "Stems: " + status.track + "  " + juce::String (juce::roundToInt (status.progress * 100.0)) + " %";
 		if (status.waiting > 0)
-			text << "  +" << status.waiting << " wartend";
+			text << "  +" << status.waiting << " waiting";
 	}
 	else if (status.lastError.isNotEmpty())
-		text = "Stems: Fehler bei " + status.lastError;
+		text = "Stems: failed: " + status.lastError;
 
 	library.setCreatorStatus (text, status.running, ! status.running && status.lastError.isNotEmpty());
 }
@@ -1078,7 +982,7 @@ void MainComponent::initialiseAudio()
 		initialiseDeviceManager();
 
 	audioSettingsButton.setEnabled (! usingJack);
-	audioSettingsButton.setTooltip (usingJack ? "Unter JACK: Routing per qjackctl oder Patchbay" : juce::String());
+	audioSettingsButton.setTooltip (usingJack ? "Under JACK: route with qjackctl or a patchbay" : juce::String());
 	updateDeviceStatus();
 }
 
@@ -1135,7 +1039,7 @@ void MainComponent::updateDeviceStatus()
 
 	if (device == nullptr)
 	{
-		deviceStatus.setText (juce::String::fromUTF8 ("Kein Audioger\xc3\xa4t offen"), juce::dontSendNotification);
+		deviceStatus.setText (juce::String ("No audio device open"), juce::dontSendNotification);
 		deviceStatus.setColour (juce::Label::textColourId, Theme::mute);
 		return;
 	}
@@ -1144,10 +1048,10 @@ void MainComponent::updateDeviceStatus()
 	auto text = deviceManager.getCurrentAudioDeviceType() + ": " + device->getName()
 			  + "  |  " + juce::String (device->getCurrentSampleRate(), 0) + " Hz, "
 			  + juce::String (device->getCurrentBufferSizeSamples()) + " Samples  |  "
-			  + juce::String (outputs) + juce::String::fromUTF8 (" Ausg\xc3\xa4nge");
+			  + juce::String (outputs) + juce::String (" outputs");
 
 	if (outputs < numOutputChannels)
-		text << "  (Busse werden zusammengemischt)";
+		text << "  (buses summed down)";
 
 	deviceStatus.setText (text, juce::dontSendNotification);
 	deviceStatus.setColour (juce::Label::textColourId, outputs < numOutputChannels ? Theme::cue : Theme::textDim);
@@ -1161,10 +1065,22 @@ void MainComponent::showAudioSettings()
 
 	juce::DialogWindow::LaunchOptions dialog;
 	dialog.content.setOwned (selector.release());
-	dialog.dialogTitle = "Audio-Einstellungen";
+	dialog.dialogTitle = "Audio";
 	dialog.dialogBackgroundColour = Theme::panel;
 	dialog.useNativeTitleBar = true;
 	dialog.resizable = true;
+	dialog.launchAsync();
+}
+
+void MainComponent::showSettings()
+{
+	juce::DialogWindow::LaunchOptions dialog;
+	dialog.content.setOwned (new SettingsPanel (library.getFolder(),
+												[this] (const juce::File& folder) { library.setFolder (folder); }));
+	dialog.dialogTitle = "Settings";
+	dialog.dialogBackgroundColour = Theme::panel;
+	dialog.useNativeTitleBar = true;
+	dialog.resizable = false;
 	dialog.launchAsync();
 }
 
@@ -1320,7 +1236,9 @@ void MainComponent::resized()
 	auto area = getLocalBounds().reduced (6);
 
 	auto topBar = area.removeFromTop (30);
-	audioSettingsButton.setBounds (topBar.removeFromRight (160));
+	settingsButton.setBounds (topBar.removeFromRight (90));
+	topBar.removeFromRight (6);
+	audioSettingsButton.setBounds (topBar.removeFromRight (70));
 	topBar.removeFromRight (6);
 	syncSourceButton.setBounds (topBar.removeFromRight (110));
 	topBar.removeFromRight (6);
@@ -1332,19 +1250,6 @@ void MainComponent::resized()
 	topBar.removeFromRight (4);
 	recButton.setBounds (topBar.removeFromRight (100));
 	topBar.removeFromRight (6);
-	castMeterR.setBounds (topBar.removeFromRight (6).reduced (0, 3));
-	topBar.removeFromRight (2);
-	castMeterL.setBounds (topBar.removeFromRight (6).reduced (0, 3));
-	topBar.removeFromRight (4);
-	castRecordButton.setBounds (topBar.removeFromRight (30));
-	topBar.removeFromRight (2);
-	castButton.setBounds (topBar.removeFromRight (100));
-	topBar.removeFromRight (6);
-	screenMeterR.setBounds (topBar.removeFromRight (6).reduced (0, 3));
-	topBar.removeFromRight (2);
-	screenMeterL.setBounds (topBar.removeFromRight (6).reduced (0, 3));
-	topBar.removeFromRight (4);
-	screenButton.setBounds (topBar.removeFromRight (100));
 	pioPlayer.setBounds (topBar.removeFromRight (90));
 	pioStatus.setBounds (topBar.removeFromRight (220));
 	deviceStatus.setBounds (topBar);
@@ -1352,19 +1257,15 @@ void MainComponent::resized()
 
 	const auto waveHeight = juce::jlimit (90, 170, getHeight() / 8);
 	auto waves = area.removeFromTop (waveHeight * 2 + 3);
-	if (castView.isVisible())
-	{
-		// The screencast beside the waveforms, as tall as both, in its own shape.
-		castView.setBounds (waves.removeFromRight (waves.getHeight() * Screencast::frameWidth / Screencast::frameHeight));
-		waves.removeFromRight (6);
-	}
 	waveA.setBounds (waves.removeFromTop (waveHeight));
 	waves.removeFromTop (3);
 	waveB.setBounds (waves);
 	area.removeFromTop (6);
 
 	auto middle = area.removeFromTop (juce::jmin (460, area.getHeight() - 150));
-	const auto mixerWidth = juce::jlimit (460, 560, getWidth() / 3);
+	// 400 at the least, so a deck column keeps ~180 px on the rig's 768 px
+	// screen; it was 460, which left them 154 and cut their right half off.
+	const auto mixerWidth = juce::jlimit (400, 560, getWidth() / 3);
 	const auto deckWidth = (middle.getWidth() - mixerWidth) / 2;
 	deckA.setBounds (middle.removeFromLeft (deckWidth));
 	deckB.setBounds (middle.removeFromRight (deckWidth));

@@ -138,16 +138,16 @@ ChannelStrip::ChannelStrip (StemDeckPlayer& p, int index) : player (p), deckInde
 			button->setColour (juce::TextButton::buttonOnColourId, busColour (bus, s));
 			button->setMouseClickGrabsKeyboardFocus (false);
 			button->onClick = [this, s, bus, button] { player.setStemOnBus (s, bus, button->getToggleState()); };
-			button->setTooltip (bus == buses::phones ? juce::String ("Stem auf PHONES (pre Fader)")
-													 : "Stem auf Bus " + busName (bus) + " (post Fader)");
+			button->setTooltip (bus == buses::phones ? juce::String ("Stem to PHONES (pre fader)")
+													 : "Stem to bus " + busName (bus) + " (post fader)");
 			addAndMakeVisible (button);
 		}
 
 		auto* label = stemLabels.add (new juce::Label ({}, "Stem " + juce::String (s + 1)));
-		label->setFont (juce::FontOptions (11.0f, juce::Font::bold));
+		label->setFont (juce::FontOptions (10.0f, juce::Font::bold));
 		label->setColour (juce::Label::textColourId, Theme::stem (s));
 		label->setJustificationType (juce::Justification::centredLeft);
-		label->setMinimumHorizontalScale (0.6f);
+		label->setMinimumHorizontalScale (0.45f);   // "3 vocals" in the 400 px mixer
 		addAndMakeVisible (label);
 	}
 
@@ -170,7 +170,7 @@ ChannelStrip::ChannelStrip (StemDeckPlayer& p, int index) : player (p), deckInde
 	phonesButton.setColour (juce::TextButton::buttonOnColourId, busColour (buses::phones, 0));
 	phonesButton.setMouseClickGrabsKeyboardFocus (false);
 	phonesButton.onClick = [this] { player.setDeckPhones (phonesButton.getToggleState()); };
-	phonesButton.setTooltip ("Ganzes Deck auf PHONES (pre Fader)");
+	phonesButton.setTooltip ("Whole deck to PHONES (pre fader)");
 	addAndMakeVisible (phonesButton);
 }
 
@@ -284,7 +284,10 @@ void ChannelStrip::resized()
 																				 switchSize, switchSize).reduced (1));
 
 		row.removeFromRight (4);
-		stemLabels[s]->setBounds (row.removeFromTop (row.getHeight() / 2));
+		// One line high, so a narrow mixer squeezes the name instead of
+		// breaking it ("Ste / m 1" at 400 px).
+		const auto labelRow = row.removeFromTop (row.getHeight() / 2);
+		stemLabels[s]->setBounds (labelRow.withSizeKeepingCentre (labelRow.getWidth(), juce::jmin (labelRow.getHeight(), 16)));
 		muteButtons[s]->setBounds (row.removeFromLeft (28).reduced (0, 2));
 	}
 

@@ -267,6 +267,25 @@ CPU 1, where StemDeck's audio runs.
   pw-metadata -n settings 0 clock.force-rate 44100
   ```
 
+### To A³ Core and back: zita
+
+Two systemd user services carry the audio over the network, kept in this repository under
+`.config/systemd/user/`:
+
+- `zita-j2n.service` sends StemDeck's 10 channels to A³ Core (UDP 65100);
+- `zita-n2j.service` receives 2 channels back from it (UDP 55100).
+
+Both restart by themselves 2 s after they drop out (zita ends on some graph changes, and
+reports that as a normal exit), with no limit on how often. Install or update them with
+
+```sh
+cp .config/systemd/user/zita-*.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now zita-j2n zita-n2j
+```
+
+Their ports are connected by hand like StemDeck's (qjackctl patchbay).
+
 ---
 
 ## Sync

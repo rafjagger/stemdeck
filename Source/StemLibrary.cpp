@@ -126,6 +126,21 @@ double StemLibrary::bpmOf (const StemSet& set) const
 	return 0.0;
 }
 
+void StemLibrary::selectRelative (int delta)
+{
+	if (visibleSets.empty())
+		return;
+	const auto row = juce::jlimit (0, (int) visibleSets.size() - 1, juce::jmax (0, table.getSelectedRow()) + delta);
+	table.selectRow (row);
+	table.scrollToEnsureRowIsOnscreen (row);
+}
+
+const StemSet* StemLibrary::selectedSet() const
+{
+	const auto row = table.getSelectedRow();
+	return row >= 0 && row < (int) visibleSets.size() ? visibleSets[(size_t) row] : nullptr;
+}
+
 const StemSet* StemLibrary::randomVisibleSet (const std::set<juce::String>& played) const
 {
 	std::vector<const StemSet*> fresh;

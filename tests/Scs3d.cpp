@@ -6,21 +6,30 @@
 
 using scs3d::Event;
 
-TEST (Scs3d, TheTopRowMutesTheStems)
+TEST (Scs3d, TopButtons1256MuteTheStems)
 {
+	const std::uint8_t buttons[] = { 0x20, 0x22, 0x28, 0x2A };   // 1 2 5 6
 	for (int s = 0; s < 4; ++s)
 	{
-		const auto e = scs3d::decode (0x90, (std::uint8_t) (0x20 + 2 * s), 1);
+		const auto e = scs3d::decode (0x90, buttons[s], 1);
 		EXPECT_EQ (e.type, Event::Type::mute);
 		EXPECT_EQ (e.stem, s);
 	}
 	EXPECT_EQ (scs3d::decode (0x80, 0x20, 0).type, Event::Type::none) << "only the press toggles";
 }
 
-TEST (Scs3d, LoopInAndOut)
+TEST (Scs3d, Buttons3And4Loop)
 {
-	EXPECT_EQ (scs3d::decode (0x90, 0x28, 1).type, Event::Type::loopIn);
-	EXPECT_EQ (scs3d::decode (0x90, 0x2A, 1).type, Event::Type::loopOut);
+	EXPECT_EQ (scs3d::decode (0x90, 0x24, 1).type, Event::Type::loopInOut);
+	EXPECT_EQ (scs3d::decode (0x90, 0x26, 1).type, Event::Type::loopToggle);
+}
+
+TEST (Scs3d, AroundTheCircleTheLibrary)
+{
+	EXPECT_EQ (scs3d::decode (0x90, 0x2C, 1).type, Event::Type::previous);
+	EXPECT_EQ (scs3d::decode (0x90, 0x2E, 1).type, Event::Type::next);
+	EXPECT_EQ (scs3d::decode (0x90, 0x01, 1).type, Event::Type::load) << "a tap in the centre";
+	EXPECT_EQ (scs3d::decode (0x90, 0x62, 1).type, Event::Type::scratchTouch) << "the ring still scratches";
 }
 
 TEST (Scs3d, TransportAndCueRelease)
@@ -67,7 +76,7 @@ TEST (Scs3d, MutedIsRedPlayingIsBlue)
 	const auto m = scs3d::render (leds);
 	EXPECT_EQ (valueOf (m, 0x20), 1);
 	EXPECT_EQ (valueOf (m, 0x22), 2);
-	EXPECT_EQ (valueOf (m, 0x26), 1);
+	EXPECT_EQ (valueOf (m, 0x2A), 1) << "stem 4 on button 6";
 }
 
 TEST (Scs3d, TheDeckLightSaysWhichDeck)

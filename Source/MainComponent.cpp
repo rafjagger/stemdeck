@@ -609,20 +609,47 @@ void MainComponent::handleController (int d, const scs3d::Event& e)
 		case Type::gain:  mixer.strip (d).setFaderTravel (e.value); break;
 		case Type::pitch: deck.moveTempo (e.value); break;
 
-		// Loop: IN marks, OUT loops from the mark to here; OUT while looping ends it.
-		case Type::loopIn:
-			if (player.isLoaded())
-				controllerLoopIn[(size_t) d] = player.getPosition();
-			break;
-		case Type::loopOut:
-			if (player.hasLoop())
-			{
-				player.clearLoop();
-				controllerLoopIn[(size_t) d] = -1.0;
-			}
-			else if (const auto in = controllerLoopIn[(size_t) d]; in >= 0.0 && player.getPosition() > in + 0.05)
+		// Loop on button 3: the first press marks in, the second loops from
+		// there to here. Button 4: loop off, and on again (back to its start).
+		case Type::loopInOut:
+		{
+			auto& in = controllerLoopIn[(size_t) d];
+			if (! player.isLoaded())
+				break;
+			if (in >= 0.0 && player.getPosition() > in + 0.05)
 			{
 				player.setLoop (in, player.getPosition());
+				controllerLoop[(size_t) d] = { in, player.getPosition() };
+				in = -1.0;
+			}
+			else
+			{
+				in = player.getPosition();
+			}
+			break;
+		}
+		case Type::loopToggle:
+			if (player.hasLoop())
+			{
+				controllerLoop[(size_t) d] = player.getLoop();
+				player.clearLoop();
+			}
+			else if (! controllerLoop[(size_t) d].isEmpty())
+			{
+				player.setLoop (controllerLoop[(size_t) d].getStart(), controllerLoop[(size_t) d].getEnd());
+			}
+			break;
+
+		// Around the circle: the library. A tap in the centre loads -- but not
+		// over a deck that is playing: a stray touch must not stop the music.
+		case Type::previous: library.selectRelative (-1); break;
+		case Type::next:     library.selectRelative (1); break;
+		case Type::load:
+			if (const auto* set = library.selectedSet(); set != nullptr && ! player.isPlaying())
+			{
+				loadSet (*set, d);
+				controllerLoopIn[(size_t) d] = -1.0;
+				controllerLoop[(size_t) d] = {};
 			}
 			break;
 
@@ -649,6 +676,7 @@ void MainComponent::showControllers()
 			leds.muted[(size_t) s] = mixer.strip (d).isMuted (s);
 		leds.looping = player.hasLoop();
 		leds.loopInSet = controllerLoopIn[(size_t) d] >= 0.0;
+		leds.loopStored = ! controllerLoop[(size_t) d].isEmpty();
 		leds.playing = player.isPlaying();
 		leds.atCue = player.isLoaded() && std::abs (player.getPosition() - player.getCuePoint()) < 0.01;
 		leds.synced = deck.isSyncEnabled();

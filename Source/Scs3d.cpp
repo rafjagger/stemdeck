@@ -10,8 +10,12 @@ namespace scs3d
 		constexpr std::uint8_t noteOn = 0x90, noteOff = 0x80, cc = 0xB0;
 		constexpr std::uint8_t black = 0, red = 1, blue = 2, purple = 3;
 
-		// Buttons
-		constexpr std::uint8_t fx = 0x20, trig = 0x28, deckButton = 0x2A;
+		// Buttons: the six on top, and the four around the circle
+		constexpr std::array<std::uint8_t, 6> top { 0x20, 0x22, 0x24, 0x26, 0x28, 0x2A };
+		constexpr std::array<int, 6> muteOf { 0, 1, -1, -1, 2, 3 };   // 1 2 5 6 mute stems 1-4
+		constexpr std::uint8_t loopInOut = 0x24, loopToggle = 0x26;   // 3 and 4
+		constexpr std::uint8_t topLeft = 0x2C, topRight = 0x2E, bottomLeft = 0x30, bottomRight = 0x32;
+		constexpr std::uint8_t centreTouch = 0x01;
 		constexpr std::uint8_t play = 0x6D, cue = 0x6E, sync = 0x6F, tap = 0x70;
 		constexpr std::uint8_t circleTouch = 0x62;
 		// Sliders: absolute CC at the id, relative (64 = still) at id + 1
@@ -34,12 +38,16 @@ namespace scs3d
 
 		if (press)
 		{
-			if (data1 >= fx && data1 <= fx + 6 && (data1 - fx) % 2 == 0)
-				return { Event::Type::mute, (data1 - fx) / 2 };
+			for (size_t i = 0; i < top.size(); ++i)
+				if (data1 == top[i] && muteOf[i] >= 0)
+					return { Event::Type::mute, muteOf[i] };
 			switch (data1)
 			{
-				case trig:        e.type = Event::Type::loopIn; break;
-				case deckButton:  e.type = Event::Type::loopOut; break;
+				case loopInOut:   e.type = Event::Type::loopInOut; break;
+				case loopToggle:  e.type = Event::Type::loopToggle; break;
+				case topLeft:     e.type = Event::Type::previous; break;
+				case topRight:    e.type = Event::Type::next; break;
+				case centreTouch: e.type = Event::Type::load; break;
 				case play:        e.type = Event::Type::play; break;
 				case cue:         e.type = Event::Type::cueDown; break;
 				case sync:        e.type = Event::Type::sync; break;
@@ -75,11 +83,16 @@ namespace scs3d
 		light (deckLightA, leds.deck == 0);
 		light (deckLightB, leds.deck == 1);
 
-		for (int s = 0; s < 4; ++s)
-			light ((std::uint8_t) (fx + 2 * s), leds.muted[(size_t) s] ? red : blue);
+		for (size_t i = 0; i < top.size(); ++i)
+			if (muteOf[i] >= 0)
+				light (top[i], leds.muted[(size_t) muteOf[i]] ? red : blue);
 
-		light (trig, leds.looping || leds.loopInSet ? blue : black);
-		light (deckButton, leds.looping ? red : black);
+		light (loopInOut, leds.looping ? purple : leds.loopInSet ? blue : black);
+		light (loopToggle, leds.looping ? red : leds.loopStored ? blue : black);
+		light (topLeft, blue);
+		light (topRight, blue);
+		light (bottomLeft, black);
+		light (bottomRight, black);
 		light (play, leds.playing ? blue : black);
 		light (cue, leds.atCue && ! leds.playing ? red : black);
 		light (sync, leds.syncBent ? purple : leds.synced ? blue : black);

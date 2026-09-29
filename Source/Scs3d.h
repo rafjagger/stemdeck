@@ -8,9 +8,12 @@
 // -- what a MIDI message from the device means, and which messages light its
 // LEDs. The IDs are the device's own (after Mixxx's SCS.3d mapping):
 //
-//   FX LOOP VINYL EQ     mute stem 1-4       red: muted, blue: playing
-//   TRIG                 loop in             blue: in point set / looping
-//   DECK                 loop out; while looping: loop off   red: looping
+// The six buttons on top, left to right: FX LOOP VINYL EQ TRIG DECK.
+//   1 2 5 6 (FX LOOP TRIG DECK)  mute stem 1-4    red: muted, blue: playing
+//   3 (VINYL)            loop in, then out         blue: in marked, purple: looping
+//   4 (EQ)               loop off / on again       red: looping, blue: one to go back to
+//   top left / right of the circle   library: previous / next set
+//   centre of the circle (tap)       load the selected set
 //   GAIN slider (left)   channel fader, absolute     LED bar
 //   PITCH slider (right) tempo, relative (no jump)   LED bar from the middle
 //   circle               scratch pad: touch holds the record, turning
@@ -23,8 +26,9 @@ namespace scs3d
 {
 	struct Event
 	{
-		enum class Type { none, mute, loopIn, loopOut, play, cueDown, cueUp, sync, master,
-						  gain, pitch, scratchTouch, scratchMove, scratchRelease };
+		enum class Type { none, mute, loopInOut, loopToggle, play, cueDown, cueUp, sync, master,
+						  gain, pitch, scratchTouch, scratchMove, scratchRelease,
+						  previous, next, load };
 		Type type = Type::none;
 		int stem = -1;       // mute
 		double value = 0.0;  // gain 0..1; pitch and scratchMove: steps, + up / clockwise
@@ -39,7 +43,7 @@ namespace scs3d
 	{
 		int deck = 0;                        // lights A or B
 		std::array<bool, 4> muted {};
-		bool loopInSet = false, looping = false;
+		bool loopInSet = false, looping = false, loopStored = false;
 		bool playing = false, atCue = false;
 		bool synced = false, syncBent = false, master = false;
 		double gain = 0.0;                   // 0..1, the fader's travel

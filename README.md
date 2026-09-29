@@ -246,6 +246,11 @@ on, it also records — the stream goes unchanged into `recordings/`. **Nothing 
 here**: a new output in the running audio graph ends zita-j2n. Pressing CAST again ends it: the ffmpeg over there ends with the connection, and
 the file becomes an `.mp4`. The script also runs on its own (`tools/screencast.sh [host]`).
 
+**SCREEN** does the same for this machine's own screen (`tools/screencast.sh local`): always
+recorded to `recordings/`, no picture, its sound from a JACK client `screencast` here —
+connected by hand as well — with two meters beside the button. It encodes on every core but
+CPU 1, where StemDeck's audio runs.
+
 - The ports are **never connected automatically**. Route them with qjackctl, a patchbay or
   whatever you like.
 - StemDeck never starts a JACK server. `./start.sh` uses a running `jackd`/`jackdbus`; if there is

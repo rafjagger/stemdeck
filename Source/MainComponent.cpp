@@ -372,6 +372,16 @@ void MainComponent::updatePioneerStatus()
 // folders suggest, so albums are not merged into one.
 void MainComponent::createStems (const juce::Array<juce::File>& files)
 {
+	if (! stemCreator.isInstalled())
+	{
+		juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Stems erstellen",
+			"Der Stem-Separator (Demucs) ist nicht installiert:\n" + stemCreator.venv().getChildFile ("bin/demucs").getFullPathName()
+			+ juce::String::fromUTF8 (" fehlt.\n\nEinmalig einrichten (ca. 1 GB):\n"
+									  "  sudo apt install ffmpeg python3-venv\n"
+									  "  tools/setup-separator.sh"));
+		return;
+	}
+
 	const auto addAll = [this, files] (const juce::String* artist, const juce::String* album)
 	{
 		for (const auto& f : files)
@@ -424,7 +434,7 @@ void MainComponent::updateCreatorStatus()
 	else if (status.lastError.isNotEmpty())
 		text = "Stems: Fehler bei " + status.lastError;
 
-	library.setCreatorStatus (text, status.running);
+	library.setCreatorStatus (text, status.running, ! status.running && status.lastError.isNotEmpty());
 }
 
 std::array<bool, 2> MainComponent::decksPlaying() const

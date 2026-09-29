@@ -266,10 +266,11 @@ void StemLibrary::selectSetWithFile (const juce::File& file)
 			}
 }
 
-void StemLibrary::setCreatorStatus (const juce::String& text, bool canCancel)
+void StemLibrary::setCreatorStatus (const juce::String& text, bool canCancel, bool isError)
 {
 	const auto show = text.isNotEmpty();
 	creatorLabel.setText (text, juce::dontSendNotification);
+	creatorLabel.setColour (juce::Label::textColourId, isError ? Theme::mute : Theme::textDim);
 	if (show == creatorLabel.isVisible() && canCancel == cancelCreateButton.isVisible())
 		return;
 	creatorLabel.setVisible (show);
@@ -312,8 +313,26 @@ bool StemLibrary::isInterestedInFileDrag (const juce::StringArray& files)
 void StemLibrary::filesDropped (const juce::StringArray& files, int, int)
 {
 	setDropHighlight (false);
-	if (const auto found = separableFiles (files); ! found.isEmpty() && onCreateStems)
-		onCreateStems (found);
+	offerForStems (files);
+}
+
+void StemLibrary::offerForStems (const juce::StringArray& paths)
+{
+	if (paths.isEmpty())
+		return;
+
+	if (const auto found = separableFiles (paths); ! found.isEmpty())
+	{
+		if (onCreateStems)
+			onCreateStems (found);
+		return;
+	}
+
+	juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::InfoIcon, "Stems erstellen",
+		juce::String::fromUTF8 ("Keine Stereo-Datei zum Zerlegen gefunden.\n\n"
+								"Dateien, die schon im Library-Ordner liegen, werden nicht zerlegt: "
+								"Leg die Originale au\xc3\x9f" "erhalb von\n") + folder.getFullPathName()
+		+ "\nab und zieh sie von dort herein.\n\nFormate: FLAC, WAV, MP3, AIFF, OGG, M4A, Opus.");
 }
 
 void StemLibrary::setDropHighlight (bool on)
@@ -334,7 +353,6 @@ void StemLibrary::chooseFilesForStems()
 							  juce::StringArray paths;
 							  for (const auto& f : fc.getResults())
 								  paths.add (f.getFullPathName());
-							  if (const auto found = separableFiles (paths); ! found.isEmpty() && onCreateStems)
-								  onCreateStems (found);
+							  offerForStems (paths);
 						  });
 }

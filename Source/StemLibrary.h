@@ -21,7 +21,7 @@ public:
 	void selectSetWithFile (const juce::File& file);
 
 	// The stem creator's line under the bar; empty hides it.
-	void setCreatorStatus (const juce::String& text, bool canCancel);
+	void setCreatorStatus (const juce::String& text, bool canCancel, bool isError = false);
 
 	// Looks up a set by the id carried in drag-and-drop descriptions.
 	const StemSet* findSet (const juce::String& setId) const;
@@ -62,6 +62,7 @@ private:
 	void chooseFilesForStems();
 	void setDropHighlight (bool on);
 	juce::Array<juce::File> separableFiles (const juce::StringArray& paths) const;
+	void offerForStems (const juce::StringArray& paths);
 
 	juce::AudioFormatManager& formatManager;
 	juce::File folder;

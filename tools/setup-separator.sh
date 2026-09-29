@@ -22,6 +22,8 @@ python3 -m venv "$VENV"
 "$VENV/bin/pip" install --upgrade pip
 "$VENV/bin/pip" install "torch==$TORCH_VERSION" --index-url https://download.pytorch.org/whl/cpu
 "$VENV/bin/pip" install "demucs==$DEMUCS_VERSION"
+# numpy: demucs imports it, but neither it nor the CPU torch wheel declares it.
+"$VENV/bin/pip" install numpy
 
 echo "model:  htdemucs (downloaded once, ~80 MB)"
 "$VENV/bin/python" -c "from demucs.pretrained import get_model; get_model('htdemucs')"

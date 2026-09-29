@@ -35,14 +35,15 @@ TEST (StemJob, AJobLandsInArtistAlbum)
 	const auto plan = planStemJob ("/lib", "Burial", "Untrue", "Archangel", "Archangel.flac", nothingExists);
 	EXPECT_EQ (plan.albumFolder, "/lib/Burial/Untrue");
 	EXPECT_EQ (plan.track, "Archangel");
-	EXPECT_EQ (plan.stemPaths[0], "/lib/Burial/Untrue/Archangel - 1.drums.wav");
-	EXPECT_EQ (plan.stemPaths[3], "/lib/Burial/Untrue/Archangel - 4.vocals.wav");
+	EXPECT_EQ (plan.stemPaths[0], "/lib/Burial/Untrue/Archangel - 1 - drums.flac");
+	EXPECT_EQ (plan.stemPaths[3], "/lib/Burial/Untrue/Archangel - 4 - vocals.flac");
+	EXPECT_EQ (plan.stemExtension, "flac");
 	EXPECT_EQ (plan.originalPath, "/lib/Burial/Untrue/originals/Archangel.flac");
 }
 
 TEST (StemJob, ATakenTrackNameGetsANumber)
 {
-	const std::set<std::string> taken { "/lib/A/B/Intro - 1.drums.wav", "/lib/A/B/Intro (2) - 1.drums.wav" };
+	const std::set<std::string> taken { "/lib/A/B/Intro - 1 - drums.flac", "/lib/A/B/Intro (2) - 1 - drums.flac" };
 	const auto plan = planStemJob ("/lib", "A", "B", "Intro", "intro.mp3",
 								   [&taken] (const std::string& p) { return taken.count (p) > 0; });
 	EXPECT_EQ (plan.track, "Intro (3)");
@@ -56,7 +57,27 @@ TEST (StemJob, NoArtistOrAlbumIsUnknown)
 	EXPECT_EQ (plan.track, "Track_1");
 }
 
+TEST (StemJob, StemsKeepTheOriginalsFormatWhereItPlays)
+{
+	EXPECT_EQ (stemExtensionFor ("a.flac"), "flac");
+	EXPECT_EQ (stemExtensionFor ("a.WAV"), "wav");
+	EXPECT_EQ (stemExtensionFor ("a.aiff"), "aiff");
+	EXPECT_EQ (stemExtensionFor ("a.ogg"), "ogg");
+	EXPECT_EQ (stemExtensionFor ("a.mp3"), "flac") << "JUCE here reads no MP3";
+	EXPECT_EQ (stemExtensionFor ("a.m4a"), "flac");
+	EXPECT_EQ (stemExtensionFor ("a.opus"), "flac");
+	EXPECT_EQ (planStemJob ("/lib", "A", "B", "t", "t.wav", nothingExists).stemPaths[1], "/lib/A/B/t - 2 - bass.wav");
+}
+
 // ── The command lines ───────────────────────────────────────────────────
+
+TEST (StemJob, StemsAreEncodedAt24Bit)
+{
+	const auto flac = encodeCommand ("/stage/drums.wav", "/stage/stem-1.flac", "flac");
+	EXPECT_TRUE (inOrder (flac, { "nice", "ionice", "ffmpeg", "-i", "/stage/drums.wav", "flac", "24", "/stage/stem-1.flac" }));
+	EXPECT_TRUE (contains (encodeCommand ("/s/d.wav", "/s/1.aiff", "aiff"), "pcm_s24be"));
+	EXPECT_TRUE (contains (encodeCommand ("/s/d.wav", "/s/1.ogg", "ogg"), "libvorbis"));
+}
 
 TEST (StemJob, AnyFormatIsDecodedToOneWav)
 {

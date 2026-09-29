@@ -18,6 +18,7 @@ struct StemJobPlan
 	std::string albumFolder;
 	std::string track;                    // after sanitising and "(2)" if taken
 	std::array<std::string, 4> stemPaths; // bus order: drums, bass, other, vocals
+	std::string stemExtension;            // "flac", "wav", ... (stemExtensionFor)
 	std::string originalPath;
 };
 
@@ -27,6 +28,15 @@ StemJobPlan planStemJob (const std::string& library, const std::string& artist, 
 						 const std::function<bool (const std::string&)>& exists);
 
 // ffmpeg: any input to the 44.1 kHz stereo float WAV the engine reads.
+// The stems keep the original's format where StemDeck can play it: FLAC,
+// WAV, AIFF, Ogg Vorbis. MP3, M4A and Opus JUCE can't read here -- those
+// become FLAC (lossless, so nothing is lost a second time). Without the dot.
+std::string stemExtensionFor (const std::string& originalFileName);
+
+// Demucs' 24-bit WAV stem into that format (24 bit where the format has
+// depth; Vorbis at quality 8). Not needed for "wav".
+std::vector<std::string> encodeCommand (const std::string& stemWav, const std::string& output, const std::string& extension);
+
 std::vector<std::string> decodeCommand (const std::string& input, const std::string& outputWav);
 
 // Demucs htdemucs at idle priority on CPU 0 with one thread (Fast: all cores),

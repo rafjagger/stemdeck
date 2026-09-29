@@ -21,14 +21,42 @@ bool splitStemName (const std::string& baseName, std::string& prefix, std::strin
 
 	prefix = trimEnd (baseName.substr (0, splitAt), separators);
 	suffix = baseName.substr (splitAt + 1);
-	return ! prefix.empty();
+	if (prefix.empty())
+		return false;
+
+	// "Title - 1 - drums": the number goes with the name. Only a number of one
+	// or two digits in front of a name, both behind a dash -- "Set - 01 - 02"
+	// stays two numbers, as before.
+	const auto isNumber = [] (const std::string& s)
+	{
+		return ! s.empty() && s.size() <= 2 && s.find_first_not_of ("0123456789") == std::string::npos;
+	};
+	const auto dashBetween = [&baseName] (size_t from, size_t to)
+	{
+		return baseName.substr (from, to - from).find ('-') != std::string::npos;
+	};
+
+	if (! isNumber (suffix) && dashBetween (prefix.size(), splitAt + 1))
+	{
+		const auto numberAt = prefix.find_last_of (separators);
+		if (numberAt != std::string::npos && isNumber (prefix.substr (numberAt + 1)))
+		{
+			const auto title = trimEnd (prefix.substr (0, numberAt), separators);
+			if (! title.empty() && dashBetween (title.size(), numberAt + 1))
+			{
+				suffix = baseName.substr (baseName.find_first_not_of (separators, title.size()));
+				prefix = title;
+			}
+		}
+	}
+	return true;
 }
 
 std::string stemFileName (const std::string& track, int stem, const std::string& extension)
 {
 	// Demucs' own order, and NI Stems' -- the one DJs know: bus 1 drums.
 	static const std::array<const char*, 4> names { "drums", "bass", "other", "vocals" };
-	return track + " - " + std::to_string (stem + 1) + "." + names[(size_t) stem] + "." + extension;
+	return track + " - " + std::to_string (stem + 1) + " - " + names[(size_t) stem] + "." + extension;
 }
 
 std::string sanitiseName (const std::string& name, const std::string& fallback)

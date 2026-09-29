@@ -24,6 +24,8 @@
 # (15 fps) auf stdout -- so zeigt StemDeck den Screencast in seinem Fenster.
 # Dazu auf Deskriptor 3 der Ton, nur zum Messen: 8 kHz, Stereo, s16le.
 #
+# NOREC=1: nur ansehen, keine Datei.
+#
 # Das Live-Fenster darf man schließen, die Aufnahme läuft weiter. Strg+C
 # beendet sie; die .ts-Datei wird dann zu .mp4 umverpackt (verlustfrei).
 set -euo pipefail
@@ -52,7 +54,12 @@ exec nice -n 19 taskset -c 0 ffmpeg -hide_banner -loglevel warning -nostdin \\
     $LIMIT -f mpegts -
 EOF
 
-echo "Aufnahme: $OUT  (Strg+C beendet)" >&2
+if [[ -n "${NOREC:-}" ]]; then
+    OUT=/dev/null   # nur ansehen: tee schreibt ins Leere, nichts wird umverpackt
+    echo "Nur ansehen, keine Aufnahme  (Strg+C beendet)" >&2
+else
+    echo "Aufnahme: $OUT  (Strg+C beendet)" >&2
+fi
 
 # Strg+C geht an alle drei (ssh, tee, ffplay); danach wird hier umverpackt.
 trap ':' INT
@@ -78,7 +85,7 @@ else
         || true
 fi
 
-if [[ -s "$OUT" ]]; then
+if [[ "$OUT" != /dev/null && -s "$OUT" ]]; then
     if ffmpeg -hide_banner -loglevel error -i "$OUT" -c copy -movflags +faststart "${OUT%.ts}.mp4"; then
         rm -f "$OUT"
         echo "Gespeichert: ${OUT%.ts}.mp4" >&2

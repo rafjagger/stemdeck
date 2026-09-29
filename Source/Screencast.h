@@ -23,7 +23,8 @@ public:
 	~Screencast() override;
 
 	// Returns an error, or an empty string.
-	juce::String start (const juce::File& script, const juce::String& host);
+	// `record`: also into recordings/; else only watched.
+	juce::String start (const juce::File& script, const juce::String& host, bool record);
 	void stop();
 
 	// Polls the child; false once it has finished (after stop(), or on its own).

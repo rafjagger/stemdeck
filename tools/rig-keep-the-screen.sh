@@ -21,12 +21,20 @@ case "${1:-}" in
         visible_workspace > "$STATE" 2>/dev/null || echo 1 > "$STATE"
         ;;
     restore)
-        # Until the last of its windows is there, then a moment more.
-        for _ in $(seq 1 40); do
-            xdotool search --class StemDeck >/dev/null 2>&1 && break
+        # Until its window is full screen -- the last thing it asks for, and
+        # the last thing that takes the screen -- then put the screen back.
+        for _ in $(seq 1 60); do
+            i3-msg -t get_tree | python3 -c '
+import json, sys
+def found(n):
+    props = n.get("window_properties") or {}
+    if props.get("class") == "StemDeck" and n.get("fullscreen_mode"):
+        return True
+    return any(found(c) for c in n.get("nodes", []) + n.get("floating_nodes", []))
+sys.exit(0 if found(json.load(sys.stdin)) else 1)' && break
             sleep 0.5
         done
-        sleep 2
+        sleep 1
         i3-msg -q "workspace number $(cat "$STATE" 2>/dev/null || echo 1)"
         ;;
     *)

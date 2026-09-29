@@ -96,28 +96,52 @@ namespace prolink
 		return p;
 	}
 
-	std::vector<uint8_t> statusPacket (int device, const std::string& name, double bpm, bool master, bool playing)
+	std::vector<uint8_t> statusPacket (int device, const std::string& name, double bpm, double pitch,
+									   bool master, bool playing, uint32_t beatNumber, int beatInBar)
 	{
+		// Beyond what beat-analyzer reads, the fields prolink-connect reads too,
+		// so tools built on it show StemDeck like a CDJ.
+		constexpr size_t offPlayState = 0x7b, offSliderPitch = 0x8d, offEffectivePitch = 0x99;
+		constexpr size_t offBeatNumber = 0xa0, offStatusBeatInBar = 0xa6;
+		constexpr uint8_t statePlaying = 0x03, statePaused = 0x05;
+
 		auto p = packet (statusSize, typeStatus, device, name);
+		p[offPlayState] = playing ? statePlaying : statePaused;
 		p[offFlags] = (uint8_t) ((master ? flagMaster : 0) | (playing ? flagPlaying : 0));
+		const auto pitchField = (uint32_t) std::lround (pitch * neutralPitch);
+		writeBE24 (p.data() + offSliderPitch, pitchField);
 		writeBE16 (p.data() + offStatusBpm, bpmField (bpm));
+		writeBE24 (p.data() + offEffectivePitch, pitchField);
+		p[offBeatNumber] = (uint8_t) (beatNumber >> 24);
+		p[offBeatNumber + 1] = (uint8_t) (beatNumber >> 16);
+		p[offBeatNumber + 2] = (uint8_t) (beatNumber >> 8);
+		p[offBeatNumber + 3] = (uint8_t) beatNumber;
+		p[offStatusBeatInBar] = (uint8_t) beatInBar;
 		return p;
 	}
 
 	std::vector<uint8_t> keepAlive (int deviceNumber, const std::string& name,
 									const std::array<uint8_t, 6>& mac, uint32_t ipNetworkOrder)
 	{
-		// 54 bytes, as beat-analyzer builds it (buildKeepAlivePacket there).
+		// 54 bytes, the layout prolink-connect announces with (after the
+		// dysentery analysis). beat-analyzer builds it one byte off -- name at
+		// 0x0b, length 0x11 -- which it never notices, since it reads none.
+		constexpr uint8_t deviceTypeCdj = 0x01;
 		std::vector<uint8_t> k (keepAliveSize, 0);
 		std::memcpy (k.data(), magic, sizeof (magic));
 		k[0x0a] = typeKeepAlive;
-		std::memcpy (k.data() + offName, name.data(), std::min<size_t> (name.size(), 20));
-		k[0x1f] = 0x01;
-		k[0x20] = 0x02;   // subtype: keep-alive
-		k[0x23] = 0x11;   // bytes remaining
+		k[0x0b] = 0x00;
+		std::memcpy (k.data() + 0x0c, name.data(), std::min<size_t> (name.size(), 20));
+		k[0x20] = 0x01;
+		k[0x21] = 0x02;
+		k[0x22] = 0x00;
+		k[0x23] = (uint8_t) keepAliveSize;   // the packet's own length
 		k[0x24] = (uint8_t) deviceNumber;
+		k[0x25] = deviceTypeCdj;
 		std::memcpy (k.data() + 0x26, mac.data(), mac.size());
 		std::memcpy (k.data() + 0x2c, &ipNetworkOrder, 4);
+		k[0x30] = 0x01;
+		k[0x34] = deviceTypeCdj;
 		return k;
 	}
 }

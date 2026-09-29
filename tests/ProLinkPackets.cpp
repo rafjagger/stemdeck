@@ -2,6 +2,7 @@
 
 #include "ProLinkPackets.h"
 
+#include <cmath>
 #include <cstring>
 
 namespace
@@ -96,6 +97,10 @@ TEST (ProLinkPackets, TheMasterFlagIsRead)
 	EXPECT_FALSE (o->isMaster);
 }
 
+// The layout prolink-connect announces its virtual CDJ with (src/virtualcdj,
+// after the dysentery analysis): type 0x06 0x00, the name from 0x0c, 01 02,
+// the packet's own length 0x0036, device, device type, MAC, IP, 01 00 00 00,
+// device type again.
 TEST (ProLinkPackets, TheKeepAliveMatchesTheLayout)
 {
 	const std::array<uint8_t, 6> mac { 1, 2, 3, 4, 5, 6 };
@@ -104,13 +109,18 @@ TEST (ProLinkPackets, TheKeepAliveMatchesTheLayout)
 	ASSERT_EQ (k.size(), 0x36u);
 	EXPECT_EQ (std::memcmp (k.data(), magic, 10), 0);
 	EXPECT_EQ (k[0x0a], 0x06);
-	EXPECT_EQ (std::string ((const char*) k.data() + 0x0b, 8), "StemDeck");
-	EXPECT_EQ (k[0x1f], 0x01);
-	EXPECT_EQ (k[0x20], 0x02);
-	EXPECT_EQ (k[0x23], 0x11);
+	EXPECT_EQ (k[0x0b], 0x00);
+	EXPECT_EQ (std::string ((const char*) k.data() + 0x0c, 8), "StemDeck");
+	EXPECT_EQ (k[0x20], 0x01);
+	EXPECT_EQ (k[0x21], 0x02);
+	EXPECT_EQ (k[0x22], 0x00);
+	EXPECT_EQ (k[0x23], 0x36);
 	EXPECT_EQ (k[0x24], 6);
+	EXPECT_EQ (k[0x25], 0x01) << "device type: CDJ";
 	EXPECT_EQ (std::memcmp (k.data() + 0x26, mac.data(), 6), 0);
 	EXPECT_EQ (std::memcmp (k.data() + 0x2c, &ip, 4), 0);
+	EXPECT_EQ (k[0x30], 0x01);
+	EXPECT_EQ (k[0x34], 0x01);
 }
 
 // Part 2: StemDeck as the tempo master. What it sends must read back through
@@ -130,8 +140,8 @@ TEST (ProLinkPackets, ABuiltBeatPacketParsesBack)
 
 TEST (ProLinkPackets, ABuiltStatusPacketParsesBack)
 {
-	const auto playing = prolink::statusPacket (6, "StemDeck", 128.0, true, true);
-	const auto stopped = prolink::statusPacket (6, "StemDeck", 128.0, true, false);
+	const auto playing = prolink::statusPacket (6, "StemDeck", 128.0, 1.0, true, true, 17, 2);
+	const auto stopped = prolink::statusPacket (6, "StemDeck", 128.0, 1.0, true, false, 17, 2);
 	const auto p = prolink::parseStatus (playing.data(), playing.size());
 	const auto s = prolink::parseStatus (stopped.data(), stopped.size());
 	ASSERT_TRUE (p.has_value());
@@ -147,5 +157,22 @@ TEST (ProLinkPackets, ABuiltStatusPacketParsesBack)
 TEST (ProLinkPackets, BuiltPacketsHaveTheRightSize)
 {
 	EXPECT_EQ (prolink::beatPacket (6, "StemDeck", 120.0, 1.0, 1).size(), 0x60u);
-	EXPECT_EQ (prolink::statusPacket (6, "StemDeck", 120.0, true, true).size(), 0xd4u);
+	EXPECT_EQ (prolink::statusPacket (6, "StemDeck", 120.0, 1.0, true, true, 1, 1).size(), 0xd4u);
+}
+
+// The fields prolink-connect reads from a status packet as well, so tools
+// built on it (prolink-tools) see StemDeck like a CDJ.
+TEST (ProLinkPackets, TheStatusCarriesWhatProlinkConnectReads)
+{
+	const auto p = prolink::statusPacket (6, "StemDeck", 125.0, 1.024, true, true, 17, 2);
+	EXPECT_EQ (p[0x7b], 0x03) << "play state: playing";
+	EXPECT_EQ (p[0x89] & 0x40, 0x40) << "flag: playing";
+	const uint32_t pitch = (uint32_t) std::lround (1.024 * 0x100000);
+	EXPECT_EQ (p[0x8d], (uint8_t) (pitch >> 16));
+	EXPECT_EQ (p[0x8f], (uint8_t) pitch);
+	EXPECT_EQ (p[0x99], (uint8_t) (pitch >> 16));
+	EXPECT_EQ (p[0xa3], 17) << "beat number, BE32 at 0xa0";
+	EXPECT_EQ (p[0xa6], 2) << "beat in bar";
+	const auto paused = prolink::statusPacket (6, "StemDeck", 125.0, 1.0, true, false, 17, 2);
+	EXPECT_EQ (paused[0x7b], 0x05) << "play state: paused";
 }

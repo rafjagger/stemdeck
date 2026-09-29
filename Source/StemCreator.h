@@ -26,6 +26,9 @@ public:
 	// Where the separator's venv lives (tools/setup-separator.sh makes it).
 	void setVenv (const juce::File& venv);
 	void setFast (bool allCores) { fast = allCores; }
+	// Where the separator should be, and whether it is there.
+	juce::File venv() const;
+	bool isInstalled() const { return venv().getChildFile ("bin/demucs").existsAsFile(); }
 
 	int add (const juce::File& input, const juce::String& artist, const juce::String& album, const juce::String& track);
 	void cancel (int id);

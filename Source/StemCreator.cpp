@@ -29,6 +29,12 @@ void StemCreator::setVenv (const juce::File& venv)
 	venvFolder = venv;
 }
 
+juce::File StemCreator::venv() const
+{
+	std::lock_guard<std::mutex> guard (lock);
+	return venvFolder;
+}
+
 int StemCreator::add (const juce::File& input, const juce::String& artist, const juce::String& album, const juce::String& track)
 {
 	int id = 0;

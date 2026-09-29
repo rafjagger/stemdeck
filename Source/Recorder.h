@@ -13,9 +13,11 @@ public:
 	Recorder();
 	~Recorder() override;
 
+	// recordings/ in the program's folder (where start.sh runs it from, like
+	// stems/): moves with the checkout.
 	static juce::File defaultFolder()
 	{
-		return juce::File::getSpecialLocation (juce::File::userMusicDirectory).getChildFile ("StemDeck-Recordings");
+		return juce::File::getCurrentWorkingDirectory().getChildFile ("recordings");
 	}
 
 	// Starts a new file in `folder`, named by the time. Returns an error, or

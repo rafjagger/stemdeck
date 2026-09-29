@@ -230,7 +230,7 @@ phones_L phones_R                    bus PH: stems switched to it and decks on P
 The names `deck1` … `deck4` are the buses', kept from when bus N was always stem N.
 
 Two **input** ports record: `rec_L` and `rec_R`. **REC** in the top bar writes them to a 24-bit
-FLAC in `~/Music/StemDeck-Recordings/`, named by the time (`StemDeck 2026-09-29 19-05-12.flac`);
+FLAC in `recordings/` in StemDeck's folder (next to `stems/`), named by the time (`StemDeck 2026-09-29 19-05-12.flac`);
 the button shows the running time, the two small meters beside it the inputs' level — also
 while not recording, to see that something is connected. The file is written by a background
 thread from a ten-second buffer; should the disk ever fall that far behind, the button shows

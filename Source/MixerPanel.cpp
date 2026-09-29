@@ -39,7 +39,7 @@ void LevelMeter::paint (juce::Graphics& g)
 	g.fillRoundedRectangle (bounds, 2.0f);
 
 	// Segmented LED bar, green -> yellow -> red
-	const int numSegments = 24;
+	const int numSegments = meterSegments (bounds.getHeight());
 	const auto segmentHeight = bounds.getHeight() / (float) numSegments;
 	const auto db = juce::Decibels::gainToDecibels (level, minDb);
 	const auto lit = juce::roundToInt ((db - minDb) / -minDb * (float) numSegments);

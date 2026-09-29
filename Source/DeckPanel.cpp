@@ -75,7 +75,7 @@ DeckPanel::DeckPanel (StemDeckPlayer& p, StemThumbnails& thumbnails, int index)
 	vinylButton.setClickingTogglesState (true);
 	vinylButton.setToggleState (true, juce::dontSendNotification);
 	vinylButton.setColour (juce::TextButton::buttonOnColourId, Theme::panelRaised.brighter (0.3f));
-	vinylButton.setTooltip ("Vinyl-Modus: Jogwheel-Oberseite scratcht");
+	vinylButton.setTooltip ("Vinyl mode: the controller's jog platter scratches");
 	vinylButton.onClick = [this] { jog.setVinylMode (vinylButton.getToggleState()); };
 
 	for (auto* b : { &cueButton, &playButton, &loopOffButton, &repeatButton, &syncButton, &masterButton, &rangeButton, &vinylButton, &gridButton })
@@ -100,6 +100,7 @@ DeckPanel::DeckPanel (StemDeckPlayer& p, StemThumbnails& thumbnails, int index)
 	gridAction (halfBackButton, GridAction::halfBack, "Grid half a beat earlier");
 	gridAction (halfForwardButton, GridAction::halfForward, "Grid half a beat later");
 	gridAction (snapButton, GridAction::snapToCue, "SNAP GRID (CUE): the bar's one onto the cue point");
+	gridAction (downbeatButton, GridAction::downbeatAtPlayhead, "SET 1: the bar's one where the playhead is");
 	gridAction (shiftButton, GridAction::shiftToLeader, "SHIFT GRID: take the beat matched by ear into the grid");
 	gridAction (resetGridButton, GridAction::reset, "Grid wie analysiert");
 
@@ -162,7 +163,7 @@ void DeckPanel::setGridMode (bool on)
 {
 	gridButton.setToggleState (on, juce::dontSendNotification);
 	jog.setGridMode (on);
-	for (auto* b : { &halfBackButton, &halfForwardButton, &snapButton, &shiftButton, &resetGridButton })
+	for (auto* b : { &halfBackButton, &halfForwardButton, &snapButton, &downbeatButton, &shiftButton, &resetGridButton })
 		b->setVisible (on);
 	resized();
 }
@@ -280,36 +281,38 @@ void DeckPanel::paint (juce::Graphics& g)
 	g.fillRect (deckIndex == 0 ? bounds.removeFromRight (3.0f) : bounds.removeFromLeft (3.0f));
 }
 
+void DeckPanel::setTempoSpan (int top, int bottom)
+{
+	if (top == tempoTop && bottom == tempoBottom)
+		return;
+	tempoTop = top;
+	tempoBottom = bottom;
+	resized();
+}
+
 void DeckPanel::resized()
 {
 	auto area = getLocalBounds().reduced (6);
+	const auto gap = 6;
 
-	// Tempo fader on the outer edge, as in Mixxx.
-	auto tempoArea = deckIndex == 0 ? area.removeFromLeft (52) : area.removeFromRight (52);
-	tempo.setBounds (tempoArea);
-	deckIndex == 0 ? area.removeFromLeft (6) : area.removeFromRight (6);
+	// At the foot, level with the mixer's volume faders and as tall: the pitch
+	// fader on the outer edge and the small keys beside it. Everything above
+	// has the deck's whole width -- the overview and the BPM got the room the
+	// full-height pitch fader took (2026-09-30).
+	const auto fallbackTop = area.getBottom() - 4 * (28 + gap);
+	const auto bandTop = tempoBottom > tempoTop ? juce::jlimit (area.getY() + 120, area.getBottom() - 4 * (22 + gap), tempoTop)
+												: fallbackTop;
+	auto band = area.withTop (bandTop).withBottom (tempoBottom > tempoTop ? juce::jmin (area.getBottom(), tempoBottom) : area.getBottom());
+	area.setBottom (bandTop - gap);
 
-	titleLabel.setBounds (area.removeFromTop (24));
-	stemsLabel.setBounds (area.removeFromTop (18));
+	tempo.setBounds (deckIndex == 0 ? band.removeFromLeft (54) : band.removeFromRight (54));   // "+0.00%" below it
+	deckIndex == 0 ? band.removeFromLeft (gap) : band.removeFromRight (gap);
 
-	auto times = area.removeFromTop (26);
-	elapsedLabel.setBounds (times.removeFromLeft (times.getWidth() / 2));
-	remainingLabel.setBounds (times);
-	area.removeFromTop (4);
-	overview.setBounds (area.removeFromTop (juce::jlimit (40, 70, area.getHeight() / 4)));
-	area.removeFromTop (10);
-
-	// One column, top to bottom (2026-09-29, the rig's 768x1024 screen): BPM,
-	// the two big transport keys, then the small keys two to a row.
-	const auto gap = 6, smallButton = 28;
-	bpmLabel.setBounds (area.removeFromTop (26));
-	bpmInfoLabel.setBounds (area.removeFromTop (14));
-	area.removeFromTop (gap);
-
-	const auto pairRow = [&area, gap, smallButton] (juce::Component& a, juce::Component* b)
+	const auto rowHeight = juce::jmax (22, (band.getHeight() - 3 * gap) / 4);
+	const auto pairRow = [&band, gap, rowHeight] (juce::Component& a, juce::Component* b)
 	{
-		auto row = area.removeFromTop (smallButton);
-		area.removeFromTop (gap);
+		auto row = band.removeFromTop (rowHeight);
+		band.removeFromTop (gap);
 		if (b == nullptr)
 		{
 			a.setBounds (row);
@@ -319,28 +322,45 @@ void DeckPanel::resized()
 		row.removeFromLeft (gap);
 		b->setBounds (row);
 	};
-
-	const auto gridRows = gridButton.getToggleState() ? 2 : 0;
-	const auto smallRows = 4 + gridRows;
-	const auto bigButton = juce::jlimit (32, 56, (area.getHeight() - smallRows * (smallButton + gap) - 2 * gap) / 2);
-	cueButton.setBounds (area.removeFromTop (bigButton));
-	area.removeFromTop (gap);
-	playButton.setBounds (area.removeFromTop (bigButton));
-	area.removeFromTop (gap);
-
 	pairRow (loopOffButton, &repeatButton);
 	pairRow (syncButton, &masterButton);
 	pairRow (rangeButton, &vinylButton);
 	pairRow (gridButton, nullptr);
 
-	// Grid Adjust, under GRID while it is on; moving the grid itself is the
-	// controller's jog wheel now.
+	// Above, the whole width: title, times, overview, BPM, the transport.
+	titleLabel.setBounds (area.removeFromTop (22));
+	stemsLabel.setBounds (area.removeFromTop (16));
+	auto times = area.removeFromTop (22);
+	elapsedLabel.setBounds (times.removeFromLeft (times.getWidth() / 2));
+	remainingLabel.setBounds (times);
+	area.removeFromTop (4);
+
+	auto transport = area.removeFromBottom (44);
+	cueButton.setBounds (transport.removeFromLeft ((transport.getWidth() - gap) / 2));
+	transport.removeFromLeft (gap);
+	playButton.setBounds (transport);
+	area.removeFromBottom (gap);
+
+	// Grid Adjust while GRID is on: moving the grid is the controller's jog
+	// wheel; these nudge it, snap it and set its one.
 	if (gridButton.getToggleState())
 	{
-		pairRow (halfBackButton, &halfForwardButton);
-		auto row = area.removeFromTop (smallButton);
-		const auto width = row.getWidth() / 3;
-		for (auto* b : { &snapButton, &shiftButton, &resetGridButton })
-			b->setBounds (row.removeFromLeft (width).reduced (1, 0));
+		const auto gridRow = [&area, gap] (std::initializer_list<juce::Component*> keys)
+		{
+			auto row = area.removeFromBottom (26);
+			area.removeFromBottom (4);
+			const auto width = row.getWidth() / (int) keys.size();
+			for (auto* key : keys)
+				key->setBounds (row.removeFromLeft (width).reduced (1, 0));
+		};
+		gridRow ({ &snapButton, &shiftButton, &resetGridButton });
+		gridRow ({ &halfBackButton, &downbeatButton, &halfForwardButton });
+		area.removeFromBottom (gap - 4);
 	}
+
+	auto bpm = area.removeFromBottom (40);
+	bpmLabel.setBounds (bpm.removeFromTop (26));
+	bpmInfoLabel.setBounds (bpm);
+	area.removeFromBottom (gap);
+	overview.setBounds (area);
 }

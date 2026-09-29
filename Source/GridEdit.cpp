@@ -42,4 +42,22 @@ namespace GridEdit
 		error -= std::round (error);   // -0.5 .. 0.5: positive, this deck is ahead of its grid's beat
 		return shift (grid, error * beatLength);
 	}
+
+	Loop snappedLoop (Grid grid, double startSeconds, double endSeconds)
+	{
+		if (grid.bpm <= 0.0)
+			return { startSeconds, endSeconds };
+
+		const auto beatLength = 60.0 / grid.bpm;
+		const auto nearest = [&grid, beatLength] (double seconds)
+		{
+			return grid.firstBeat + std::round ((seconds - grid.firstBeat) / beatLength) * beatLength;
+		};
+
+		const auto start = nearest (startSeconds);
+		auto end = nearest (endSeconds);
+		if (end <= start)
+			end = start + beatLength;
+		return { start, end };
+	}
 }

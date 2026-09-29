@@ -27,6 +27,12 @@ namespace GridEdit
 	// SNAP GRID (CUE): the downbeat onto the cue point.
 	Grid snapToCue (Grid grid, double cueSeconds);
 
+	// A loop's in and out on the grid's nearest beats: "the loop in/out must
+	// snap to grid" (2026-09-30). Both on the same beat makes a one-beat loop
+	// rather than none; without a tempo the points stay where they were.
+	struct Loop { double start = 0.0, end = 0.0; };
+	Loop snappedLoop (Grid grid, double startSeconds, double endSeconds);
+
 	// SHIFT GRID: the grid moved so that, at `position`, this deck is at the
 	// same point in its beat as the leader (`leaderBeatPhase`, the leader's
 	// position in beats) -- what was aligned by ear with the jog wheel goes

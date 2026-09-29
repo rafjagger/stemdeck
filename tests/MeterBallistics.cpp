@@ -36,3 +36,10 @@ TEST (MeterBallistics, QuietSignalStillReachesZero)
 	// Starts below the old 0.001 step threshold / 0.15 (~ -43.5 dB) and must not stick there.
 	EXPECT_EQ (releaseFor (0.005f, 120), 0.0f);
 }
+
+TEST (MeterBallistics, ASmallMeterDrawsSegmentsItCanShow)
+{
+	EXPECT_EQ (meterSegments (24.0f), 8) << "the top bar's REC meters";
+	EXPECT_EQ (meterSegments (300.0f), 24) << "the mixer's, capped";
+	EXPECT_GE (meterSegments (4.0f), 1);
+}

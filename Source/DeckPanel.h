@@ -53,7 +53,11 @@ public:
 	// Grid Adjust, as on a CDJ-3000: GRID turns it on; the jog wheel then moves
 	// the grid, and <1/2 1/2> SNAP (the downbeat onto the cue) SHIFT (take the
 	// phase aligned by ear against the sync leader) RESET (as analysed) edit it.
-	enum class GridAction { shift, halfBack, halfForward, snapToCue, shiftToLeader, reset };
+	enum class GridAction { shift, halfBack, halfForward, snapToCue, downbeatAtPlayhead, shiftToLeader, reset };
+
+	// The pitch fader's top and bottom in this panel's coordinates: level
+	// with the mixer's volume faders and as tall (set by MainComponent).
+	void setTempoSpan (int top, int bottom);
 	std::function<void (GridAction, double seconds)> onGridEdit;
 
 	void saveState (DeckSession& state) const;
@@ -83,6 +87,8 @@ private:
 	juce::TextButton gridButton { "GRID" };
 	juce::TextButton halfBackButton { juce::String::fromUTF8 ("\xe2\x80\xb9" "1/2") }, halfForwardButton { juce::String::fromUTF8 ("1/2\xe2\x80\xba") };
 	juce::TextButton snapButton { "SNAP" }, shiftButton { "SHIFT" }, resetGridButton { "RESET" };
+	juce::TextButton downbeatButton { "SET 1" };
+	int tempoTop = 0, tempoBottom = 0;
 	void setGridMode (bool on);
 	juce::Slider tempo { juce::Slider::LinearVertical, juce::Slider::TextBoxBelow };
 

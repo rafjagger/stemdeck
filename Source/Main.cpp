@@ -26,6 +26,12 @@ public:
         // This method is where you should put your application's initialisation code..
 
         mainWindow.reset (new MainWindow (getApplicationName()));
+
+        // The rig's service starts it with --fullscreen: the i3 rule alone
+        // missed it, catching one of the windows JUCE builds and drops again
+        // while StemDeck comes up (2026-09-30).
+        if (commandLine.contains ("--fullscreen"))
+            mainWindow->setFullScreen (true);
     }
 
     void shutdown() override

@@ -57,3 +57,38 @@ TEST (GridEdit, NoTempoNoEdit)
 	EXPECT_DOUBLE_EQ (GridEdit::shiftHalfBeat (none, true).firstBeat, 0.0);
 	EXPECT_DOUBLE_EQ (GridEdit::shiftToPhase (none, 3.0, 1.2).firstBeat, 0.0);
 }
+
+// "SET 1": the bar's one wherever the playhead is -- between two beats of the
+// old grid, which a cue point rarely is. The same arithmetic as SNAP.
+TEST (GridEdit, TheDownbeatGoesToThePlayhead)
+{
+	const auto playhead = 12.34;
+	const auto set = GridEdit::snapToCue (at120, playhead);
+	EXPECT_NEAR (std::fmod ((playhead - set.firstBeat) / 0.5, 4.0), 0.0, 1e-9) << "the playhead is a 1";
+	EXPECT_GE (set.firstBeat, 0.0);
+	EXPECT_LT (set.firstBeat, 2.0) << "within the first bar";
+	EXPECT_DOUBLE_EQ (set.bpm, 120.0);
+}
+
+// Loop in/out on the nearest beats of the grid (a beat is 0.5 s at 120, the
+// first at 0.25).
+TEST (GridEdit, ALoopSnapsToTheNearestBeats)
+{
+	const auto loop = GridEdit::snappedLoop (at120, 10.2, 12.1);
+	EXPECT_NEAR (loop.start, 10.25, 1e-9);
+	EXPECT_NEAR (loop.end, 12.25, 1e-9);
+}
+
+TEST (GridEdit, ALoopInsideOneBeatBecomesOneBeat)
+{
+	const auto loop = GridEdit::snappedLoop (at120, 10.2, 10.3);
+	EXPECT_NEAR (loop.start, 10.25, 1e-9);
+	EXPECT_NEAR (loop.end, 10.75, 1e-9);
+}
+
+TEST (GridEdit, WithoutATempoTheLoopStaysPut)
+{
+	const auto loop = GridEdit::snappedLoop ({ 0.0, 0.0 }, 10.2, 12.1);
+	EXPECT_DOUBLE_EQ (loop.start, 10.2);
+	EXPECT_DOUBLE_EQ (loop.end, 12.1);
+}

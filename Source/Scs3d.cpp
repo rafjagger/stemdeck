@@ -12,8 +12,9 @@ namespace scs3d
 
 		// Buttons: the six on top, and the four around the circle
 		constexpr std::array<std::uint8_t, 6> top { 0x20, 0x22, 0x24, 0x26, 0x28, 0x2A };
-		constexpr std::array<int, 6> muteOf { 0, 1, -1, -1, 2, 3 };   // 1 2 5 6 mute stems 1-4
-		constexpr std::uint8_t loopInOut = 0x24, loopToggle = 0x26;   // 3 and 4
+		// FX EQ LOOP TRIG mute stems 1-4; VINYL loop in/out, DECK loop on/off.
+		constexpr std::array<int, 6> muteOf { 0, 2, -1, 1, 3, -1 };   // in the order of `top`
+		constexpr std::uint8_t loopInOut = 0x24, loopToggle = 0x2A;   // VINYL, DECK
 		constexpr std::uint8_t topLeft = 0x2C, topRight = 0x2E, bottomLeft = 0x30, bottomRight = 0x32;
 		constexpr std::uint8_t centreTouch = 0x01;
 		constexpr std::uint8_t play = 0x6D, cue = 0x6E, sync = 0x6F, tap = 0x70;

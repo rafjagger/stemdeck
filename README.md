@@ -111,9 +111,9 @@ three seconds), one per deck; the A/B light on each says which. The first found 
 
 | SCS.3d | StemDeck |
 |---|---|
-| top buttons **1 2 5 6** (FX LOOP TRIG DECK) | mute stem 1–4 (red: muted, blue: playing) |
-| **3** (VINYL) | loop in, pressed again: loop out (blue: in marked, purple: looping) |
-| **4** (EQ) | loop off, and on again from its start (red: looping, blue: a loop to go back to) |
+| **FX EQ LOOP TRIG** | mute stem 1–4 (red: muted, blue: playing) |
+| **VINYL** | loop in, pressed again: loop out (blue: in marked, purple: looping) |
+| **DECK** | loop off, and on again from its start (red: looping, blue: a loop to go back to) |
 | **top left / top right** of the circle | library: previous / next set |
 | tap the **centre** of the circle | load the selected set — not onto a deck that is playing |
 | **GAIN** slider | channel fader; the LED bar shows it |

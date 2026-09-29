@@ -11,7 +11,6 @@
 #include "AutoDj.h"
 #include "Recorder.h"
 #include "Scs3dDevice.h"
-#include "Screencast.h"
 #include "Waveforms.h"
 #include "JackOutput.h"
 #include "Theme.h"
@@ -196,43 +195,6 @@ private:
 	Recorder recorder;
 	juce::TextButton recButton { "REC" };
 
-	// CAST: tools/screencast.sh against the host in the setting
-	// screencastHost (default a3nuc1_mango); its picture beside the
-	// waveforms while it runs.
-	Screencast screencast;
-	juce::TextButton castButton { "CAST" };
-	juce::TextButton castRecordButton { juce::String::fromUTF8 ("\xe2\x97\x8f") };   // CAST also records
-	void toggleScreencast();
-
-	// The cast's picture; its sound's level is in the top bar (castMeterL/R).
-	struct CastView : public juce::Component
-	{
-		juce::Image image;
-
-		void paint (juce::Graphics& g) override
-		{
-			g.fillAll (juce::Colours::black);
-			if (image.isValid())
-				g.drawImage (image, getLocalBounds().toFloat(), juce::RectanglePlacement::centred);
-			else
-			{
-				g.setColour (juce::Colours::grey);
-				g.drawText ("CAST ...", getLocalBounds(), juce::Justification::centred);
-			}
-		}
-	};
-	LevelMeter castMeterL, castMeterR;   // always there, beside CAST
-
-	// SCREEN: the same for this machine's own screen (tools/screencast.sh
-	// local), always recorded, no picture; its JACK client "screencast"
-	// here is connected by hand like the other.
-	Screencast screenRecording;
-	juce::TextButton screenButton { "SCREEN" };
-	LevelMeter screenMeterL, screenMeterR;
-	void toggleScreenRecording();
-	CastView castView;
-	int castFramesShown = -1;
-	bool castRecordingNow = false;   // how the running cast was started
 	LevelMeter recMeterL, recMeterR;
 	void toggleRecording();
 	void updateRecorder();

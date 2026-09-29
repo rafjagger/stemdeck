@@ -73,30 +73,6 @@ MainComponent::MainComponent()
 	deviceStatus.setColour (juce::Label::textColourId, Theme::textDim);
 	addAndMakeVisible (deviceStatus);
 
-	castButton.setMouseClickGrabsKeyboardFocus (false);
-	castButton.setColour (juce::TextButton::buttonOnColourId, Theme::mute);
-	castButton.onClick = [this] { toggleScreencast(); };
-	addAndMakeVisible (castButton);
-
-	castRecordButton.setClickingTogglesState (true);
-	castRecordButton.setMouseClickGrabsKeyboardFocus (false);
-	castRecordButton.setColour (juce::TextButton::buttonOnColourId, Theme::mute);
-	castRecordButton.setToggleState (settings().getBoolValue ("screencastRecord", false), juce::dontSendNotification);
-	castRecordButton.setTooltip (juce::String::fromUTF8 ("An: CAST nimmt auch auf (recordings/). Aus: nur ansehen. Gilt ab dem n\xc3\xa4" "chsten Start."));
-	castRecordButton.onClick = [this] { settings().setValue ("screencastRecord", castRecordButton.getToggleState()); };
-	addAndMakeVisible (castRecordButton);
-	addAndMakeVisible (castMeterL);
-	addAndMakeVisible (castMeterR);
-
-	screenButton.setMouseClickGrabsKeyboardFocus (false);
-	screenButton.setColour (juce::TextButton::buttonOnColourId, Theme::mute);
-	screenButton.setTooltip (juce::String::fromUTF8 ("Diesen Bildschirm aufnehmen, nach recordings/ \xe2\x80\x93 den Ton an screencast:input_1/2 hier selbst verbinden"));
-	screenButton.onClick = [this] { toggleScreenRecording(); };
-	addAndMakeVisible (screenButton);
-	addAndMakeVisible (screenMeterL);
-	addAndMakeVisible (screenMeterR);
-	addChildComponent (castView);
-
 	recButton.setMouseClickGrabsKeyboardFocus (false);
 	recButton.setColour (juce::TextButton::buttonOnColourId, Theme::mute);
 	recButton.onClick = [this] { toggleRecording(); };
@@ -727,83 +703,8 @@ void MainComponent::toggleRecording()
 	updateRecorder();
 }
 
-void MainComponent::toggleScreencast()
-{
-	if (screencast.isRunning())
-	{
-		screencast.stop();   // the script finishes the file; the button follows in updateRecorder()
-		return;
-	}
-
-	const auto host = settings().getValue ("screencastHost", "a3nuc1_mango");
-	const auto script = juce::File::getCurrentWorkingDirectory().getChildFile ("tools/screencast.sh");
-	castRecordingNow = castRecordButton.getToggleState();
-	if (const auto error = screencast.start (script, host, castRecordingNow); error.isNotEmpty())
-		juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Screencast", error);
-	castButton.setTooltip ("Screencast von " + host
-						   + (castRecordButton.getToggleState() ? juce::String (", mit Aufnahme nach recordings/") : juce::String (", nur ansehen"))
-						   + juce::String::fromUTF8 (" \xe2\x80\x93 den Ton dr\xc3\xbc" "ben selbst an screencast:input_1/2 verbinden"));
-}
-
-void MainComponent::toggleScreenRecording()
-{
-	if (screenRecording.isRunning())
-	{
-		screenRecording.stop();
-		return;
-	}
-	const auto script = juce::File::getCurrentWorkingDirectory().getChildFile ("tools/screencast.sh");
-	if (const auto error = screenRecording.start (script, "local", true); error.isNotEmpty())
-		juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Bildschirmaufnahme", error);
-}
-
 void MainComponent::updateRecorder()
 {
-	screenMeterL.setLevel (screenRecording.popPeak (0));
-	screenMeterR.setLevel (screenRecording.popPeak (1));
-	const auto screening = screenRecording.isRunning();
-	screenButton.setToggleState (screening, juce::dontSendNotification);
-	if (screening)
-	{
-		const auto seconds = (int) screenRecording.getSeconds();
-		screenButton.setButtonText (juce::String::fromUTF8 ("\xe2\x97\x8f SCREEN ") + juce::String (seconds / 60) + ":" + juce::String (seconds % 60).paddedLeft ('0', 2));
-	}
-	else
-	{
-		screenButton.setButtonText ("SCREEN");
-	}
-
-	const auto casting = screencast.isRunning();
-	castButton.setToggleState (casting, juce::dontSendNotification);
-
-	if (casting != castView.isVisible())
-	{
-		castView.image = {};
-		castFramesShown = -1;
-		castView.setVisible (casting);
-		resized();
-	}
-	castMeterL.setLevel (screencast.popPeak (0));
-	castMeterR.setLevel (screencast.popPeak (1));
-	if (casting && screencast.getFrameCount() != castFramesShown)
-	{
-		castFramesShown = screencast.getFrameCount();
-		castView.image = screencast.getFrame();
-		castView.repaint();
-	}
-	if (casting)
-	{
-		const auto seconds = (int) screencast.getSeconds();
-		castButton.setButtonText ((castRecordingNow ? juce::String::fromUTF8 ("\xe2\x97\x8f CAST ") : juce::String ("CAST "))
-								  + juce::String (seconds / 60) + ":" + juce::String (seconds % 60).paddedLeft ('0', 2));
-	}
-	else
-	{
-		castButton.setButtonText ("CAST");
-		if (castButton.getTooltip().isEmpty())
-			castButton.setTooltip ("Screencast des entfernten Rechners (screencastHost) aufnehmen und live zeigen");
-	}
-
 	recMeterL.setLevel (recorder.popPeak (0));
 	recMeterR.setLevel (recorder.popPeak (1));
 
@@ -1332,19 +1233,6 @@ void MainComponent::resized()
 	topBar.removeFromRight (4);
 	recButton.setBounds (topBar.removeFromRight (100));
 	topBar.removeFromRight (6);
-	castMeterR.setBounds (topBar.removeFromRight (6).reduced (0, 3));
-	topBar.removeFromRight (2);
-	castMeterL.setBounds (topBar.removeFromRight (6).reduced (0, 3));
-	topBar.removeFromRight (4);
-	castRecordButton.setBounds (topBar.removeFromRight (30));
-	topBar.removeFromRight (2);
-	castButton.setBounds (topBar.removeFromRight (100));
-	topBar.removeFromRight (6);
-	screenMeterR.setBounds (topBar.removeFromRight (6).reduced (0, 3));
-	topBar.removeFromRight (2);
-	screenMeterL.setBounds (topBar.removeFromRight (6).reduced (0, 3));
-	topBar.removeFromRight (4);
-	screenButton.setBounds (topBar.removeFromRight (100));
 	pioPlayer.setBounds (topBar.removeFromRight (90));
 	pioStatus.setBounds (topBar.removeFromRight (220));
 	deviceStatus.setBounds (topBar);
@@ -1352,12 +1240,6 @@ void MainComponent::resized()
 
 	const auto waveHeight = juce::jlimit (90, 170, getHeight() / 8);
 	auto waves = area.removeFromTop (waveHeight * 2 + 3);
-	if (castView.isVisible())
-	{
-		// The screencast beside the waveforms, as tall as both, in its own shape.
-		castView.setBounds (waves.removeFromRight (waves.getHeight() * Screencast::frameWidth / Screencast::frameHeight));
-		waves.removeFromRight (6);
-	}
 	waveA.setBounds (waves.removeFromTop (waveHeight));
 	waves.removeFromTop (3);
 	waveB.setBounds (waves);

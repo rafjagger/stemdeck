@@ -17,6 +17,8 @@
 //   - Then the old deck stops, SYNC comes off, and the new one is the one
 //     playing. Its tempo stays where the mix put it.
 // Tracks without a beat grid mix over a fixed 10 s, unsynced.
+// A loop is the DJ's: nothing is loaded onto a deck that loops, and no mix
+// starts while the playing deck loops -- it waits until the loop is off.
 class AutoDj
 {
 public:
@@ -29,6 +31,7 @@ public:
 		double gridBpm = 0.0;    // 0: no grid
 		double firstBeat = 0.0;
 		double rate = 1.0;       // track seconds per second (tempo fader and sync)
+		bool looping = false;
 	};
 
 	// What to do this tick; -1 / empty: nothing.

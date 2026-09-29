@@ -9,6 +9,7 @@
 #include "Buses.h"
 #include "Session.h"
 #include "AutoDj.h"
+#include "Recorder.h"
 #include "Waveforms.h"
 #include "JackOutput.h"
 #include "Theme.h"
@@ -175,6 +176,14 @@ private:
 	// (a real CDJ may hold master) and not once MASTER was turned off by hand.
 	bool masterTurnedOff = false;
 	ProLinkSender pioSender;
+
+	// Two JACK inputs (rec_L, rec_R) to FLAC: REC in the top bar, with the
+	// inputs' levels beside it. Only under JACK.
+	Recorder recorder;
+	juce::TextButton recButton { "REC" };
+	LevelMeter recMeterL, recMeterR;
+	void toggleRecording();
+	void updateRecorder();
 
 	JackOutput jack;
 	bool usingJack = false;

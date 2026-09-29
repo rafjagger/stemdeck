@@ -78,6 +78,13 @@ MainComponent::MainComponent()
 	deviceStatus.setColour (juce::Label::textColourId, Theme::textDim);
 	addAndMakeVisible (deviceStatus);
 
+	recButton.setMouseClickGrabsKeyboardFocus (false);
+	recButton.setColour (juce::TextButton::buttonOnColourId, Theme::mute);
+	recButton.onClick = [this] { toggleRecording(); };
+	addAndMakeVisible (recButton);
+	addAndMakeVisible (recMeterL);
+	addAndMakeVisible (recMeterR);
+
 	autoDjButton.setClickingTogglesState (true);
 	autoDjButton.setMouseClickGrabsKeyboardFocus (false);
 	autoDjButton.setColour (juce::TextButton::buttonOnColourId, Theme::play);
@@ -136,6 +143,8 @@ MainComponent::~MainComponent()
 {
 	stopTimer();
 	saveSession();
+	jack.close();        // no more input blocks ...
+	recorder.stop();     // ... then the file is closed complete
 	pioSender.setMaster (nullptr);
 	pioSender.stop();   // before the players it reads go away
 	proLink.stop();
@@ -551,6 +560,46 @@ void MainComponent::editGrid (int deckIndex, DeckPanel::GridAction action, doubl
 		setSyncBent (deckIndex, false);
 }
 
+void MainComponent::toggleRecording()
+{
+	if (recorder.isRecording())
+	{
+		recorder.stop();
+		recButton.setTooltip ("Aufgenommen: " + recorder.getFile().getFullPathName());
+	}
+	else if (const auto error = recorder.start (Recorder::defaultFolder(), jack.getSampleRate()); error.isNotEmpty())
+	{
+		juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Aufnahme", error);
+	}
+	updateRecorder();
+}
+
+void MainComponent::updateRecorder()
+{
+	recMeterL.setLevel (recorder.popPeak (0));
+	recMeterR.setLevel (recorder.popPeak (1));
+
+	const auto on = recorder.isRecording();
+	recButton.setToggleState (on, juce::dontSendNotification);
+	if (on)
+	{
+		const auto seconds = (int) recorder.getSeconds();
+		recButton.setButtonText (juce::String::fromUTF8 ("\xe2\x97\x8f ") + juce::String (seconds / 60) + ":" + juce::String (seconds % 60).paddedLeft ('0', 2)
+								 + (recorder.hasDropped() ? " !" : ""));
+		recButton.setTooltip (recorder.getFile().getFullPathName()
+							  + (recorder.hasDropped() ? juce::String::fromUTF8 ("\n! Die Platte kam nicht mit: L\xc3\xbc" "cken in der Aufnahme") : juce::String()));
+	}
+	else
+	{
+		recButton.setButtonText ("REC");
+		if (! usingJack)
+			recButton.setTooltip (juce::String::fromUTF8 ("Aufnahme nur unter JACK (Eing\xc3\xa4nge rec_L / rec_R)"));
+		else if (recButton.getTooltip().isEmpty())
+			recButton.setTooltip (juce::String::fromUTF8 ("Nimmt die JACK-Eing\xc3\xa4nge StemDeck:rec_L / rec_R als FLAC auf, nach ")
+								  + Recorder::defaultFolder().getFullPathName());
+	}
+}
+
 void MainComponent::setAutoDj (bool on)
 {
 	autoDjButton.setToggleState (on, juce::dontSendNotification);
@@ -793,7 +842,8 @@ void MainComponent::initialiseAudio()
 		portNames.addArray ({ name + "_L", name + "_R" });
 	}
 
-	usingJack = jack.open ("StemDeck", portNames, *this).isEmpty();
+	usingJack = jack.open ("StemDeck", portNames, *this, { "rec_L", "rec_R" }, &recorder).isEmpty();
+	recButton.setEnabled (usingJack);
 
 	if (! usingJack)
 		initialiseDeviceManager();
@@ -908,6 +958,7 @@ void MainComponent::timerCallback()
 	updateCreatorStatus();
 
 	runAutoDj();
+	updateRecorder();
 
 	if (--sessionCountdown <= 0)
 	{
@@ -1038,6 +1089,12 @@ void MainComponent::resized()
 	syncSourceButton.setBounds (topBar.removeFromRight (110));
 	topBar.removeFromRight (6);
 	autoDjButton.setBounds (topBar.removeFromRight (100));
+	topBar.removeFromRight (6);
+	recMeterR.setBounds (topBar.removeFromRight (6).reduced (0, 3));
+	topBar.removeFromRight (2);
+	recMeterL.setBounds (topBar.removeFromRight (6).reduced (0, 3));
+	topBar.removeFromRight (4);
+	recButton.setBounds (topBar.removeFromRight (100));
 	pioPlayer.setBounds (topBar.removeFromRight (90));
 	pioStatus.setBounds (topBar.removeFromRight (220));
 	deviceStatus.setBounds (topBar);

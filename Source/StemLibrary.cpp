@@ -1,6 +1,7 @@
 #include "StemLibrary.h"
 #include "Theme.h"
 #include "Waveforms.h"
+#include "StemJob.h"
 
 StemLibrary::StemLibrary (juce::AudioFormatManager& fm) : formatManager (fm)
 {
@@ -8,10 +9,12 @@ StemLibrary::StemLibrary (juce::AudioFormatManager& fm) : formatManager (fm)
 	rescanButton.onClick = [this] { setFolder (folder); };
 	loadAButton.onClick = [this] { loadSelected (0); };
 	loadBButton.onClick = [this] { loadSelected (1); };
+	createButton.onClick = [this] { chooseFilesForStems(); };
+	cancelCreateButton.onClick = [this] { if (onCancelCreation) onCancelCreation(); };
 	loadAButton.setColour (juce::TextButton::textColourOffId, Theme::deck (0));
 	loadBButton.setColour (juce::TextButton::textColourOffId, Theme::deck (1));
 
-	for (auto* b : { &folderButton, &rescanButton, &loadAButton, &loadBButton })
+	for (auto* b : { &folderButton, &rescanButton, &loadAButton, &loadBButton, &createButton, &cancelCreateButton })
 	{
 		b->setMouseClickGrabsKeyboardFocus (false);
 		addAndMakeVisible (b);
@@ -20,6 +23,11 @@ StemLibrary::StemLibrary (juce::AudioFormatManager& fm) : formatManager (fm)
 	folderLabel.setColour (juce::Label::textColourId, Theme::textDim);
 	folderLabel.setMinimumHorizontalScale (0.6f);
 	addAndMakeVisible (folderLabel);
+
+	creatorLabel.setColour (juce::Label::textColourId, Theme::textDim);
+	creatorLabel.setMinimumHorizontalScale (0.7f);
+	addChildComponent (creatorLabel);
+	cancelCreateButton.setVisible (false);
 
 	searchBox.setTextToShowWhenEmpty ("Suchen...", Theme::textDim);
 	searchBox.setColour (juce::TextEditor::backgroundColourId, Theme::background);
@@ -206,6 +214,12 @@ void StemLibrary::paint (juce::Graphics& g)
 {
 	g.setColour (Theme::panel);
 	g.fillRoundedRectangle (getLocalBounds().toFloat().reduced (2.0f), 6.0f);
+
+	if (dropHighlight)
+	{
+		g.setColour (Theme::deck (0));
+		g.drawRoundedRectangle (getLocalBounds().toFloat().reduced (3.0f), 6.0f, 2.0f);
+	}
 }
 
 void StemLibrary::resized()
@@ -221,10 +235,106 @@ void StemLibrary::resized()
 	bar.removeFromLeft (16);
 	rescanButton.setBounds (bar.removeFromRight (110));
 	bar.removeFromRight (6);
+	createButton.setBounds (bar.removeFromRight (130));
+	bar.removeFromRight (6);
 	folderButton.setBounds (bar.removeFromRight (90));
 	bar.removeFromRight (10);
 	folderLabel.setBounds (bar);
 
+	if (creatorLabel.isVisible())
+	{
+		area.removeFromTop (6);
+		auto strip = area.removeFromTop (24);
+		if (cancelCreateButton.isVisible())
+			cancelCreateButton.setBounds (strip.removeFromRight (100));
+		creatorLabel.setBounds (strip);
+	}
+
 	area.removeFromTop (8);
 	table.setBounds (area);
+}
+
+void StemLibrary::selectSetWithFile (const juce::File& file)
+{
+	for (int row = 0; row < (int) visibleSets.size(); ++row)
+		for (const auto& f : visibleSets[(size_t) row]->files)
+			if (f == file)
+			{
+				table.selectRow (row);
+				table.scrollToEnsureRowIsOnscreen (row);
+				return;
+			}
+}
+
+void StemLibrary::setCreatorStatus (const juce::String& text, bool canCancel)
+{
+	const auto show = text.isNotEmpty();
+	creatorLabel.setText (text, juce::dontSendNotification);
+	if (show == creatorLabel.isVisible() && canCancel == cancelCreateButton.isVisible())
+		return;
+	creatorLabel.setVisible (show);
+	cancelCreateButton.setVisible (show && canCancel);
+	resized();
+}
+
+juce::Array<juce::File> StemLibrary::separableFiles (const juce::StringArray& paths) const
+{
+	const auto offered = [this] (const juce::File& f)
+	{
+		return shouldOfferForSeparation (f.getFullPathName().toStdString(), folder.getFullPathName().toStdString());
+	};
+
+	juce::Array<juce::File> found;
+	for (const auto& path : paths)
+	{
+		const juce::File f (path);
+		if (f.isDirectory())
+		{
+			for (const auto& entry : juce::RangedDirectoryIterator (f, true, "*", juce::File::findFiles))
+				if (offered (entry.getFile()))
+					found.add (entry.getFile());
+		}
+		else if (offered (f))
+			found.add (f);
+	}
+	found.sort();
+	return found;
+}
+
+bool StemLibrary::isInterestedInFileDrag (const juce::StringArray& files)
+{
+	for (const auto& path : files)
+		if (juce::File (path).isDirectory() || isSeparableAudioFile (juce::File (path).getFileName().toStdString()))
+			return true;
+	return false;
+}
+
+void StemLibrary::filesDropped (const juce::StringArray& files, int, int)
+{
+	setDropHighlight (false);
+	if (const auto found = separableFiles (files); ! found.isEmpty() && onCreateStems)
+		onCreateStems (found);
+}
+
+void StemLibrary::setDropHighlight (bool on)
+{
+	dropHighlight = on;
+	repaint();
+}
+
+void StemLibrary::chooseFilesForStems()
+{
+	chooser = std::make_unique<juce::FileChooser> ("Stereo-Dateien in Stems zerlegen",
+		juce::File::getSpecialLocation (juce::File::userMusicDirectory),
+		"*.flac;*.wav;*.mp3;*.aiff;*.aif;*.ogg;*.m4a;*.opus");
+	chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles
+							  | juce::FileBrowserComponent::canSelectMultipleItems,
+						  [this] (const juce::FileChooser& fc)
+						  {
+							  juce::StringArray paths;
+							  for (const auto& f : fc.getResults())
+								  paths.add (f.getFullPathName());
+							  if (const auto found = separableFiles (paths); ! found.isEmpty() && onCreateStems)
+								  onCreateStems (found);
+						  });
 }

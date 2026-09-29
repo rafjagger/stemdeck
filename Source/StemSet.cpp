@@ -1,32 +1,7 @@
 #include "StemSet.h"
 #include "LibraryPath.h"
+#include "StemNames.h"
 #include <map>
-
-namespace
-{
-	// Splits "Artist - Title-001" into prefix "Artist - Title" and suffix "001".
-	bool splitStemName (const juce::String& baseName, juce::String& prefix, juce::String& suffix)
-	{
-		const juce::String separators (" -_");
-		int splitAt = -1;
-
-		for (int i = baseName.length(); --i >= 0;)
-		{
-			if (separators.containsChar (baseName[i]))
-			{
-				splitAt = i;
-				break;
-			}
-		}
-
-		if (splitAt <= 0 || splitAt == baseName.length() - 1)
-			return false;
-
-		prefix = baseName.substring (0, splitAt).trimCharactersAtEnd (separators);
-		suffix = baseName.substring (splitAt + 1);
-		return prefix.isNotEmpty();
-	}
-}
 
 std::vector<StemSet> StemSet::scanFolder (const juce::File& folder, juce::AudioFormatManager& formats)
 {
@@ -41,10 +16,15 @@ std::vector<StemSet> StemSet::scanFolder (const juce::File& folder, juce::AudioF
 	for (const auto& entry : juce::RangedDirectoryIterator (folder, true, formats.getWildcardForAllFormats(), juce::File::findFiles))
 	{
 		const auto file = entry.getFile();
-		juce::String prefix, suffix;
-
-		if (! splitStemName (file.getFileNameWithoutExtension(), prefix, suffix))
+		// The stem creator's originals are not sets (LibraryPath.h).
+		const auto fileFolder = file.getParentDirectory();
+		if (fileFolder != folder
+			&& isIgnoredLibraryFolder (fileFolder.getRelativePathFrom (folder).replaceCharacter ('\\', '/').toStdString()))
 			continue;
+		std::string prefixText, suffixText;
+		if (! splitStemName (file.getFileNameWithoutExtension().toStdString(), prefixText, suffixText))
+			continue;
+		const juce::String prefix (prefixText), suffix (suffixText);
 
 		// Group per directory so equal names in different folders stay apart.
 		const auto key = file.getParentDirectory().getFullPathName() + "/" + prefix;

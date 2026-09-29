@@ -20,3 +20,12 @@ LibraryPlace libraryPlaceOf (const std::string& relativeFolder)
 
 	return place;
 }
+
+bool isIgnoredLibraryFolder (const std::string& relativeFolder)
+{
+	std::stringstream parts (relativeFolder);
+	for (std::string level; std::getline (parts, level, '/');)
+		if (level == "originals")
+			return true;
+	return false;
+}

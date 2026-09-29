@@ -14,3 +14,8 @@ struct LibraryPlace
 };
 
 LibraryPlace libraryPlaceOf (const std::string& relativeFolder);
+
+// True for a folder the library does not look into: `originals` at any level,
+// where the stem creator keeps the source files -- a set of four originals
+// with one name would otherwise show up as a stem set.
+bool isIgnoredLibraryFolder (const std::string& relativeFolder);

@@ -8,12 +8,20 @@
 // deck buttons, by double-click (first deck that is not playing) or by
 // dragging a row onto a deck.
 class StemLibrary : public juce::Component,
+					public juce::FileDragAndDropTarget,
 					private juce::TableListBoxModel
 {
 public:
 	explicit StemLibrary (juce::AudioFormatManager& formatManager);
 
 	void setFolder (const juce::File& folder);
+	const juce::File& getFolder() const { return folder; }
+
+	// Selects and shows the set a file belongs to (after the creator made it).
+	void selectSetWithFile (const juce::File& file);
+
+	// The stem creator's line under the bar; empty hides it.
+	void setCreatorStatus (const juce::String& text, bool canCancel);
 
 	// Looks up a set by the id carried in drag-and-drop descriptions.
 	const StemSet* findSet (const juce::String& setId) const;
@@ -24,6 +32,13 @@ public:
 	std::function<void (const StemSet&, int deckIndex)> onLoadSet; // deckIndex -1: first free deck
 	std::function<void (const juce::File&)> onFolderChanged;
 	std::function<std::optional<BeatGrid> (const StemSet&)> lookUpBeatGrid; // for the BPM column
+	std::function<void (const juce::Array<juce::File>&)> onCreateStems;       // stereo files, dropped or chosen
+	std::function<void()> onCancelCreation;
+
+	bool isInterestedInFileDrag (const juce::StringArray& files) override;
+	void fileDragEnter (const juce::StringArray&, int, int) override { setDropHighlight (true); }
+	void fileDragExit (const juce::StringArray&) override { setDropHighlight (false); }
+	void filesDropped (const juce::StringArray& files, int, int) override;
 
 	void analysisChanged() { table.repaint(); }
 
@@ -44,6 +59,9 @@ private:
 	void applyFilter();
 	void loadSelected (int deckIndex);
 	void chooseFolder();
+	void chooseFilesForStems();
+	void setDropHighlight (bool on);
+	juce::Array<juce::File> separableFiles (const juce::StringArray& paths) const;
 
 	juce::AudioFormatManager& formatManager;
 	juce::File folder;
@@ -54,7 +72,9 @@ private:
 
 	juce::TextButton folderButton { "Ordner..." }, rescanButton { "Neu scannen" };
 	juce::TextButton loadAButton { "Laden in A" }, loadBButton { "Laden in B" };
-	juce::Label folderLabel;
+	juce::TextButton createButton { juce::String::fromUTF8 ("Stems erstellen\xe2\x80\xa6") }, cancelCreateButton { "Abbrechen" };
+	juce::Label folderLabel, creatorLabel;
+	bool dropHighlight = false;
 	juce::TextEditor searchBox;
 	juce::TableListBox table { "Sets", this };
 	std::unique_ptr<juce::FileChooser> chooser;

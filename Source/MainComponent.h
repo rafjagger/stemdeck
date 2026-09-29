@@ -15,6 +15,7 @@
 #include "ProLinkReceiver.h"
 #include "ProLinkSender.h"
 #include "MasterDeck.h"
+#include "StemCreator.h"
 
 //==============================================================================
 // Two stem decks and a mixer, laid out like Mixxx: scrolling waveforms on top,
@@ -68,6 +69,8 @@ private:
 	void initialiseDeviceManager();
 	void changeListenerCallback (juce::ChangeBroadcaster*) override;
 	void timerCallback() override;
+	void createStems (const juce::Array<juce::File>& files);
+	void updateCreatorStatus();
 	void updateDeviceStatus();
 	void showAudioSettings();
 
@@ -92,6 +95,8 @@ private:
 	DeckPanel deckA { playerA, thumbsA, 0 }, deckB { playerB, thumbsB, 1 };
 	MixerPanel mixer { playerA, playerB };
 	StemLibrary library { formatManager };
+	StemCreator stemCreator;
+	std::unique_ptr<juce::AlertWindow> stemDialog;
 
 	std::array<StemThumbnails*, numDecks> thumbs { &thumbsA, &thumbsB };
 	std::array<ScrollingWaveform*, numDecks> waves { &waveA, &waveB };

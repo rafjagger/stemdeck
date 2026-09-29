@@ -106,6 +106,40 @@ Columns: set, BPM (once analysed), stem names, length, folder; click a header to
 box filters as you type. Load a set with the **Laden in A / B** buttons, by double-click or Return
 (first deck that is not playing), or by dragging a row onto a deck or its waveform.
 
+### Creating stems from stereo files
+
+Drop stereo files, or a whole folder, on the library, or press **Stems erstellen…**. FLAC, WAV,
+MP3, AIFF, OGG, M4A and Opus work. StemDeck asks once for artist and album (preset from the
+folders the files lie in: `…/Artist/Album/track.flac`); files dropped from several folders keep
+the artist and album of their own folder, without a question. Each track becomes a set:
+
+```
+stems/Artist/Album/Title - 1.drums.wav
+                   Title - 2.bass.wav
+                   Title - 3.other.wav
+                   Title - 4.vocals.wav
+                   originals/Title.flac     (a copy; the library ignores this folder)
+```
+
+The separation is [Demucs](https://github.com/adefossez/demucs) `htdemucs`, 24-bit WAV at
+44.1 kHz. It runs in the background, one track at a time, a few minutes per track, and stays
+out of the way of live audio: one CPU core (0), idle priority for CPU and disk, at most 6 GB of
+memory, and **paused while a deck plays**. The strip under the library bar shows the track,
+the progress and how many wait; **Abbrechen** stops the running one and leaves nothing behind.
+When a set is done the library rescans and selects it. A track name already in the album gets
+` (2)`.
+
+Setup, once (about 1 GB):
+
+```sh
+sudo apt install ffmpeg python3-venv
+tools/setup-separator.sh
+```
+
+The script installs Demucs and the CPU build of PyTorch into
+`~/.local/share/StemDeck/separator` and downloads the model. If it is missing, the strip says
+so when a job starts.
+
 ### Keyboard
 
 | Key | Deck A | Deck B |

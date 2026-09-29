@@ -42,7 +42,17 @@ MainComponent::MainComponent()
 	library.onFolderChanged = [this] (const juce::File& folder)
 	{
 		appProperties.getUserSettings()->setValue ("stemFolder", folder.getFullPathName());
+		stemCreator.setLibraryFolder (folder);
 	};
+	library.onCreateStems = [this] (const juce::Array<juce::File>& files) { createStems (files); };
+	library.onCancelCreation = [this] { stemCreator.cancelRunning(); };
+	stemCreator.onSetCreated = [this] (const juce::File& firstStem)
+	{
+		library.setFolder (library.getFolder());
+		library.selectSetWithFile (firstStem);
+	};
+	if (const auto venv = appProperties.getUserSettings()->getValue ("separatorVenv"); juce::File::isAbsolutePath (venv))
+		stemCreator.setVenv (venv);
 
 	// Last used folder, otherwise ./stems next to where the app was started.
 	// A saved folder that is gone (the checkout moved) falls back too, or the
@@ -51,6 +61,7 @@ MainComponent::MainComponent()
 	const juce::File saved (savedFolder.isNotEmpty() && juce::File::isAbsolutePath (savedFolder) ? savedFolder : juce::String());
 	library.setFolder (saved.isDirectory() ? saved
 										   : juce::File::getCurrentWorkingDirectory().getChildFile ("stems"));
+	stemCreator.setLibraryFolder (library.getFolder());
 
 	audioSettingsButton.onClick = [this] { showAudioSettings(); };
 	audioSettingsButton.setMouseClickGrabsKeyboardFocus (false);
@@ -355,6 +366,67 @@ void MainComponent::updatePioneerStatus()
 	pioStatus.setText (text, juce::dontSendNotification);
 }
 
+//==============================================================================
+// One question for files from one folder; files from several folders (an
+// artist's folder dropped whole) each keep the artist and album their own
+// folders suggest, so albums are not merged into one.
+void MainComponent::createStems (const juce::Array<juce::File>& files)
+{
+	const auto addAll = [this, files] (const juce::String* artist, const juce::String* album)
+	{
+		for (const auto& f : files)
+		{
+			const auto guess = guessArtistAlbum (f.getFullPathName().toStdString());
+			stemCreator.add (f, artist != nullptr ? *artist : juce::String (guess.artist),
+							 album != nullptr ? *album : juce::String (guess.album), f.getFileNameWithoutExtension());
+		}
+	};
+
+	for (const auto& f : files)
+		if (f.getParentDirectory() != files.getFirst().getParentDirectory())
+			return addAll (nullptr, nullptr);
+
+	const auto guess = guessArtistAlbum (files.getFirst().getFullPathName().toStdString());
+	const auto count = files.size() == 1 ? files.getFirst().getFileNameWithoutExtension()
+										 : juce::String (files.size()) + " Tracks";
+	stemDialog = std::make_unique<juce::AlertWindow> ("Stems erstellen", count, juce::MessageBoxIconType::NoIcon, this);
+	stemDialog->addTextEditor ("artist", juce::String (guess.artist), "Artist");
+	stemDialog->addTextEditor ("album", juce::String (guess.album), "Album");
+	stemDialog->addButton ("Erstellen", 1, juce::KeyPress (juce::KeyPress::returnKey));
+	stemDialog->addButton ("Abbrechen", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+	stemDialog->enterModalState (true, juce::ModalCallbackFunction::create ([this, addAll] (int result)
+	{
+		if (result == 1)
+		{
+			const auto artist = stemDialog->getTextEditorContents ("artist").trim();
+			const auto album = stemDialog->getTextEditorContents ("album").trim();
+			addAll (&artist, &album);
+		}
+		stemDialog.reset();
+	}));
+}
+
+void MainComponent::updateCreatorStatus()
+{
+	const auto playing = decksPlaying();
+	stemCreator.setPaused (playing[0] || playing[1]);
+
+	const auto status = stemCreator.status();
+	juce::String text;
+	if (status.running)
+	{
+		text = "Stems: " + status.track + "  " + juce::String (juce::roundToInt (status.progress * 100.0)) + " %";
+		if (status.paused)
+			text << "  (pausiert, ein Deck spielt)";
+		if (status.waiting > 0)
+			text << "  +" << status.waiting << " wartend";
+	}
+	else if (status.lastError.isNotEmpty())
+		text = "Stems: Fehler bei " + status.lastError;
+
+	library.setCreatorStatus (text, status.running);
+}
+
 std::array<bool, 2> MainComponent::decksPlaying() const
 {
 	return { players[0]->isPlaying(), players[1]->isPlaying() };
@@ -546,6 +618,7 @@ void MainComponent::timerCallback()
 		setMasterDeck (chosen);
 
 	updatePioneerStatus();
+	updateCreatorStatus();
 
 	for (int ch = 0; ch < numOutputChannels; ++ch)
 		mixer.setOutputLevel (ch, outputPeaks[(size_t) ch].exchange (0.0f));

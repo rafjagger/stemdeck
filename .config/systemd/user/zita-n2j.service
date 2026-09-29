@@ -1,13 +1,11 @@
 [Unit]
-Description=zita-j2n: StemDeck's 10 channels to A3 Core (NUC)
-PartOf=a3-main.service
-After=a3-jack.service
+Description=zita-n2j: 2 channels back from A3 Core (NUC)
 StartLimitIntervalSec=0
 
 [Service]
 Type=simple
 ExecStartPre=/usr/bin/sleep 2
-ExecStart=/usr/bin/zita-j2n --chan 10 --24bit 192.168.43.129 65100
+ExecStart=/usr/bin/zita-n2j --chan 1-2 --buff 20 --info 0.0.0.0 55100
 CPUAffinity=1 2 3
 CPUSchedulingPolicy=rr
 CPUSchedulingPriority=64

@@ -40,3 +40,16 @@ FollowResult followLeader (const FollowInput& in);
 // can be set against a leader phase computed for now. Not while stopped or
 // scratching; never backwards; at most 100 ms, longer than any audio block.
 double positionAt (double position, double stampSeconds, double nowSeconds, double rate, bool moving);
+
+// Part 2, StemDeck as the tempo master: the next beat of a deck's grid after
+// `position` (track seconds) -- when it falls, and where in the bar. The bar
+// counts from the grid's first beat: that beat is 1. Nothing without a tempo.
+// One beat only: after a jump back it is simply the next one, never a burst
+// of the beats skipped over.
+struct NextBeat
+{
+	double trackSeconds = 0.0;
+	int beatInBar = 1;
+};
+
+std::optional<NextBeat> nextBeat (double gridFirstBeat, double gridBpm, double position);

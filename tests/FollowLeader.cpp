@@ -116,3 +116,50 @@ TEST (FollowLeader, ACarryIsNeverBackwardsNorLongerThanABlockCouldBe)
 	EXPECT_DOUBLE_EQ (positionAt (10.0, 100.0, 99.9, 1.0, true), 10.0) << "stamp from the future";
 	EXPECT_NEAR (positionAt (10.0, 100.0, 105.0, 1.0, true), 10.1, 1e-9) << "a stale stamp is capped at 100 ms";
 }
+
+TEST (FollowLeader, TheNextBeatIsTheNextGridLine)
+{
+	const auto next = nextBeat (0.5, 120.0, 1.2);
+	ASSERT_TRUE (next.has_value());
+	EXPECT_NEAR (next->trackSeconds, 1.5, 1e-9);
+	EXPECT_EQ (next->beatInBar, 3);
+}
+
+TEST (FollowLeader, OnABeatTheNextIsTheOneAfter)
+{
+	const auto next = nextBeat (0.5, 120.0, 1.5);
+	ASSERT_TRUE (next.has_value());
+	EXPECT_NEAR (next->trackSeconds, 2.0, 1e-9);
+	EXPECT_EQ (next->beatInBar, 4);
+}
+
+TEST (FollowLeader, BeforeTheFirstBeatItIsTheFirst)
+{
+	const auto next = nextBeat (0.5, 120.0, 0.1);
+	ASSERT_TRUE (next.has_value());
+	EXPECT_NEAR (next->trackSeconds, 0.5, 1e-9);
+	EXPECT_EQ (next->beatInBar, 1);
+}
+
+TEST (FollowLeader, TheBarWraps)
+{
+	const auto next = nextBeat (0.5, 120.0, 2.1); // the fifth beat, at 2.5 s
+	ASSERT_TRUE (next.has_value());
+	EXPECT_NEAR (next->trackSeconds, 2.5, 1e-9);
+	EXPECT_EQ (next->beatInBar, 1);
+}
+
+TEST (FollowLeader, NoTempoNoBeat)
+{
+	EXPECT_FALSE (nextBeat (0.5, 0.0, 1.0).has_value());
+}
+
+TEST (FollowLeader, AJumpBackIsNotABurst)
+{
+	const auto before = nextBeat (0.5, 120.0, 3.9);
+	const auto after = nextBeat (0.5, 120.0, 1.2);
+	ASSERT_TRUE (before.has_value());
+	ASSERT_TRUE (after.has_value());
+	EXPECT_NEAR (before->trackSeconds, 4.0, 1e-9);
+	EXPECT_NEAR (after->trackSeconds, 1.5, 1e-9) << "just the next one after the jump";
+}

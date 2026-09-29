@@ -50,3 +50,15 @@ double positionAt (double position, double stampSeconds, double nowSeconds, doub
 		return position;
 	return position + std::clamp (nowSeconds - stampSeconds, 0.0, longestCarry) * rate;
 }
+
+std::optional<NextBeat> nextBeat (double gridFirstBeat, double gridBpm, double position)
+{
+	if (gridBpm <= 0.0)
+		return std::nullopt;
+
+	const auto beatLength = 60.0 / gridBpm;
+	const auto n = std::max (0.0, std::floor ((position - gridFirstBeat) / beatLength) + 1.0);
+	const auto index = (long long) n;
+
+	return NextBeat { gridFirstBeat + n * beatLength, 1 + (int) (index % 4) };
+}

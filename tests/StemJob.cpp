@@ -109,20 +109,22 @@ TEST (StemJob, AnyFormatIsDecodedToOneWav)
 	EXPECT_TRUE (contains (argv, "pcm_f32le"));
 }
 
-TEST (StemJob, SeparationRunsIdleOnCpuZeroWithOneThread)
+TEST (StemJob, OneCoreIsCpuZeroWithOneThreadAtIdle)
 {
-	const auto argv = separateCommand ("/venv", "/stage/input.wav", "/stage", false);
+	const auto argv = separateCommand ("/venv", "/stage/input.wav", "/stage", 1);
 	EXPECT_TRUE (inOrder (argv, { "systemd-run", "--user", "--scope", "MemoryMax=6G", "taskset", "-c", "0",
 								  "chrt", "-i", "0", "nice", "-n", "19", "ionice", "-c", "3", "/venv/bin/demucs" }));
 	EXPECT_TRUE (inOrder (argv, { "-n", "htdemucs", "--int24", "--clip-mode", "clamp", "-o", "/stage", "/stage/input.wav" }));
-	EXPECT_TRUE (contains (separateEnvironment (false), "OMP_NUM_THREADS=1"));
+	EXPECT_TRUE (contains (separateEnvironment (1), "OMP_NUM_THREADS=1"));
+	EXPECT_TRUE (inOrder (separateCommand ("/venv", "/s/i.wav", "/s", 0), { "taskset", "-c", "0", "chrt" })) << "never none";
 }
 
-TEST (StemJob, FastModeUsesAllCoresStillIdle)
+TEST (StemJob, AllCoresRunStillIdle)
 {
-	const auto argv = separateCommand ("/venv", "/stage/input.wav", "/stage", true);
-	EXPECT_TRUE (inOrder (argv, { "taskset", "-c", "0-3", "chrt", "-i", "0" }));
-	EXPECT_TRUE (contains (separateEnvironment (true), "OMP_NUM_THREADS=4"));
+	const auto argv = separateCommand ("/venv", "/stage/input.wav", "/stage", 6);
+	EXPECT_TRUE (inOrder (argv, { "taskset", "-c", "0-5", "chrt", "-i", "0", "nice", "-n", "19" }));
+	EXPECT_TRUE (contains (separateEnvironment (6), "OMP_NUM_THREADS=6"));
+	EXPECT_TRUE (contains (separateEnvironment (6), "MKL_NUM_THREADS=6"));
 }
 
 TEST (StemJob, DemucsWritesIntoItsModelFolder)

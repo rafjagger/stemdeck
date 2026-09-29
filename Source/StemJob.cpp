@@ -76,13 +76,14 @@ std::vector<std::string> decodeCommand (const std::string& input, const std::str
 }
 
 std::vector<std::string> separateCommand (const std::string& venv, const std::string& inputWav,
-										  const std::string& stagingDir, bool fast)
+										  const std::string& stagingDir, int cores)
 {
 	// A scope with a memory cap (the user manager may set it without sudo);
-	// CPU 0 is the one core without real-time audio on the rig, and idle
-	// scheduling lets even the UI renderer there go first.
+	// idle scheduling lets everything else -- the audio, the UI -- go first.
+	// One core is CPU 0, the one without real-time audio on the rig.
+	cores = std::max (1, cores);
 	return { "systemd-run", "--user", "--scope", "--quiet", "-p", "MemoryMax=6G", "-p", "CPUWeight=idle",
-			 "taskset", "-c", fast ? "0-3" : "0",
+			 "taskset", "-c", cores == 1 ? std::string ("0") : "0-" + std::to_string (cores - 1),
 			 "chrt", "-i", "0",
 			 "nice", "-n", "19",
 			 "ionice", "-c", "3",
@@ -90,9 +91,9 @@ std::vector<std::string> separateCommand (const std::string& venv, const std::st
 			 "-o", stagingDir, inputWav };
 }
 
-std::vector<std::string> separateEnvironment (bool fast)
+std::vector<std::string> separateEnvironment (int cores)
 {
-	const std::string threads = fast ? "4" : "1";
+	const auto threads = std::to_string (std::max (1, cores));
 	return { "OMP_NUM_THREADS=" + threads, "MKL_NUM_THREADS=" + threads };
 }
 

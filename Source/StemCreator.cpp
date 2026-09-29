@@ -160,8 +160,8 @@ bool StemCreator::runJob (const StemJobEntry& job, juce::String& error)
 			progress = *p;
 		}
 	};
-	if (! execute (separateCommand (venv.getFullPathName().toStdString(), wav, staging.getFullPathName().toStdString(), fast),
-				   separateEnvironment (fast), onLine, error))
+	if (! execute (separateCommand (venv.getFullPathName().toStdString(), wav, staging.getFullPathName().toStdString(), cores),
+				   separateEnvironment (cores), onLine, error))
 		return cleanUp(), false;
 
 	const auto plan = planStemJob (library.getFullPathName().toStdString(), job.folder, job.track,

@@ -39,11 +39,11 @@ std::vector<std::string> encodeCommand (const std::string& stemWav, const std::s
 
 std::vector<std::string> decodeCommand (const std::string& input, const std::string& outputWav);
 
-// Demucs htdemucs at idle priority on CPU 0 with one thread (Fast: all cores),
+// Demucs htdemucs at idle priority on CPUs 0 .. cores-1 with as many threads,
 // memory capped, 24-bit clamped output into `stagingDir`.
 std::vector<std::string> separateCommand (const std::string& venv, const std::string& inputWav,
-										  const std::string& stagingDir, bool fast);
-std::vector<std::string> separateEnvironment (bool fast);
+										  const std::string& stagingDir, int cores);
+std::vector<std::string> separateEnvironment (int cores);
 
 // Where Demucs writes stem `stem` (0 drums .. 3 vocals) of `inputWav`.
 std::string demucsOutputFile (const std::string& stagingDir, const std::string& inputWav, int stem);

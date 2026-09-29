@@ -53,6 +53,9 @@ MainComponent::MainComponent()
 	};
 	if (const auto venv = appProperties.getUserSettings()->getValue ("separatorVenv"); juce::File::isAbsolutePath (venv))
 		stemCreator.setVenv (venv);
+	// All cores unless the settings say fewer (1 on the live rig: CPU 0 only).
+	if (const auto cores = appProperties.getUserSettings()->getIntValue ("separatorCores"); cores > 0)
+		stemCreator.setCores (cores);
 
 	// Last used folder, otherwise ./stems next to where the app was started.
 	// A saved folder that is gone (the checkout moved) falls back too, or the

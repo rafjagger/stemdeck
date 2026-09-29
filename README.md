@@ -28,6 +28,31 @@ to bus N. A group with three or five files is not a set and does not show up. An
 reads out of the box works (WAV, AIFF, FLAC, Ogg Vorbis); WAV and AIFF are memory-mapped, which
 makes seeking and looping instant.
 
+### The library: artist > album > sets
+
+Put the stems in folders by artist and album:
+
+```
+stems/
+├── Burial/
+│   └── Untrue/
+│       ├── Archangel - 01.wav … Archangel - 04.wav
+│       └── Etched Headplate - Drums.flac, - Bass.flac, - Keys.flac, - Vox.flac
+└── Aphex Twin/
+    └── Drukqs/
+        └── CD1/
+            └── Avril 14th - 1.wav … Avril 14th - 4.wav
+```
+
+The first folder under the library folder is the **artist**, the second the **album**; deeper
+folders are added to the album (`Drukqs / CD1`). A set lying straight in the library folder has
+neither, one level down only an artist. Within a folder, four files with the same beginning are a
+set, their endings sorted naturally — `1 2 3 10`, `01 … 04`, or alphabetically.
+
+The library table shows **Artist | Album | Set | BPM | Stems | Length**, sorted artist → album →
+set to begin with; any header sorts by that column (artist and album keep their sets together and
+in order). The search box finds sets by name, artist or album.
+
 The library scans its folder recursively. It starts in `./stems` (relative to where StemDeck was
 started) and remembers the last folder you picked.
 

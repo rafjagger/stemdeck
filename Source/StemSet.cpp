@@ -1,4 +1,5 @@
 #include "StemSet.h"
+#include "LibraryPath.h"
 #include <map>
 
 namespace
@@ -71,6 +72,13 @@ std::vector<StemSet> StemSet::scanFolder (const juce::File& folder, juce::AudioF
 			set.stemNames[(size_t) i] = candidates[(size_t) i].suffix;
 		}
 
+		// Straight in the library folder JUCE's relative path is ".", not "".
+		const auto setFolder = set.files[0].getParentDirectory();
+		const auto relative = setFolder == folder ? juce::String() : setFolder.getRelativePathFrom (folder);
+		const auto place = libraryPlaceOf (relative.replaceCharacter ('\\', '/').toStdString());
+		set.artist = juce::String (place.artist);
+		set.album = juce::String (place.album);
+
 		if (std::unique_ptr<juce::AudioFormatReader> reader { formats.createReaderFor (set.files[0]) })
 			set.lengthSeconds = (double) reader->lengthInSamples / reader->sampleRate;
 
@@ -79,6 +87,8 @@ std::vector<StemSet> StemSet::scanFolder (const juce::File& folder, juce::AudioF
 
 	std::sort (sets.begin(), sets.end(), [] (const StemSet& a, const StemSet& b)
 	{
+		if (const auto order = a.artist.compareNatural (b.artist); order != 0) return order < 0;
+		if (const auto order = a.album.compareNatural (b.album); order != 0)   return order < 0;
 		return a.name.compareNatural (b.name) < 0;
 	});
 

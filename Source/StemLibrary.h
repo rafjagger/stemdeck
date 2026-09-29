@@ -28,7 +28,7 @@ public:
 	void analysisChanged() { table.repaint(); }
 
 private:
-	enum Columns { nameColumn = 1, bpmColumn, stemsColumn, lengthColumn, folderColumn };
+	enum Columns { nameColumn = 1, bpmColumn, stemsColumn, lengthColumn, artistColumn, albumColumn };
 
 	double bpmOf (const StemSet& set) const;
 
@@ -49,7 +49,7 @@ private:
 	juce::File folder;
 	std::vector<StemSet> allSets;
 	std::vector<const StemSet*> visibleSets;
-	int sortColumn = nameColumn;
+	int sortColumn = artistColumn;
 	bool sortForwards = true;
 
 	juce::TextButton folderButton { "Ordner..." }, rescanButton { "Neu scannen" };

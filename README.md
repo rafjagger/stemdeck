@@ -236,6 +236,15 @@ while not recording, to see that something is connected. The file is written by 
 thread from a ten-second buffer; should the disk ever fall that far behind, the button shows
 `!` and the tooltip says so. Recording needs JACK.
 
+**CAST** beside REC records a screencast of another machine — by default `a3nuc1_mango`, set
+`screencastHost` in `~/.config/StemDeck/StemDeck.settings` for another. It runs
+`tools/screencast.sh`: over ssh, ffmpeg there grabs its screen (x11grab, x264 at the lowest
+priority on CPU 0) and its sound from a JACK client `screencast` — **connect
+`screencast:input_1/2` there yourself** while it runs. Here the stream goes unchanged into
+`recordings/` and into a live window (`screencastView` 0 turns that off; closing the window keeps
+recording). Pressing CAST again ends it: the ffmpeg over there ends with the connection, and
+the file becomes an `.mp4`. The script also runs on its own (`tools/screencast.sh [host]`).
+
 - The ports are **never connected automatically**. Route them with qjackctl, a patchbay or
   whatever you like.
 - StemDeck never starts a JACK server. `./start.sh` uses a running `jackd`/`jackdbus`; if there is

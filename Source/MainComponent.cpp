@@ -73,6 +73,11 @@ MainComponent::MainComponent()
 	deviceStatus.setColour (juce::Label::textColourId, Theme::textDim);
 	addAndMakeVisible (deviceStatus);
 
+	castButton.setMouseClickGrabsKeyboardFocus (false);
+	castButton.setColour (juce::TextButton::buttonOnColourId, Theme::mute);
+	castButton.onClick = [this] { toggleScreencast(); };
+	addAndMakeVisible (castButton);
+
 	recButton.setMouseClickGrabsKeyboardFocus (false);
 	recButton.setColour (juce::TextButton::buttonOnColourId, Theme::mute);
 	recButton.onClick = [this] { toggleRecording(); };
@@ -703,8 +708,38 @@ void MainComponent::toggleRecording()
 	updateRecorder();
 }
 
+void MainComponent::toggleScreencast()
+{
+	if (screencast.isRunning())
+	{
+		screencast.stop();   // the script finishes the file; the button follows in updateRecorder()
+		return;
+	}
+
+	const auto host = settings().getValue ("screencastHost", "a3nuc1_mango");
+	const auto script = juce::File::getCurrentWorkingDirectory().getChildFile ("tools/screencast.sh");
+	if (const auto error = screencast.start (script, host, settings().getBoolValue ("screencastView", true)); error.isNotEmpty())
+		juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Screencast", error);
+	castButton.setTooltip ("Screencast von " + host
+						   + juce::String::fromUTF8 (" nach recordings/ \xe2\x80\x93 den Ton dr\xc3\xbc" "ben selbst an screencast:input_1/2 verbinden"));
+}
+
 void MainComponent::updateRecorder()
 {
+	const auto casting = screencast.isRunning();
+	castButton.setToggleState (casting, juce::dontSendNotification);
+	if (casting)
+	{
+		const auto seconds = (int) screencast.getSeconds();
+		castButton.setButtonText (juce::String::fromUTF8 ("\xe2\x97\x8f CAST ") + juce::String (seconds / 60) + ":" + juce::String (seconds % 60).paddedLeft ('0', 2));
+	}
+	else
+	{
+		castButton.setButtonText ("CAST");
+		if (castButton.getTooltip().isEmpty())
+			castButton.setTooltip ("Screencast des entfernten Rechners (screencastHost) aufnehmen und live zeigen");
+	}
+
 	recMeterL.setLevel (recorder.popPeak (0));
 	recMeterR.setLevel (recorder.popPeak (1));
 
@@ -1231,6 +1266,8 @@ void MainComponent::resized()
 	recMeterL.setBounds (topBar.removeFromRight (6).reduced (0, 3));
 	topBar.removeFromRight (4);
 	recButton.setBounds (topBar.removeFromRight (100));
+	topBar.removeFromRight (6);
+	castButton.setBounds (topBar.removeFromRight (100));
 	pioPlayer.setBounds (topBar.removeFromRight (90));
 	pioStatus.setBounds (topBar.removeFromRight (220));
 	deviceStatus.setBounds (topBar);

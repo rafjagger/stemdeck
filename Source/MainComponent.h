@@ -11,6 +11,7 @@
 #include "AutoDj.h"
 #include "Recorder.h"
 #include "Scs3dDevice.h"
+#include "Screencast.h"
 #include "Waveforms.h"
 #include "JackOutput.h"
 #include "Theme.h"
@@ -194,6 +195,13 @@ private:
 
 	Recorder recorder;
 	juce::TextButton recButton { "REC" };
+
+	// CAST: tools/screencast.sh against the host in the setting
+	// screencastHost (default a3nuc1_mango), with its live view unless
+	// screencastView is 0.
+	Screencast screencast;
+	juce::TextButton castButton { "CAST" };
+	void toggleScreencast();
 	LevelMeter recMeterL, recMeterR;
 	void toggleRecording();
 	void updateRecorder();

@@ -1,4 +1,5 @@
 #include "StemDeckPlayer.h"
+#include "Buses.h"
 
 StemDeckPlayer::StemDeckPlayer (juce::AudioFormatManager& fm) : formatManager (fm)
 {
@@ -6,7 +7,7 @@ StemDeckPlayer::StemDeckPlayer (juce::AudioFormatManager& fm) : formatManager (f
 	{
 		stemGain[(size_t) i] = 1.0f;
 		stemMuted[(size_t) i] = false;
-		stemToAux[(size_t) i] = false;
+		stemBuses[(size_t) i] = buses::defaultMask (i);
 		stemPeak[(size_t) i] = 0.0f;
 	}
 
@@ -207,7 +208,7 @@ void StemDeckPlayer::prepareToPlay (int samplesPerBlockExpected, double sampleRa
 	for (int i = 0; i < numStems; ++i)
 	{
 		gainSmoothers[(size_t) i].reset (sampleRate, 0.02);
-		gainSmoothers[(size_t) i].setCurrentAndTargetValue (stemMuted[(size_t) i] ? 0.0f : stemGain[(size_t) i].load() * deckGain.load());
+		gainSmoothers[(size_t) i].setCurrentAndTargetValue (stemMuted[(size_t) i] ? 0.0f : stemGain[(size_t) i].load());
 	}
 }
 
@@ -265,7 +266,7 @@ void StemDeckPlayer::getNextAudioBlock (const juce::AudioSourceChannelInfo& info
 	for (int s = 0; s < numStems; ++s)
 	{
 		auto& smoother = gainSmoothers[(size_t) s];
-		smoother.setTargetValue (stemMuted[(size_t) s] ? 0.0f : stemGain[(size_t) s].load() * deckGain.load());
+		smoother.setTargetValue (stemMuted[(size_t) s] ? 0.0f : stemGain[(size_t) s].load());
 
 		const auto from = smoother.getCurrentValue();
 		smoother.skip (info.numSamples);
@@ -279,6 +280,7 @@ void StemDeckPlayer::getNextAudioBlock (const juce::AudioSourceChannelInfo& info
 			peak = juce::jmax (peak, info.buffer->getMagnitude (ch, info.startSample, info.numSamples));
 		}
 
+		peak *= deckGain.load();   // the meter shows what the fader lets through
 		if (peak > stemPeak[(size_t) s].load())
 			stemPeak[(size_t) s] = peak;
 	}

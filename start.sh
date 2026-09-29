@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Baut StemDeck bei Bedarf und startet es.
 #
-# Audio: 10 JACK-Ports (deck1_L ... deck4_R, aux_L, aux_R). Läuft ein jackd
+# Audio: 12 JACK-Ports (deck1_L ... deck4_R, aux_L/R, phones_L/R). Läuft ein jackd
 # (JACK2), wird dieser benutzt; sonst, wenn PipeWire da ist, dessen
 # JACK-Schnittstelle über pw-jack. Ohne beides fällt StemDeck auf ALSA zurück.
 #

@@ -1,11 +1,11 @@
 # StemDeck
 
 A stem player for DJs: two decks, each playing a track split into four stereo stems, and a
-mixer that sends every stem to its own output bus.
+mixer that sends every stem to any of six output buses.
 
 StemDeck is part of the [A³ Audio](https://github.com/a3-audio) system, a live 3D/ambisonics
-setup. Its four stem buses and the aux bus feed A³ Core, where a stem sent to aux can be put onto
-a movement and flown around the room.
+setup. Its buses 1–4 and AUX feed A³ Core, where a stem sent to aux can be put onto a movement
+and flown around the room; a sixth bus, PHONES, is for the headphones.
 
 <!-- IMAGE: the whole main window with a set loaded on both decks, one of them playing -->
 ![StemDeck main window](docs/stemdeck-main.png)
@@ -90,12 +90,15 @@ to zoom.
 
 ### Mixer
 
-<!-- IMAGE: the mixer between the decks: both channel strips with stem knobs, M and AUX buttons (one AUX lit), channel faders, and the output meters 1-4 / AUX -->
+<!-- IMAGE: the mixer between the decks: both channel strips with stem knobs, M and the bus switches 1 2 3 4 AUX PH per stem, channel faders, PHONES buttons, and the output meters 1-4 / AUX / PH -->
 ![The mixer](docs/stemdeck-mixer.png)
 
 One channel strip per deck. Per stem: a gain knob (−60 to +6 dB, double-click for 0 dB), **M**
-(mute) and **AUX**, which takes the stem off its bus and sends it, post fader, to the aux bus
-instead. Below, the channel fader. In the middle, output meters for buses 1–4 and AUX.
+(mute) and six bus switches **1 2 3 4 AUX PH**. A stem plays on every bus that is lit — any
+number at once, none for silence; a new set starts with stem N on bus N. Buses 1–4 and AUX are
+**post fader**, **PH** (PHONES) is **pre fader**. Knob and mute act on all of them. Below the
+stems, the channel fader and **PHONES**, which puts the whole deck on the phones bus, pre fader.
+In the middle, output meters for buses 1–4, AUX and PH.
 
 ### Library
 
@@ -162,19 +165,22 @@ so when a job starts.
 
 ## Audio output
 
-StemDeck is a JACK client named `StemDeck` with 10 output ports:
+StemDeck is a JACK client named `StemDeck` with 12 output ports:
 
 ```
-deck1_L deck1_R … deck4_L deck4_R   bus N = stem N of deck A + stem N of deck B
-aux_L   aux_R                        every stem switched to AUX
+deck1_L deck1_R … deck4_L deck4_R   bus 1–4: every stem switched to it, post fader
+aux_L   aux_R                        bus AUX: every stem switched to it, post fader
+phones_L phones_R                    bus PH: stems switched to it and decks on PHONES, pre fader
 ```
+
+The names `deck1` … `deck4` are the buses', kept from when bus N was always stem N.
 
 - The ports are **never connected automatically**. Route them with qjackctl, a patchbay or
   whatever you like.
 - StemDeck never starts a JACK server. `./start.sh` uses a running `jackd`/`jackdbus`; if there is
   none but PipeWire is running, it starts StemDeck through `pw-jack`. Without either, StemDeck
   falls back to a regular audio device (ALSA), chosen with the **Audio-Einstellungen** button; with
-  fewer than 10 outputs the buses are summed down onto the ones there are.
+  fewer than 12 outputs the buses are summed down onto the ones there are.
 - It takes the graph's sample rate and buffer size as they are and resamples the stems itself. It
   requests nothing on purpose — changing a running graph ends clients like zita-j2n. Set the rate
   beforehand if it matters, e.g. for PipeWire (until restart):

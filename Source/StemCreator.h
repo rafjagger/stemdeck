@@ -25,7 +25,8 @@ public:
 	void setLibraryFolder (const juce::File& folder);
 	// Where the separator's venv lives (tools/setup-separator.sh makes it).
 	void setVenv (const juce::File& venv);
-	void setFast (bool allCores) { fast = allCores; }
+	// How many CPU cores Demucs may use (from CPU 0); all of them by default.
+	void setCores (int count) { cores = juce::jmax (1, count); }
 	// Where the separator should be, and whether it is there.
 	juce::File venv() const;
 	bool isInstalled() const { return venv().getChildFile ("bin/demucs").existsAsFile(); }
@@ -63,7 +64,8 @@ private:
 	juce::File libraryFolder, venvFolder;
 	juce::String runningTrack, lastError;
 	double progress = 0.0;
-	std::atomic<bool> fast { false }, paused { false }, cancelRequested { false };
+	std::atomic<int> cores { juce::jmax (1, juce::SystemStats::getNumCpus()) };
+	std::atomic<bool> paused { false }, cancelRequested { false };
 	ProcessGroup processes;
 	juce::WaitableEvent wake;
 };

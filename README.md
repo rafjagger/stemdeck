@@ -129,9 +129,11 @@ The title is the file name without its extension (`Artist - Title.flac` gives
 FLAC loses nothing a second time.
 
 The separation is [Demucs](https://github.com/adefossez/demucs) `htdemucs` at
-44.1 kHz. It runs in the background, one track at a time, a few minutes per track, and stays
-out of the way of live audio: one CPU core (0), idle priority for CPU and disk, at most 6 GB of
-memory, and **paused while a deck plays**. The strip under the library bar shows the track,
+44.1 kHz. It runs in the background, one track at a time, on **all CPU cores**, and stays out
+of the way of live audio: idle priority for CPU and disk, at most 6 GB of memory, and **paused
+while a deck plays**. On a rig whose other cores carry real-time audio, limit it with
+`<VALUE name="separatorCores" val="1"/>` in `~/.config/StemDeck/StemDeck.settings` (1 is
+CPU 0 only; a track then takes about 1.2× its length). The strip under the library bar shows the track,
 the progress and how many wait; **Abbrechen** stops the running one and leaves nothing behind.
 When a set is done the library rescans and selects it. A track name already in the album gets
 ` (2)`.

@@ -31,8 +31,9 @@ namespace TempoAnalysis
 						  const std::function<bool()>& shouldAbort = [] { return false; });
 }
 
-// Remembers analysis results per set (keyed by the stem files' paths, sizes
-// and dates) in a small XML file, so a set is only analysed once.
+// Remembers analysis results per set (keyed by the stem files' names, sizes
+// and dates -- not their folder, so moving the library keeps them) in a small
+// XML file, so a set is only analysed once.
 class AnalysisCache
 {
 public:

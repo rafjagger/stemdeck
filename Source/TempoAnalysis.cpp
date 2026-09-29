@@ -300,7 +300,7 @@ juce::String AnalysisCache::keyFor (const StemSet& set)
 	juce::String key;
 
 	for (const auto& f : set.files)
-		key << f.getFullPathName() << "|" << f.getSize() << "|" << f.getLastModificationTime().toMilliseconds() << ";";
+		key << f.getFileName() << "|" << f.getSize() << "|" << f.getLastModificationTime().toMilliseconds() << ";";
 
 	return juce::String::toHexString (key.hashCode64());
 }

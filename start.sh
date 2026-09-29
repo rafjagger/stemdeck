@@ -21,6 +21,17 @@ APP="$BUILD_DIR/StemDeck_artefacts/Release/StemDeck"
 # anyone having to set a path; a CMAKE_PREFIX_PATH set by hand still wins.
 export CMAKE_PREFIX_PATH="${CMAKE_PREFIX_PATH:-$HOME/local/juce}"
 
+# CMake schreibt den absoluten Pfad des Checkouts in seinen Cache. Wurde der
+# Ordner verschoben, passt der nicht mehr und jeder Build bricht ab: dann den
+# Cache verwerfen und hier neu konfigurieren (die Objektdateien bleiben).
+if [[ -f "$BUILD_DIR/CMakeCache.txt" ]]; then
+    configured="$(sed -n 's/^CMAKE_HOME_DIRECTORY:INTERNAL=//p' "$BUILD_DIR/CMakeCache.txt")"
+    if [[ "$configured" != "$PWD" ]]; then
+        echo "Checkout verschoben ($configured -> $PWD): konfiguriere neu." >&2
+        rm -rf "$BUILD_DIR/CMakeCache.txt" "$BUILD_DIR/CMakeFiles"
+    fi
+fi
+
 # CMake's default generator: Ninja is not installed everywhere StemDeck runs
 # (the Core NUC has none).
 if [[ ! -f "$BUILD_DIR/CMakeCache.txt" ]]; then

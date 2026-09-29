@@ -737,6 +737,8 @@ void MainComponent::updateRecorder()
 		castView.setVisible (casting);
 		resized();
 	}
+	castView.meterL.setLevel (screencast.popPeak (0));
+	castView.meterR.setLevel (screencast.popPeak (1));
 	if (casting && screencast.getFrameCount() != castFramesShown)
 	{
 		castFramesShown = screencast.getFrameCount();
@@ -1288,12 +1290,13 @@ void MainComponent::resized()
 	deviceStatus.setBounds (topBar);
 	area.removeFromTop (4);
 
-	const auto waveHeight = juce::jlimit (70, 130, getHeight() / 10);
+	const auto waveHeight = juce::jlimit (90, 170, getHeight() / 8);
 	auto waves = area.removeFromTop (waveHeight * 2 + 3);
 	if (castView.isVisible())
 	{
 		// The screencast beside the waveforms, as tall as both, in its own shape.
-		castView.setBounds (waves.removeFromRight (waves.getHeight() * Screencast::frameWidth / Screencast::frameHeight));
+		castView.setBounds (waves.removeFromRight (waves.getHeight() * Screencast::frameWidth / Screencast::frameHeight
+												   + 2 * CastView::meterWidth + 6));
 		waves.removeFromRight (6);
 	}
 	waveA.setBounds (waves.removeFromTop (waveHeight));

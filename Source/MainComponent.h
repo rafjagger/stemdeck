@@ -203,18 +203,35 @@ private:
 	juce::TextButton castButton { "CAST" };
 	void toggleScreencast();
 
+	// The picture, and the sound's level beside it (L, R).
 	struct CastView : public juce::Component
 	{
+		static constexpr int meterWidth = 8;
 		juce::Image image;
+		LevelMeter meterL, meterR;
+
+		CastView() { addAndMakeVisible (meterL); addAndMakeVisible (meterR); }
+
+		juce::Rectangle<int> pictureArea() const { return getLocalBounds().withTrimmedRight (2 * meterWidth + 6); }
+
+		void resized() override
+		{
+			auto meters = getLocalBounds().removeFromRight (2 * meterWidth + 2);
+			meterR.setBounds (meters.removeFromRight (meterWidth));
+			meters.removeFromRight (2);
+			meterL.setBounds (meters.removeFromRight (meterWidth));
+		}
+
 		void paint (juce::Graphics& g) override
 		{
-			g.fillAll (juce::Colours::black);
+			g.setColour (juce::Colours::black);
+			g.fillRect (pictureArea());
 			if (image.isValid())
-				g.drawImage (image, getLocalBounds().toFloat(), juce::RectanglePlacement::centred);
+				g.drawImage (image, pictureArea().toFloat(), juce::RectanglePlacement::centred);
 			else
 			{
 				g.setColour (juce::Colours::grey);
-				g.drawText ("CAST ...", getLocalBounds(), juce::Justification::centred);
+				g.drawText ("CAST ...", pictureArea(), juce::Justification::centred);
 			}
 		}
 	};

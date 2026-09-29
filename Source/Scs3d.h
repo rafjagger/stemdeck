@@ -8,10 +8,10 @@
 // -- what a MIDI message from the device means, and which messages light its
 // LEDs. The IDs are the device's own (after Mixxx's SCS.3d mapping):
 //
-// The six buttons on top, left to right: FX LOOP VINYL EQ TRIG DECK.
-//   1 2 5 6 (FX LOOP TRIG DECK)  mute stem 1-4    red: muted, blue: playing
-//   3 (VINYL)            loop in, then out         blue: in marked, purple: looping
-//   4 (EQ)               loop off / on again       red: looping, blue: one to go back to
+// The six mode buttons: FX LOOP VINYL / EQ TRIG DECK.
+//   FX EQ LOOP TRIG      mute stem 1-4             red: muted, blue: playing
+//   VINYL                loop in, then out         blue: in marked, purple: looping
+//   DECK                 loop off / on again       red: looping, blue: one to go back to
 //   top left / right of the circle   library: previous / next set
 //   centre of the circle (tap)       load the selected set
 //   GAIN slider (left)   channel fader, absolute     LED bar

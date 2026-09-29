@@ -6,9 +6,9 @@
 
 using scs3d::Event;
 
-TEST (Scs3d, TopButtons1256MuteTheStems)
+TEST (Scs3d, FxEqLoopTrigMuteTheStems)
 {
-	const std::uint8_t buttons[] = { 0x20, 0x22, 0x28, 0x2A };   // 1 2 5 6
+	const std::uint8_t buttons[] = { 0x20, 0x26, 0x22, 0x28 };   // FX EQ LOOP TRIG
 	for (int s = 0; s < 4; ++s)
 	{
 		const auto e = scs3d::decode (0x90, buttons[s], 1);
@@ -18,10 +18,10 @@ TEST (Scs3d, TopButtons1256MuteTheStems)
 	EXPECT_EQ (scs3d::decode (0x80, 0x20, 0).type, Event::Type::none) << "only the press toggles";
 }
 
-TEST (Scs3d, Buttons3And4Loop)
+TEST (Scs3d, VinylAndDeckLoop)
 {
 	EXPECT_EQ (scs3d::decode (0x90, 0x24, 1).type, Event::Type::loopInOut);
-	EXPECT_EQ (scs3d::decode (0x90, 0x26, 1).type, Event::Type::loopToggle);
+	EXPECT_EQ (scs3d::decode (0x90, 0x2A, 1).type, Event::Type::loopToggle);
 }
 
 TEST (Scs3d, AroundTheCircleTheLibrary)
@@ -74,9 +74,9 @@ TEST (Scs3d, MutedIsRedPlayingIsBlue)
 	scs3d::Leds leds;
 	leds.muted = { true, false, false, true };
 	const auto m = scs3d::render (leds);
-	EXPECT_EQ (valueOf (m, 0x20), 1);
-	EXPECT_EQ (valueOf (m, 0x22), 2);
-	EXPECT_EQ (valueOf (m, 0x2A), 1) << "stem 4 on button 6";
+	EXPECT_EQ (valueOf (m, 0x20), 1) << "stem 1 on FX";
+	EXPECT_EQ (valueOf (m, 0x26), 2) << "stem 2 on EQ";
+	EXPECT_EQ (valueOf (m, 0x28), 1) << "stem 4 on TRIG";
 }
 
 TEST (Scs3d, TheDeckLightSaysWhichDeck)

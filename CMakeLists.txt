@@ -28,7 +28,8 @@ target_sources(StemDeck PRIVATE
     Source/MixerPanel.cpp
     Source/StemLibrary.cpp
     Source/JackOutput.cpp
-    Source/ProLinkPackets.cpp)
+    Source/ProLinkPackets.cpp
+    Source/PioneerClock.cpp)
 
 target_compile_definitions(StemDeck PRIVATE
     JUCE_WEB_BROWSER=0

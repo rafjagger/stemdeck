@@ -254,6 +254,20 @@ Demo and promo videos are recorded with OBS Studio, outside StemDeck.
   pw-metadata -n settings 0 clock.force-rate 44100
   ```
 
+### Always running on the rig
+
+On the A³ Core machine StemDeck runs as a user service and sits on i3 workspace 4, full screen
+(the rule is in the a3-core package's i3 config):
+
+```sh
+cp .config/systemd/user/stemdeck.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now stemdeck
+```
+
+It starts the build in `build-make/` from this checkout, so a rebuild is picked up by
+`systemctl --user restart stemdeck`.
+
 ### To A³ Core and back: zita
 
 Two systemd user services carry the audio over the network, kept in this repository under

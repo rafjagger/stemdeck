@@ -45,6 +45,15 @@ std::optional<double> parseDemucsProgress (const std::string& line);
 // One job at a time, in the order added; a failure does not stop the next.
 enum class JobState { queued, running, done, failed, cancelled };
 
+// What the creator accepts: anything ffmpeg decodes that people keep music in.
+// Stems already made ("Title - 1.drums.wav") are not taken again.
+bool isSeparableAudioFile (const std::string& fileName);
+
+// Artist and album preset from where a file lies (.../Artist/Album/track.flac);
+// empty where the path has no such level.
+struct ArtistAlbum { std::string artist, album; };
+ArtistAlbum guessArtistAlbum (const std::string& path);
+
 struct StemJobEntry
 {
 	int id = 0;

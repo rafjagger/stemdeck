@@ -151,3 +151,30 @@ TEST (StemJob, CancellingTheRunningJobKillsItOnce)
 	EXPECT_EQ (q.cancel (a), StemJobQueue::Cancel::none);
 	EXPECT_FALSE (q.running().has_value());
 }
+
+TEST (StemJob, TheTypicalFormatsAreAccepted)
+{
+	for (const auto* name : { "a.flac", "a.wav", "a.mp3", "a.aiff", "a.aif", "a.ogg", "a.m4a", "a.opus", "A.FLAC" })
+		EXPECT_TRUE (isSeparableAudioFile (name)) << name;
+}
+
+TEST (StemJob, OtherFilesAndStemsAreNot)
+{
+	for (const auto* name : { "cover.jpg", "notes.txt", "flac", "Title - 1.drums.wav", "Title - 4.vocals.flac" })
+		EXPECT_FALSE (isSeparableAudioFile (name)) << name;
+}
+
+TEST (StemJob, ArtistAndAlbumComeFromTheFolders)
+{
+	const auto guess = guessArtistAlbum ("/music/Burial/Untrue/02 Archangel.flac");
+	EXPECT_EQ (guess.artist, "Burial");
+	EXPECT_EQ (guess.album, "Untrue");
+}
+
+TEST (StemJob, AShallowPathGuessesWhatItHas)
+{
+	EXPECT_EQ (guessArtistAlbum ("/track.flac").artist, "");
+	EXPECT_EQ (guessArtistAlbum ("/track.flac").album, "");
+	EXPECT_EQ (guessArtistAlbum ("/Untrue/track.flac").album, "Untrue");
+	EXPECT_EQ (guessArtistAlbum ("/Untrue/track.flac").artist, "");
+}

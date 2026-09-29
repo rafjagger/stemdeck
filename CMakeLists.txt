@@ -37,7 +37,8 @@ target_sources(StemDeck PRIVATE
     Source/BeatScheduler.cpp
     Source/LibraryPath.cpp
     Source/StemNames.cpp
-    Source/StemJob.cpp)
+    Source/StemJob.cpp
+    Source/StemCreator.cpp)
 
 target_compile_definitions(StemDeck PRIVATE
     JUCE_WEB_BROWSER=0

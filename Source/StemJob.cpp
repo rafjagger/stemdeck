@@ -158,3 +158,34 @@ const StemJobEntry* StemJobQueue::find (int id) const
 			return &e;
 	return nullptr;
 }
+
+bool isSeparableAudioFile (const std::string& fileName)
+{
+	auto name = fileName;
+	std::transform (name.begin(), name.end(), name.begin(), [] (unsigned char c) { return (char) std::tolower (c); });
+
+	static const char* const formats[] = { ".flac", ".wav", ".mp3", ".aiff", ".aif", ".ogg", ".m4a", ".opus" };
+	const auto extension = extensionOf (name);
+	if (std::find (std::begin (formats), std::end (formats), extension) == std::end (formats))
+		return false;
+
+	for (int stem = 0; stem < 4; ++stem)
+		if (name.find ("- " + std::to_string (stem + 1) + "." + stemNames[stem] + ".") != std::string::npos)
+			return false;
+	return true;
+}
+
+ArtistAlbum guessArtistAlbum (const std::string& path)
+{
+	std::vector<std::string> folders;
+	for (size_t start = 0, slash; (slash = path.find ('/', start)) != std::string::npos; start = slash + 1)
+		if (slash > start)
+			folders.push_back (path.substr (start, slash - start));
+
+	ArtistAlbum guess;
+	if (! folders.empty())
+		guess.album = folders.back();
+	if (folders.size() > 1)
+		guess.artist = folders[folders.size() - 2];
+	return guess;
+}

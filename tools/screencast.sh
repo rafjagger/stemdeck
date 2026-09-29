@@ -4,15 +4,17 @@
 #
 #   tools/screencast.sh [host]          Standard: a3nuc1_mango
 #
-# Drüben: der X-Bildschirm :0 (x11grab), H.264 per Hardware (VAAPI), der Ton
+# Drüben: der X-Bildschirm :0 (x11grab), H.264 per x264 auf der CPU, der Ton
 # per JACK: ein Client "screencast" mit input_1 / input_2. Die Eingänge werden
 # NICHT automatisch verbunden -- drüben selbst verbinden (qjackctl, jack_connect),
 # solange der Stream läuft; unverbunden ist der Ton still.
-# FPS (Standard 30) und QP (Qualität, Standard 20; kleiner = besser) ebenso,
+# FPS (Standard 30) und CRF (Qualität, Standard 20; kleiner = besser) ebenso,
 # NOVIEW=1 nimmt nur auf, ohne Live-Fenster; DURATION=60 hört nach 60 s auf.
 #
 # Der Rechner drüben spielt live: ffmpeg läuft dort mit niedrigster
-# Priorität auf CPU 0, die Kodierung macht die GPU. Die Übertragung geht
+# Priorität auf CPU 0. Bewusst nicht per GPU (VAAPI): auf dem amdgpu des
+# a3nuc1 blieb ein Encoder 2026-09-29 in einem GPU-Reset hängen, samt allem,
+# was danach den Bildschirm las. Die Übertragung geht
 # durch ssh (keine Ports, verschlüsselt), hier wird nicht neu kodiert.
 #
 # Das Live-Fenster darf man schließen, die Aufnahme läuft weiter. Strg+C
@@ -23,7 +25,7 @@ cd "$(dirname "$(readlink -f "$0")")/.."
 
 HOST="${1:-a3nuc1_mango}"
 FPS="${FPS:-30}"
-QP="${QP:-20}"
+CRF="${CRF:-20}"
 DURATION="${DURATION:-}"
 LIMIT="${DURATION:+-t $DURATION}"
 
@@ -36,10 +38,9 @@ set -e
 export DISPLAY=:0
 SIZE=\$(xdpyinfo | awk '/dimensions:/ { print \$2 }')
 exec nice -n 19 taskset -c 0 ffmpeg -hide_banner -loglevel warning -nostdin \\
-    -vaapi_device /dev/dri/renderD128 \\
     -thread_queue_size 1024 -f x11grab -framerate $FPS -video_size "\$SIZE" -draw_mouse 1 -i :0 \\
     -thread_queue_size 1024 -f jack -channels 2 -i screencast \\
-    -vf "format=nv12,hwupload" -c:v h264_vaapi -qp $QP -g $((FPS * 2)) \\
+    -c:v libx264 -preset veryfast -tune zerolatency -crf $CRF -pix_fmt yuv420p -g $((FPS * 2)) \\
     -c:a aac -b:a 256k \\
     $LIMIT -f mpegts -
 EOF

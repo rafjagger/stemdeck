@@ -17,6 +17,10 @@ cd "$(dirname "$(readlink -f "$0")")"
 BUILD_DIR=build
 APP="$BUILD_DIR/StemDeck_artefacts/Release/StemDeck"
 
+# JUCE installed under ~/local/juce (as on the Core NUC) is found without
+# anyone having to set a path; a CMAKE_PREFIX_PATH set by hand still wins.
+export CMAKE_PREFIX_PATH="${CMAKE_PREFIX_PATH:-$HOME/local/juce}"
+
 # CMake's default generator: Ninja is not installed everywhere StemDeck runs
 # (the Core NUC has none).
 if [[ ! -f "$BUILD_DIR/CMakeCache.txt" ]]; then

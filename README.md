@@ -128,9 +128,8 @@ Reading this back some years later, the architecture holds up better than the de
 
 ## Building
 
-`./start.sh` configures (CMake's default generator), builds and starts StemDeck. JUCE must be
-findable by CMake; if it is installed outside the standard paths, export
-`CMAKE_PREFIX_PATH=/path/to/juce` first. Tests: `cmake -S . -B build -DSTEMDECK_TESTS=ON` and
+`./start.sh` configures (CMake's default generator), builds and starts StemDeck. It looks for
+JUCE under `~/local/juce` unless `CMAKE_PREFIX_PATH` is already set. Tests: `cmake -S . -B build -DSTEMDECK_TESTS=ON` and
 `ctest --test-dir build`.
 
 This repository contains the application source only. To build it, create a JUCE GUI

@@ -114,14 +114,19 @@ folders the files lie in: `…/Artist/Album/track.flac`); files dropped from sev
 the artist and album of their own folder, without a question. Each track becomes a set:
 
 ```
-stems/Artist/Album/Title - 1.drums.wav
-                   Title - 2.bass.wav
-                   Title - 3.other.wav
-                   Title - 4.vocals.wav
+stems/Artist/Album/Title - 1 - drums.flac
+                   Title - 2 - bass.flac
+                   Title - 3 - other.flac
+                   Title - 4 - vocals.flac
                    originals/Title.flac     (a copy; the library ignores this folder)
 ```
 
-The separation is [Demucs](https://github.com/adefossez/demucs) `htdemucs`, 24-bit WAV at
+The title is the file name without its extension (`Artist - Title.flac` gives
+`Artist - Title - 1 - drums.flac`). The stems keep the original's format: FLAC, WAV and AIFF at
+24 bit, Ogg Vorbis at quality 8. MP3, M4A and Opus become FLAC — StemDeck can't play those, and
+FLAC loses nothing a second time.
+
+The separation is [Demucs](https://github.com/adefossez/demucs) `htdemucs` at
 44.1 kHz. It runs in the background, one track at a time, a few minutes per track, and stays
 out of the way of live audio: one CPU core (0), idle priority for CPU and disk, at most 6 GB of
 memory, and **paused while a deck plays**. The strip under the library bar shows the track,

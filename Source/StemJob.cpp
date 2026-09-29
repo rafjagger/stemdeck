@@ -32,15 +32,41 @@ StemJobPlan planStemJob (const std::string& library, const std::string& artist, 
 	StemJobPlan plan;
 	plan.albumFolder = library + "/" + sanitiseName (artist, "Unknown Artist") + "/" + sanitiseName (album, "Unknown Album");
 
+	plan.stemExtension = stemExtensionFor (originalFileName);
 	const auto base = sanitiseName (track, "Untitled");
 	plan.track = base;
-	for (int n = 2; exists (plan.albumFolder + "/" + stemFileName (plan.track, 0, "wav")); ++n)
+	for (int n = 2; exists (plan.albumFolder + "/" + stemFileName (plan.track, 0, plan.stemExtension)); ++n)
 		plan.track = base + " (" + std::to_string (n) + ")";
 
 	for (int stem = 0; stem < 4; ++stem)
-		plan.stemPaths[(size_t) stem] = plan.albumFolder + "/" + stemFileName (plan.track, stem, "wav");
+		plan.stemPaths[(size_t) stem] = plan.albumFolder + "/" + stemFileName (plan.track, stem, plan.stemExtension);
 	plan.originalPath = plan.albumFolder + "/originals/" + plan.track + extensionOf (originalFileName);
 	return plan;
+}
+
+std::string stemExtensionFor (const std::string& originalFileName)
+{
+	auto extension = extensionOf (originalFileName);
+	std::transform (extension.begin(), extension.end(), extension.begin(), [] (unsigned char c) { return (char) std::tolower (c); });
+
+	for (const auto* kept : { ".flac", ".wav", ".aiff", ".aif", ".ogg" })
+		if (extension == kept)
+			return extension.substr (1);
+	return "flac";
+}
+
+std::vector<std::string> encodeCommand (const std::string& stemWav, const std::string& output, const std::string& extension)
+{
+	std::vector<std::string> argv { "nice", "-n", "19", "ionice", "-c", "3",
+									"ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-i", stemWav };
+	if (extension == "flac")
+		argv.insert (argv.end(), { "-c:a", "flac", "-sample_fmt", "s32", "-bits_per_raw_sample", "24" });
+	else if (extension == "aiff" || extension == "aif")
+		argv.insert (argv.end(), { "-c:a", "pcm_s24be" });
+	else if (extension == "ogg")
+		argv.insert (argv.end(), { "-c:a", "libvorbis", "-q:a", "8" });
+	argv.push_back (output);
+	return argv;
 }
 
 std::vector<std::string> decodeCommand (const std::string& input, const std::string& outputWav)

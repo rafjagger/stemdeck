@@ -168,6 +168,21 @@ bool StemCreator::runJob (const StemJobEntry& job, juce::String& error)
 								   input.getFileName().toStdString(),
 								   [] (const std::string& path) { return juce::File (path).exists(); });
 
+	// Into the original's format, still in staging: a cancel here leaves the
+	// library untouched.
+	std::array<juce::File, 4> stems;
+	for (int stem = 0; stem < 4; ++stem)
+	{
+		const auto separated = demucsOutputFile (staging.getFullPathName().toStdString(), wav, stem);
+		stems[(size_t) stem] = juce::File (separated);
+		if (plan.stemExtension == "wav")
+			continue;
+
+		stems[(size_t) stem] = staging.getChildFile ("stem-" + juce::String (stem + 1) + "." + juce::String (plan.stemExtension));
+		if (! execute (encodeCommand (separated, stems[(size_t) stem].getFullPathName().toStdString(), plan.stemExtension), {}, {}, error))
+			return cleanUp(), false;
+	}
+
 	// The original first: the copy is the slow part (a stick, a big FLAC), and
 	// a cancel during it must still leave the album untouched.
 	const juce::File original (plan.originalPath);
@@ -184,7 +199,7 @@ bool StemCreator::runJob (const StemJobEntry& job, juce::String& error)
 	// From here on the set goes in: four renames, too quick to cancel.
 	for (int stem = 0; stem < 4; ++stem)
 	{
-		const juce::File from (demucsOutputFile (staging.getFullPathName().toStdString(), wav, stem));
+		const auto& from = stems[(size_t) stem];
 		if (! from.moveFileTo (juce::File (plan.stemPaths[(size_t) stem])))
 		{
 			for (int s = 0; s < stem; ++s)
@@ -211,7 +226,8 @@ bool StemCreator::execute (const std::vector<std::string>& argv, const std::vect
 	if (result == ProcessGroup::Result::stopped)
 		return (error = "cancelled"), false;
 
-	error = juce::String (argv[0] == "systemd-run" ? "demucs" : argv[0]) + ": "
+	const auto program = argv[0] == "systemd-run" ? "demucs" : argv[0] == "nice" ? "ffmpeg" : argv[0];
+	error = juce::String (program) + ": "
 		  + (lastLine.empty() ? juce::String ("failed") : juce::String (lastLine));
 	return false;
 }

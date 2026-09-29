@@ -42,6 +42,12 @@ public:
 
 	// The deck's own controls for the session (tempo, range, vinyl, repeat,
 	// SYNC); restoring SYNC is the caller's, through onSyncToggled.
+	// Grid Adjust, as on a CDJ-3000: GRID turns it on; the jog wheel then moves
+	// the grid, and <1/2 1/2> SNAP (the downbeat onto the cue) SHIFT (take the
+	// phase aligned by ear against the sync leader) RESET (as analysed) edit it.
+	enum class GridAction { shift, halfBack, halfForward, snapToCue, shiftToLeader, reset };
+	std::function<void (GridAction, double seconds)> onGridEdit;
+
 	void saveState (DeckSession& state) const;
 	void restoreState (const DeckSession& state);
 
@@ -66,6 +72,10 @@ private:
 
 	juce::TextButton cueButton { "CUE" }, playButton { "PLAY" }, loopOffButton { "LOOP AUS" }, repeatButton { "REPEAT" };
 	juce::TextButton syncButton { "SYNC" }, masterButton { "MASTER" }, rangeButton, vinylButton { "VINYL" };
+	juce::TextButton gridButton { "GRID" };
+	juce::TextButton halfBackButton { juce::String::fromUTF8 ("\xe2\x80\xb9" "1/2") }, halfForwardButton { juce::String::fromUTF8 ("1/2\xe2\x80\xba") };
+	juce::TextButton snapButton { "SNAP" }, shiftButton { "SHIFT" }, resetGridButton { "RESET" };
+	void setGridMode (bool on);
 	juce::Slider tempo { juce::Slider::LinearVertical, juce::Slider::TextBoxBelow };
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DeckPanel)

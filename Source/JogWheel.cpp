@@ -33,7 +33,7 @@ void JogWheel::mouseDown (const juce::MouseEvent& e)
 		return;
 
 	const auto distance = e.position.getDistanceFrom (centre()) / radius();
-	touch = (distance <= platterFraction && vinylMode) ? Touch::platter : Touch::ring;
+	touch = (distance <= platterFraction && vinylMode && ! gridMode) ? Touch::platter : Touch::ring;
 	lastAngle = angleAt (e.position);
 	lastMoveTime = juce::Time::getMillisecondCounterHiRes();
 
@@ -58,7 +58,12 @@ void JogWheel::mouseDrag (const juce::MouseEvent& e)
 
 	const auto turns = (double) delta / juce::MathConstants<double>::twoPi;
 
-	if (touch == Touch::platter)
+	if (gridMode)
+	{
+		if (onGridShift)
+			onGridShift (turns * gridSecondsPerTurn);
+	}
+	else if (touch == Touch::platter)
 	{
 		player.scratchBy (turns * secondsPerRevolution);
 	}
@@ -86,6 +91,13 @@ void JogWheel::mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDe
 {
 	if (! player.isLoaded())
 		return;
+
+	if (gridMode)
+	{
+		if (onGridShift)
+			onGridShift (wheel.deltaY * 0.02);
+		return;
+	}
 
 	if (player.isPlaying())
 	{

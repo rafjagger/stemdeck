@@ -307,6 +307,19 @@ juce::String AnalysisCache::keyFor (const StemSet& set)
 
 std::optional<BeatGrid> AnalysisCache::find (const StemSet& set) const
 {
+	if (auto* entry = xml->getChildByAttribute ("key", keyFor (set)); entry != nullptr && entry->hasAttribute ("correctedBpm"))
+	{
+		BeatGrid grid;
+		grid.bpm = entry->getDoubleAttribute ("correctedBpm");
+		grid.firstBeat = entry->getDoubleAttribute ("correctedFirstBeat");
+		if (grid.isValid())
+			return grid;
+	}
+	return findAnalysed (set);
+}
+
+std::optional<BeatGrid> AnalysisCache::findAnalysed (const StemSet& set) const
+{
 	if (auto* entry = xml->getChildByAttribute ("key", keyFor (set)))
 	{
 		BeatGrid grid;
@@ -318,6 +331,32 @@ std::optional<BeatGrid> AnalysisCache::find (const StemSet& set) const
 	}
 
 	return std::nullopt;
+}
+
+void AnalysisCache::storeCorrected (const StemSet& set, const BeatGrid& grid)
+{
+	if (auto* entry = xml->getChildByAttribute ("key", keyFor (set)))
+	{
+		entry->setAttribute ("correctedBpm", grid.bpm);
+		entry->setAttribute ("correctedFirstBeat", grid.firstBeat);
+		unwritten = true;
+	}
+}
+
+void AnalysisCache::clearCorrected (const StemSet& set)
+{
+	if (auto* entry = xml->getChildByAttribute ("key", keyFor (set)))
+	{
+		entry->removeAttribute ("correctedBpm");
+		entry->removeAttribute ("correctedFirstBeat");
+		unwritten = true;
+	}
+}
+
+void AnalysisCache::flush()
+{
+	if (unwritten && xml->writeTo (file))
+		unwritten = false;
 }
 
 void AnalysisCache::store (const StemSet& set, const BeatGrid& grid)

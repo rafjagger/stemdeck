@@ -17,6 +17,11 @@ public:
 	JogWheel (StemDeckPlayer& player, int deckIndex);
 
 	void setVinylMode (bool shouldUseVinylMode) { vinylMode = shouldUseVinylMode; }
+
+	// Grid Adjust (CDJ-3000): turning moves the beat grid instead of the
+	// music -- a whole turn is 100 ms, a mouse wheel notch about 2 ms.
+	void setGridMode (bool on) { gridMode = on; repaint(); }
+	std::function<void (double seconds)> onGridShift;
 	void refresh(); // called at UI rate: eases pitch bend back and redraws
 
 	void paint (juce::Graphics& g) override;
@@ -37,6 +42,8 @@ private:
 	StemDeckPlayer& player;
 	const int deckIndex;
 	bool vinylMode = true;
+	bool gridMode = false;
+	static constexpr double gridSecondsPerTurn = 0.1;
 
 	Touch touch = Touch::none;
 	float lastAngle = 0.0f;

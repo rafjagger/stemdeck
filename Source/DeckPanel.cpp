@@ -75,11 +75,30 @@ DeckPanel::DeckPanel (StemDeckPlayer& p, StemThumbnails& thumbnails, int index)
 	vinylButton.setTooltip ("Vinyl-Modus: Jogwheel-Oberseite scratcht");
 	vinylButton.onClick = [this] { jog.setVinylMode (vinylButton.getToggleState()); };
 
-	for (auto* b : { &cueButton, &playButton, &loopOffButton, &repeatButton, &syncButton, &masterButton, &rangeButton, &vinylButton })
+	for (auto* b : { &cueButton, &playButton, &loopOffButton, &repeatButton, &syncButton, &masterButton, &rangeButton, &vinylButton, &gridButton })
 	{
 		b->setMouseClickGrabsKeyboardFocus (false); // keyboard shortcuts stay with the main window
 		addAndMakeVisible (b);
 	}
+
+	gridButton.setClickingTogglesState (true);
+	gridButton.setColour (juce::TextButton::buttonOnColourId, Theme::loop);
+	gridButton.setTooltip ("Grid Adjust: Jogwheel verschiebt das Beatgrid (wie CDJ-3000)");
+	gridButton.onClick = [this] { setGridMode (gridButton.getToggleState()); };
+	jog.onGridShift = [this] (double seconds) { if (onGridEdit) onGridEdit (GridAction::shift, seconds); };
+
+	const auto gridAction = [this] (juce::TextButton& b, GridAction action, const char* tip)
+	{
+		b.setTooltip (juce::String::fromUTF8 (tip));
+		b.setMouseClickGrabsKeyboardFocus (false);
+		b.onClick = [this, action] { if (onGridEdit) onGridEdit (action, 0.0); };
+		addChildComponent (b);
+	};
+	gridAction (halfBackButton, GridAction::halfBack, "Grid einen halben Beat fr\xc3\xbc" "her");
+	gridAction (halfForwardButton, GridAction::halfForward, "Grid einen halben Beat sp\xc3\xa4ter");
+	gridAction (snapButton, GridAction::snapToCue, "SNAP GRID (CUE): die Eins des Takts auf den Cue-Punkt");
+	gridAction (shiftButton, GridAction::shiftToLeader, "SHIFT GRID: den nach Geh\xc3\xb6r angeglichenen Beat ins Grid \xc3\xbc" "bernehmen");
+	gridAction (resetGridButton, GridAction::reset, "Grid wie analysiert");
 
 	tempo.setValue (1.0, juce::dontSendNotification);
 	tempo.setDoubleClickReturnValue (true, 1.0);
@@ -134,6 +153,15 @@ void DeckPanel::setTempoFromSync (double rate)
 
 	const juce::ScopedValueSetter<bool> svs (settingTempoFromSync, true);
 	tempo.setValue (rate, juce::sendNotificationSync);
+}
+
+void DeckPanel::setGridMode (bool on)
+{
+	gridButton.setToggleState (on, juce::dontSendNotification);
+	jog.setGridMode (on);
+	for (auto* b : { &halfBackButton, &halfForwardButton, &snapButton, &shiftButton, &resetGridButton })
+		b->setVisible (on);
+	resized();
 }
 
 void DeckPanel::saveState (DeckSession& state) const
@@ -293,6 +321,18 @@ void DeckPanel::resized()
 	rangeButton.setBounds (right.removeFromTop (28));
 	right.removeFromTop (6);
 	vinylButton.setBounds (right.removeFromTop (28));
+	right.removeFromTop (6);
+	gridButton.setBounds (right.removeFromTop (28));
+
+	// Grid Adjust: its buttons in a row under the jog wheel.
+	if (gridButton.getToggleState())
+	{
+		auto row = area.removeFromBottom (28);
+		area.removeFromBottom (6);
+		const auto width = row.getWidth() / 5;
+		for (auto* b : { &halfBackButton, &halfForwardButton, &snapButton, &shiftButton, &resetGridButton })
+			b->setBounds (row.removeFromLeft (width).reduced (2, 0));
+	}
 
 	const auto jogSize = juce::jmin (area.getWidth() - 16, area.getHeight());
 	jog.setBounds (area.withSizeKeepingCentre (jogSize, jogSize));

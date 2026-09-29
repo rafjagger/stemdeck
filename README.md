@@ -84,6 +84,18 @@ Laid out like a CDJ:
   tempo analysis that runs in the background when a set is loaded; it assumes a constant tempo,
   sums all four stems, and caches its result, so each set is analysed once.
 - **SYNC**: see [Sync](#sync).
+- **GRID**: Grid Adjust, as on a CDJ-3000, for a beat grid the analysis got wrong. While it is
+  on, turning the jog wheel moves the whole grid (a turn is 100 ms, a mouse wheel notch about
+  2 ms), and a row of buttons appears under the wheel:
+  - **‹1/2** / **1/2›** move the grid half a beat — for an analysis that took the off-beats;
+  - **SNAP** puts the downbeat (the 1 of the bar) on the cue point: set CUE on the real first
+    beat of a bar, press SNAP;
+  - **SHIFT** takes over what you aligned by ear: with SYNC off, bring the beats together with
+    the jog ring against the other deck (or the Pioneer master under SYNC: PIO), then press
+    SHIFT — the grid moves so that this deck is where the leader is in its beat;
+  - **RESET** brings back the grid as analysed.
+
+  A corrected grid is kept in `analysis.xml` beside the analysed one and used from then on.
 
 The scrolling waveforms scroll past a fixed playhead; drag to move through the track, mouse wheel
 to zoom.
@@ -208,7 +220,9 @@ off jumps into phase, closer is nudged by at most 2 %.
 ### DECK
 
 One deck follows the other. SYNC on deck A makes A follow B; pressing SYNC on B hands the role
-over.
+over. Like a CDJ's BEAT SYNC it lines up the **bars** too, not only the beats: the follower's
+downbeat lands on the leader's (at the same tempo; at half or double tempo only the beats). A
+downbeat that is wrong in the grid shows up here first — correct it with [GRID](#deck).
 
 ### PIO: following the CDJs
 

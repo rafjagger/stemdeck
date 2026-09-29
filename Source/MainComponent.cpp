@@ -1,5 +1,6 @@
 #include "MainComponent.h"
 #include "StemJob.h"
+#include "GridEdit.h"
 
 #include <pthread.h>
 #include <sched.h>
@@ -30,6 +31,7 @@ MainComponent::MainComponent()
 		waves[(size_t) d]->onSetDropped = [this, d] (const juce::String& id) { loadDroppedSet (id, d); };
 		decks[(size_t) d]->onSetDropped = [this, d] (const juce::String& id) { loadDroppedSet (id, d); };
 		decks[(size_t) d]->onSyncToggled = [this, d] (bool enabled) { setSync (d, enabled); };
+		decks[(size_t) d]->onGridEdit = [this, d] (DeckPanel::GridAction action, double seconds) { editGrid (d, action, seconds); };
 		decks[(size_t) d]->onMasterPressed = [this, d]
 		{
 			const auto chosen = chooseMaster (d, decksPlaying(), masterDeck, true);
@@ -163,6 +165,7 @@ void MainComponent::loadSet (const StemSet& set, int deckIndex)
 	}
 
 	loadedSetIds[d] = set.files[0].getFullPathName();
+	loadedSets[d] = set;
 	thumbs[d]->setSet (set);
 	decks[d]->setSet (set);
 	waves[d]->setTitle (set.name);
@@ -269,6 +272,7 @@ void MainComponent::updateSync()
 	in.leaderPlaying = leader.isPlaying();
 	in.anyScratching = follower.isScratching() || leader.isScratching();
 	in.multiple = syncMultiple;
+	in.alignBars = true;   // deck to deck: the downbeats line up too
 
 	// Both positions move with the same audio block, so they compare as read.
 	syncMultiple = applyFollow (syncFollower, in, follower.getPosition());
@@ -468,8 +472,66 @@ Session MainComponent::gatherSession() const
 	return session;
 }
 
+void MainComponent::editGrid (int deckIndex, DeckPanel::GridAction action, double seconds)
+{
+	auto& player = *players[(size_t) deckIndex];
+	const auto& set = loadedSets[(size_t) deckIndex];
+	const auto current = player.getBeatGrid();
+	if (! set || ! current.isValid())
+		return;
+
+	using Action = DeckPanel::GridAction;
+	if (action == Action::reset)
+	{
+		analysisCache->clearCorrected (*set);
+		if (const auto analysed = analysisCache->findAnalysed (*set))
+			player.setBeatGrid (*analysed);
+		return;
+	}
+
+	GridEdit::Grid grid { current.bpm, current.firstBeat };
+	switch (action)
+	{
+		case Action::shift:       grid = GridEdit::shift (grid, seconds); break;
+		case Action::halfBack:    grid = GridEdit::shiftHalfBeat (grid, false); break;
+		case Action::halfForward: grid = GridEdit::shiftHalfBeat (grid, true); break;
+		case Action::snapToCue:   grid = GridEdit::snapToCue (grid, player.getCuePoint()); break;
+		case Action::shiftToLeader:
+		{
+			// The leader: the Pioneer master under SYNC: PIO, else the other deck.
+			const auto now = juce::Time::getMillisecondCounterHiRes() / 1000.0;
+			const auto position = positionAt (player.getPosition(), player.getPositionStamp(), now,
+											  player.getEffectiveRate(), player.isPlaying() && ! player.isScratching());
+			if (pioSource)
+			{
+				if (pioClock.bpm() <= 0.0)
+					return;
+				grid = GridEdit::shiftToPhase (grid, position, pioClock.beatPhaseAt (now));
+			}
+			else
+			{
+				const auto& leader = *players[(size_t) (1 - deckIndex)];
+				const auto leaderGrid = leader.getBeatGrid();
+				if (! leaderGrid.isValid() || ! leader.isPlaying())
+					return;
+				const auto leaderPosition = positionAt (leader.getPosition(), leader.getPositionStamp(), now,
+														leader.getEffectiveRate(), ! leader.isScratching());
+				const auto multiple = syncMultiple > 0.0 ? syncMultiple : 1.0;
+				grid = GridEdit::shiftToPhase (grid, position, leaderGrid.beatsAt (leaderPosition) * multiple);
+			}
+			break;
+		}
+		case Action::reset: break;
+	}
+
+	const BeatGrid edited { grid.bpm, grid.firstBeat };
+	player.setBeatGrid (edited);
+	analysisCache->storeCorrected (*set, edited);
+}
+
 void MainComponent::saveSession()
 {
+	analysisCache->flush();   // grid corrections, written with the session
 	// Nothing playing and nothing touched: no write.
 	const auto text = gatherSession().toXml()->toString();
 	if (text == lastSessionText)

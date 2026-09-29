@@ -23,6 +23,11 @@ struct FollowInput
 
 	bool anyScratching = false;
 	double multiple = 0.0;           // 0: choose now
+
+	// Also line the bars up: the follower's downbeat (its grid's first beat,
+	// 1 of 4) on the leader's -- as a CDJ's BEAT SYNC does. Only at the same
+	// tempo (multiple 1); a whole-beat difference jumps.
+	bool alignBars = false;
 };
 
 struct FollowResult

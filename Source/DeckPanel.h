@@ -33,6 +33,8 @@ public:
 	void setTempoFromSync (double rate);
 	void setSyncEnabled (bool enabled) { syncButton.setToggleState (enabled, juce::dontSendNotification); }
 	bool isSyncEnabled() const { return syncButton.getToggleState(); }
+	// SYNC on but only the tempo followed: bent by hand (CDJ-3000), until SHIFT.
+	void setSyncBpmOnly (bool bpmOnly) { syncButton.setButtonText (bpmOnly ? "SYNC BPM" : "SYNC"); }
 
 	std::function<void (bool enabled)> onSyncToggled;
 

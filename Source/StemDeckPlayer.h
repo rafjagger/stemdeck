@@ -50,6 +50,7 @@ public:
 	void setSpeed (double ratio);            // tempo fader
 	double getSpeed() const { return speed.load(); }
 	void setPitchBend (double factor) { pitchBend = factor; } // jog ring, temporary
+	double getPitchBend() const { return pitchBend.load(); }
 	void setSyncNudge (double factor) { syncNudge = factor; } // phase correction while synced
 	double getEffectiveRate() const { return speed.load() * pitchBend.load() * syncNudge.load(); }
 

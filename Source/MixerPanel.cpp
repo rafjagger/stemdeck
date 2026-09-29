@@ -259,8 +259,17 @@ void ChannelStrip::resized()
 	meterZone = deckIndex == 0 ? area.removeFromRight (meterReserve) : area.removeFromLeft (meterReserve);
 	phonesButton.setBounds (area.removeFromBottom (24).reduced (0, 1));
 	area.removeFromBottom (4);
-	meter.setBounds (area.removeFromRight (10).reduced (0, 4));
-	area.removeFromRight (4);
+	// Deck meter on the outer side, mirrored: A left of its fader, B right.
+	if (deckIndex == 0)
+	{
+		meter.setBounds (area.removeFromLeft (10).reduced (0, 4));
+		area.removeFromLeft (4);
+	}
+	else
+	{
+		meter.setBounds (area.removeFromRight (10).reduced (0, 4));
+		area.removeFromRight (4);
+	}
 	fader.setBounds (area);
 }
 

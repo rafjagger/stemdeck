@@ -45,9 +45,12 @@ MainComponent::MainComponent()
 	};
 
 	// Last used folder, otherwise ./stems next to where the app was started.
+	// A saved folder that is gone (the checkout moved) falls back too, or the
+	// library stays empty with nothing to say why.
 	const auto savedFolder = appProperties.getUserSettings()->getValue ("stemFolder");
-	library.setFolder (savedFolder.isNotEmpty() ? juce::File (savedFolder)
-												: juce::File::getCurrentWorkingDirectory().getChildFile ("stems"));
+	const juce::File saved (savedFolder.isNotEmpty() && juce::File::isAbsolutePath (savedFolder) ? savedFolder : juce::String());
+	library.setFolder (saved.isDirectory() ? saved
+										   : juce::File::getCurrentWorkingDirectory().getChildFile ("stems"));
 
 	audioSettingsButton.onClick = [this] { showAudioSettings(); };
 	audioSettingsButton.setMouseClickGrabsKeyboardFocus (false);

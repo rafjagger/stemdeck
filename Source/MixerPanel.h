@@ -52,6 +52,11 @@ public:
 
 	// The channel fader, moved as by hand (the Auto-DJ's crossfade).
 	void setFaderDb (double db) { fader.setValue (db, juce::sendNotificationSync); }
+	// ... and as a controller's slider does: 0..1 of its travel, with the
+	// on-screen fader's own curve.
+	void setFaderTravel (double t) { fader.setValue (fader.proportionOfLengthToValue (juce::jlimit (0.0, 1.0, t)), juce::sendNotificationSync); }
+	double getFaderTravel() { return fader.valueToProportionOfLength (fader.getValue()); }
+	bool isMuted (int stem) const { return muteButtons[stem]->getToggleState(); }
 
 	// Knobs, mutes, bus switches, fader and PHONES, for the session.
 	void saveState (DeckSession& state) const;

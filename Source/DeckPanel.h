@@ -32,6 +32,12 @@ public:
 	// as the user moving the fader.
 	void setTempoFromSync (double rate);
 	void setSyncEnabled (bool enabled) { syncButton.setToggleState (enabled, juce::dontSendNotification); }
+
+	// A controller's relative pitch slider: `steps` of 1/128 of the range's
+	// full travel, moved as by hand (so it takes the deck out of sync).
+	void moveTempo (double steps) { tempo.setValue (tempo.getValue() + steps * 2.0 * tempoRange / 128.0, juce::sendNotificationSync); }
+	// -1 .. 1: where the tempo is in its range.
+	double getTempoPosition() const { return (tempo.getValue() - 1.0) / tempoRange; }
 	bool isSyncEnabled() const { return syncButton.getToggleState(); }
 	// SYNC on but only the tempo followed: bent by hand (CDJ-3000), until SHIFT.
 	void setSyncBpmOnly (bool bpmOnly) { syncButton.setButtonText (bpmOnly ? "SYNC BPM" : "SYNC"); }

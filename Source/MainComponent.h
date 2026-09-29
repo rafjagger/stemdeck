@@ -10,6 +10,7 @@
 #include "Session.h"
 #include "AutoDj.h"
 #include "Recorder.h"
+#include "Scs3dDevice.h"
 #include "Waveforms.h"
 #include "JackOutput.h"
 #include "Theme.h"
@@ -179,6 +180,17 @@ private:
 
 	// Two JACK inputs (rec_L, rec_R) to FLAC: REC in the top bar, with the
 	// inputs' levels beside it. Only under JACK.
+	// Stanton SCS.3d controllers (Scs3d.h), one per deck: the first found
+	// is A unless the setting scs3dSwap says otherwise. Looked for again every
+	// few seconds, so one plugged in later is taken up.
+	std::vector<std::unique_ptr<Scs3dDevice>> controllers;
+	std::array<double, numDecks> controllerLoopIn { -1.0, -1.0 };
+	int controllerScanCountdown = 0;
+	void scanControllers();
+	void handleController (int deckIndex, const scs3d::Event& event);
+	void showControllers();
+	void pressMaster (int deckIndex);
+
 	Recorder recorder;
 	juce::TextButton recButton { "REC" };
 	LevelMeter recMeterL, recMeterR;

@@ -32,12 +32,7 @@ MainComponent::MainComponent()
 		decks[(size_t) d]->onSetDropped = [this, d] (const juce::String& id) { loadDroppedSet (id, d); };
 		decks[(size_t) d]->onSyncToggled = [this, d] (bool enabled) { setSync (d, enabled); };
 		decks[(size_t) d]->onGridEdit = [this, d] (DeckPanel::GridAction action, double seconds) { editGrid (d, action, seconds); };
-		decks[(size_t) d]->onMasterPressed = [this, d]
-		{
-			const auto chosen = chooseMaster (d, decksPlaying(), masterDeck, true);
-			masterTurnedOff = chosen < 0;
-			setMasterDeck (chosen);
-		};
+		decks[(size_t) d]->onMasterPressed = [this, d] { pressMaster (d); };
 	}
 
 	addAndMakeVisible (mixer);
@@ -560,6 +555,112 @@ void MainComponent::editGrid (int deckIndex, DeckPanel::GridAction action, doubl
 		setSyncBent (deckIndex, false);
 }
 
+void MainComponent::pressMaster (int deckIndex)
+{
+	const auto chosen = chooseMaster (deckIndex, decksPlaying(), masterDeck, true);
+	masterTurnedOff = chosen < 0;
+	setMasterDeck (chosen);
+}
+
+//==============================================================================
+void MainComponent::scanControllers()
+{
+	const auto found = Scs3dDevice::find();
+
+	bool same = found.size() == controllers.size();
+	for (size_t i = 0; same && i < found.size(); ++i)
+		same = controllers[i]->getIdentifier() == found[i].first.identifier;
+	if (same)
+		return;
+
+	controllers.clear();
+	const auto swap = settings().getBoolValue ("scs3dSwap");
+	for (size_t i = 0; i < std::min<size_t> (found.size(), numDecks); ++i)
+	{
+		auto device = std::make_unique<Scs3dDevice> (found[i].first, found[i].second);
+		if (! device->isOpen())
+			continue;
+		const auto deck = swap ? numDecks - 1 - (int) i : (int) i;
+		device->onEvent = [this, deck] (const scs3d::Event& e) { handleController (deck, e); };
+		controllers.push_back (std::move (device));
+	}
+}
+
+void MainComponent::handleController (int d, const scs3d::Event& e)
+{
+	auto& player = *players[(size_t) d];
+	auto& deck = *decks[(size_t) d];
+	using Type = scs3d::Event::Type;
+
+	switch (e.type)
+	{
+		case Type::mute:    mixer.strip (d).toggleMute (e.stem); break;
+		case Type::play:    deck.togglePlay(); break;
+		case Type::cueDown: deck.cuePressed(); break;
+		case Type::cueUp:   deck.cueReleased(); break;
+		case Type::master:  pressMaster (d); break;
+		case Type::sync:
+		{
+			const auto on = ! deck.isSyncEnabled();
+			deck.setSyncEnabled (on);
+			setSync (d, on);
+			break;
+		}
+		case Type::gain:  mixer.strip (d).setFaderTravel (e.value); break;
+		case Type::pitch: deck.moveTempo (e.value); break;
+
+		// Loop: IN marks, OUT loops from the mark to here; OUT while looping ends it.
+		case Type::loopIn:
+			if (player.isLoaded())
+				controllerLoopIn[(size_t) d] = player.getPosition();
+			break;
+		case Type::loopOut:
+			if (player.hasLoop())
+			{
+				player.clearLoop();
+				controllerLoopIn[(size_t) d] = -1.0;
+			}
+			else if (const auto in = controllerLoopIn[(size_t) d]; in >= 0.0 && player.getPosition() > in + 0.05)
+			{
+				player.setLoop (in, player.getPosition());
+			}
+			break;
+
+		// The circle as the platter: touch holds, turning scratches, release lets go.
+		case Type::scratchTouch:   if (player.isLoaded()) player.beginScratch(); break;
+		case Type::scratchMove:    if (player.isScratching()) player.scratchBy (e.value * scs3d::secondsPerScratchStep); break;
+		case Type::scratchRelease: player.endScratch(); break;
+		case Type::none: break;
+	}
+}
+
+void MainComponent::showControllers()
+{
+	const auto swap = settings().getBoolValue ("scs3dSwap");
+	for (size_t i = 0; i < controllers.size(); ++i)
+	{
+		const auto d = swap ? numDecks - 1 - (int) i : (int) i;
+		const auto& player = *players[(size_t) d];
+		const auto& deck = *decks[(size_t) d];
+
+		scs3d::Leds leds;
+		leds.deck = d;
+		for (int s = 0; s < StemSet::numStems; ++s)
+			leds.muted[(size_t) s] = mixer.strip (d).isMuted (s);
+		leds.looping = player.hasLoop();
+		leds.loopInSet = controllerLoopIn[(size_t) d] >= 0.0;
+		leds.playing = player.isPlaying();
+		leds.atCue = player.isLoaded() && std::abs (player.getPosition() - player.getCuePoint()) < 0.01;
+		leds.synced = deck.isSyncEnabled();
+		leds.syncBent = syncBent[(size_t) d];
+		leds.master = masterDeck == d;
+		leds.gain = mixer.strip (d).getFaderTravel();
+		leds.pitch = deck.getTempoPosition();
+		leds.platter = player.getPosition() / JogWheel::secondsPerRevolution;
+		controllers[i]->show (leds);
+	}
+}
+
 void MainComponent::toggleRecording()
 {
 	if (recorder.isRecording())
@@ -959,6 +1060,13 @@ void MainComponent::timerCallback()
 
 	runAutoDj();
 	updateRecorder();
+
+	if (--controllerScanCountdown <= 0)
+	{
+		controllerScanCountdown = 180;   // three seconds
+		scanControllers();
+	}
+	showControllers();
 
 	if (--sessionCountdown <= 0)
 	{

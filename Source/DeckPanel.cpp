@@ -57,6 +57,9 @@ DeckPanel::DeckPanel (StemDeckPlayer& p, StemThumbnails& thumbnails, int index)
 	syncButton.setColour (juce::TextButton::buttonOnColourId, Theme::deck (deckIndex));
 	syncButton.setTooltip ("Tempo und Beats an das andere Deck koppeln");
 	syncButton.onClick = [this] { if (onSyncToggled) onSyncToggled (syncButton.getToggleState()); };
+	masterButton.setColour (juce::TextButton::buttonOnColourId, Theme::deck (deckIndex));
+	masterButton.setTooltip ("Dieses Deck gibt den Takt ins Pioneer-Netz (wie MASTER am CDJ)");
+	masterButton.onClick = [this] { if (onMasterPressed) onMasterPressed(); };
 
 	rangeButton.setTooltip ("Tempo-Bereich umschalten");
 	rangeButton.onClick = [this]
@@ -72,7 +75,7 @@ DeckPanel::DeckPanel (StemDeckPlayer& p, StemThumbnails& thumbnails, int index)
 	vinylButton.setTooltip ("Vinyl-Modus: Jogwheel-Oberseite scratcht");
 	vinylButton.onClick = [this] { jog.setVinylMode (vinylButton.getToggleState()); };
 
-	for (auto* b : { &cueButton, &playButton, &loopOffButton, &repeatButton, &syncButton, &rangeButton, &vinylButton })
+	for (auto* b : { &cueButton, &playButton, &loopOffButton, &repeatButton, &syncButton, &masterButton, &rangeButton, &vinylButton })
 	{
 		b->setMouseClickGrabsKeyboardFocus (false); // keyboard shortcuts stay with the main window
 		addAndMakeVisible (b);
@@ -261,6 +264,8 @@ void DeckPanel::resized()
 	bpmInfoLabel.setBounds (right.removeFromTop (16));
 	right.removeFromTop (8);
 	syncButton.setBounds (right.removeFromTop (40));
+	right.removeFromTop (6);
+	masterButton.setBounds (right.removeFromTop (28));
 	right.removeFromTop (8);
 	rangeButton.setBounds (right.removeFromTop (28));
 	right.removeFromTop (6);

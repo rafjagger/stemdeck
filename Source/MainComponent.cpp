@@ -26,6 +26,7 @@ MainComponent::MainComponent()
 		waves[(size_t) d]->onSetDropped = [this, d] (const juce::String& id) { loadDroppedSet (id, d); };
 		decks[(size_t) d]->onSetDropped = [this, d] (const juce::String& id) { loadDroppedSet (id, d); };
 		decks[(size_t) d]->onSyncToggled = [this, d] (bool enabled) { setSync (d, enabled); };
+		decks[(size_t) d]->onMasterPressed = [this, d] { setMasterDeck (chooseMaster (d, decksPlaying(), masterDeck)); };
 	}
 
 	addAndMakeVisible (mixer);
@@ -98,6 +99,8 @@ MainComponent::MainComponent()
 MainComponent::~MainComponent()
 {
 	stopTimer();
+	pioSender.setMaster (nullptr);
+	pioSender.stop();   // before the players it reads go away
 	proLink.stop();
 	analysisPool.removeAllJobs (true, 5000);
 	jack.close();
@@ -258,11 +261,7 @@ void MainComponent::setSyncSource (bool pio)
 	syncSourceButton.setButtonText (pio ? "SYNC: PIO" : "SYNC: DECK");
 	appProperties.getUserSettings()->setValue ("syncSource", pio ? "pio" : "deck");
 
-	if (pio)
-		proLink.start (appProperties.getUserSettings()->getIntValue ("pioDevice", 6));
-	else
-		proLink.stop();
-
+	updateNetwork();
 	updatePioneerStatus();
 }
 
@@ -307,16 +306,21 @@ void MainComponent::updatePioneerStatus()
 {
 	// PIO chosen but not listening -- the network was not up yet at start-up,
 	// or the ports were busy: try again every two seconds, and say why meanwhile.
-	if (pioSource && ! proLink.isRunning() && --pioRetryCountdown <= 0)
+	if ((pioSource || masterDeck >= 0) && ! proLink.isRunning() && --pioRetryCountdown <= 0)
 	{
 		pioRetryCountdown = 120;
-		proLink.start (appProperties.getUserSettings()->getIntValue ("pioDevice", 6));
+		updateNetwork();
 	}
 
-	pioStatus.setVisible (pioSource);
+	const auto sending = masterDeck >= 0 && pioSender.isRunning();
+	const auto masterText = sending ? juce::String ("PIO master: ") + (masterDeck == 0 ? "A" : "B") : juce::String();
+
+	pioStatus.setVisible (pioSource || masterDeck >= 0);
 	if (! pioSource)
 	{
 		pioPlayer.setVisible (false);
+		const auto error = proLink.error();
+		pioStatus.setText (! error.empty() ? "PIO: " + juce::String (error) : masterText, juce::dontSendNotification);
 		return;
 	}
 
@@ -338,7 +342,46 @@ void MainComponent::updatePioneerStatus()
 		text = "PIO " + juce::String (pioClock.bpm(), 1) + juce::String::fromUTF8 (" \xc2\xb7 ")
 			 + (pioClock.isLive (now) ? "CDJ " + juce::String (pioClock.leader (now)) : juce::String ("held"));
 
+	if (sending)
+		text = masterText + juce::String::fromUTF8 (" \xc2\xb7 ") + text;
 	pioStatus.setText (text, juce::dontSendNotification);
+}
+
+std::array<bool, 2> MainComponent::decksPlaying() const
+{
+	return { players[0]->isPlaying(), players[1]->isPlaying() };
+}
+
+void MainComponent::setMasterDeck (int deckIndex)
+{
+	masterDeck = deckIndex;
+	for (int d = 0; d < numDecks; ++d)
+		decks[(size_t) d]->setMaster (d == deckIndex);
+	pioSender.setMaster (deckIndex >= 0 ? players[(size_t) deckIndex] : nullptr);
+	updateNetwork();
+}
+
+// On the Pioneer network while following (PIO) or sending (a master deck):
+// the receiver announces the virtual CDJ and listens, the sender sends the
+// master deck's beat. Off the network when neither.
+void MainComponent::updateNetwork()
+{
+	const auto device = appProperties.getUserSettings()->getIntValue ("pioDevice", 6);
+
+	if (! pioSource && masterDeck < 0)
+	{
+		pioSender.stop();
+		proLink.stop();
+		return;
+	}
+
+	if (! proLink.isRunning())
+		proLink.start (device);
+
+	if (masterDeck >= 0 && proLink.isRunning() && ! pioSender.isRunning())
+		pioSender.start (device, proLink.broadcastAddress());
+	else if (masterDeck < 0)
+		pioSender.stop();
 }
 
 // One synced deck against its leader: the rules in followLeader(), the
@@ -489,6 +532,11 @@ void MainComponent::timerCallback()
 
 	mixer.refresh();
 	updateSync();
+
+	// With no master yet, the only playing deck becomes it (like a lone CDJ).
+	if (const auto chosen = chooseMaster (-1, decksPlaying(), masterDeck); chosen != masterDeck)
+		setMasterDeck (chosen);
+
 	updatePioneerStatus();
 
 	for (int ch = 0; ch < numOutputChannels; ++ch)

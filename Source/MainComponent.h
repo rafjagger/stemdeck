@@ -13,6 +13,8 @@
 #include "FollowLeader.h"
 #include "PioneerClock.h"
 #include "ProLinkReceiver.h"
+#include "ProLinkSender.h"
+#include "MasterDeck.h"
 
 //==============================================================================
 // Two stem decks and a mixer, laid out like Mixxx: scrolling waveforms on top,
@@ -56,6 +58,9 @@ private:
 	void updateSync();
 	double applyFollow (int deckIndex, FollowInput in, double followerPosition);
 	void setSyncSource (bool pio);
+	void setMasterDeck (int deckIndex);
+	void updateNetwork();
+	std::array<bool, 2> decksPlaying() const;
 	void followPioneer();
 	void updatePioneerStatus();
 	void loadDroppedSet (const juce::String& setId, int deckIndex);
@@ -120,6 +125,10 @@ private:
 	juce::Label pioStatus;
 	juce::ComboBox pioPlayer;
 	int pioRetryCountdown = 0; // timer ticks until the next start attempt
+
+	// StemDeck as the tempo master (Part 2): the deck whose beat goes out, -1 none.
+	int masterDeck = -1;
+	ProLinkSender pioSender;
 
 	JackOutput jack;
 	bool usingJack = false;

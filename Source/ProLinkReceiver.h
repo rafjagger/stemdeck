@@ -35,6 +35,10 @@ public:
 	bool isRunning() const { return running.load(); }
 	std::string error() const;
 
+	// The subnet's broadcast address the virtual CDJ announces to, in network
+	// byte order; 0 until start() has found an interface.
+	uint32_t broadcastAddress() const { return broadcastIp; }
+
 	// Everything received since the last call, oldest first.
 	std::vector<Event> drain();
 

@@ -30,12 +30,15 @@ StemLibrary::StemLibrary (juce::AudioFormatManager& fm) : formatManager (fm)
 	addAndMakeVisible (searchBox);
 
 	auto& header = table.getHeader();
-	header.addColumn ("Set", nameColumn, 360, 120);
+	// stems/Artist/Album/<sets>: the folders are the first two columns, and
+	// the table is sorted artist, album, set to begin with.
+	header.addColumn ("Artist", artistColumn, 180, 80);
+	header.addColumn ("Album", albumColumn, 180, 80);
+	header.addColumn ("Set", nameColumn, 280, 120);
 	header.addColumn ("BPM", bpmColumn, 70, 50);
-	header.addColumn ("Stems", stemsColumn, 240, 80);
+	header.addColumn ("Stems", stemsColumn, 200, 80);
 	header.addColumn (juce::String::fromUTF8 ("L\xc3\xa4nge"), lengthColumn, 70, 50);
-	header.addColumn ("Ordner", folderColumn, 260, 80);
-	header.setSortColumnId (nameColumn, true);
+	header.setSortColumnId (artistColumn, true);
 	header.setColour (juce::TableHeaderComponent::backgroundColourId, Theme::panelRaised);
 	header.setColour (juce::TableHeaderComponent::textColourId, Theme::textDim);
 
@@ -72,18 +75,29 @@ void StemLibrary::applyFilter()
 	visibleSets.clear();
 
 	for (const auto& set : allSets)
-		if (std::all_of (words.begin(), words.end(), [&set] (const juce::String& w) { return set.name.containsIgnoreCase (w); }))
+		if (std::all_of (words.begin(), words.end(), [&set] (const juce::String& w)
+			{
+				return set.name.containsIgnoreCase (w) || set.artist.containsIgnoreCase (w) || set.album.containsIgnoreCase (w);
+			}))
 			visibleSets.push_back (&set);
 
 	std::stable_sort (visibleSets.begin(), visibleSets.end(), [this] (const StemSet* a, const StemSet* b)
 	{
 		int order = 0;
 
+		// Artist and album sort down through the levels below them, so an
+		// artist's albums and an album's sets stay together and in order.
 		switch (sortColumn)
 		{
 			case lengthColumn: order = a->lengthSeconds < b->lengthSeconds ? -1 : (a->lengthSeconds > b->lengthSeconds ? 1 : 0); break;
 			case bpmColumn:    order = bpmOf (*a) < bpmOf (*b) ? -1 : (bpmOf (*a) > bpmOf (*b) ? 1 : 0); break;
-			case folderColumn: order = a->files[0].getParentDirectory().getFileName().compareNatural (b->files[0].getParentDirectory().getFileName()); break;
+			case artistColumn: order = a->artist.compareNatural (b->artist);
+							   if (order == 0) order = a->album.compareNatural (b->album);
+							   if (order == 0) order = a->name.compareNatural (b->name);
+							   break;
+			case albumColumn:  order = a->album.compareNatural (b->album);
+							   if (order == 0) order = a->name.compareNatural (b->name);
+							   break;
 			default:           order = a->name.compareNatural (b->name); break;
 		}
 
@@ -158,7 +172,8 @@ void StemLibrary::paintCell (juce::Graphics& g, int row, int columnId, int width
 		case stemsColumn:  { juce::StringArray n; for (const auto& s : set.stemNames) n.add (s); text = n.joinIntoString (" / "); break; }
 		case bpmColumn:    { const auto bpm = bpmOf (set); text = bpm > 0.0 ? juce::String (bpm, 2) : juce::String(); break; }
 		case lengthColumn: text = Theme::formatTime (set.lengthSeconds).upToLastOccurrenceOf (".", false, false); break;
-		case folderColumn: text = set.files[0].getParentDirectory().getFileName(); break;
+		case artistColumn: text = set.artist; break;
+		case albumColumn:  text = set.album; break;
 		default: break;
 	}
 

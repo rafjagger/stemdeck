@@ -15,10 +15,14 @@ struct StemSet
 	static constexpr int numStems = 4;
 
 	juce::String name;
+	// Where it sits in the library: stems/Artist/Album/<files> (LibraryPath.h).
+	juce::String artist, album;
 	std::array<juce::File, numStems> files;
 	std::array<juce::String, numStems> stemNames;
 	double lengthSeconds = 0.0; // from the first stem's header
 
-	// Scans a folder (recursively) for complete four-stem sets, sorted by name.
+	// Scans a folder (recursively) for complete four-stem sets, sorted by
+	// artist, album and name; artist and album come from the folders the set
+	// lies in below `folder`.
 	static std::vector<StemSet> scanFolder (const juce::File& folder, juce::AudioFormatManager& formats);
 };

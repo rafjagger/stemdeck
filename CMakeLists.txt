@@ -34,7 +34,8 @@ target_sources(StemDeck PRIVATE
     Source/ProLinkReceiver.cpp
     Source/MasterDeck.cpp
     Source/ProLinkSender.cpp
-    Source/BeatScheduler.cpp)
+    Source/BeatScheduler.cpp
+    Source/LibraryPath.cpp)
 
 target_compile_definitions(StemDeck PRIVATE
     JUCE_WEB_BROWSER=0

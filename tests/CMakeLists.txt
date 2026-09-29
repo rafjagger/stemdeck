@@ -10,7 +10,9 @@ add_executable(stemdeck-tests
     MasterDeck.cpp
     ${CMAKE_SOURCE_DIR}/Source/MasterDeck.cpp
     BeatScheduler.cpp
-    ${CMAKE_SOURCE_DIR}/Source/BeatScheduler.cpp)
+    ${CMAKE_SOURCE_DIR}/Source/BeatScheduler.cpp
+    LibraryPath.cpp
+    ${CMAKE_SOURCE_DIR}/Source/LibraryPath.cpp)
 target_include_directories(stemdeck-tests PRIVATE ${CMAKE_SOURCE_DIR}/Source)
 target_compile_features(stemdeck-tests PRIVATE cxx_std_17)
 target_link_libraries(stemdeck-tests PRIVATE GTest::gtest GTest::gtest_main)

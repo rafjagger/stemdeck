@@ -16,6 +16,11 @@ std::vector<StemSet> StemSet::scanFolder (const juce::File& folder, juce::AudioF
 	for (const auto& entry : juce::RangedDirectoryIterator (folder, true, formats.getWildcardForAllFormats(), juce::File::findFiles))
 	{
 		const auto file = entry.getFile();
+		// The stem creator's originals are not sets (LibraryPath.h).
+		const auto fileFolder = file.getParentDirectory();
+		if (fileFolder != folder
+			&& isIgnoredLibraryFolder (fileFolder.getRelativePathFrom (folder).replaceCharacter ('\\', '/').toStdString()))
+			continue;
 		std::string prefixText, suffixText;
 		if (! splitStemName (file.getFileNameWithoutExtension().toStdString(), prefixText, suffixText))
 			continue;

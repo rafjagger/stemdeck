@@ -90,12 +90,12 @@ to zoom.
 
 ### Mixer
 
-<!-- IMAGE: the mixer between the decks: both channel strips with stem knobs, M and the 2×3 bus switches 1-6 per stem, channel faders, PHONES buttons, and the output meters 1-4 / AUX / PH -->
+<!-- IMAGE: the mixer between the decks: both channel strips with stem knobs, M and the 2×3 bus switches 1 2 3 / 4 A P per stem, channel faders, PHONES buttons, and the output meters 1-4 / AUX / PH -->
 ![The mixer](docs/stemdeck-mixer.png)
 
 One channel strip per deck. Per stem: a gain knob (−60 to +6 dB, double-click for 0 dB), **M**
-(mute) and six bus switches, right-aligned in two rows: **1 2 3** / **4 5 6**, where 5 is AUX
-and 6 is PH (lit, they show in AUX and PHONES colour). A stem plays on every bus that is lit — any
+(mute) and six bus switches, right-aligned in two rows: **1 2 3** / **4 A P** — A is AUX, P is
+PHONES (lit, they show in AUX and PHONES colour). A stem plays on every bus that is lit — any
 number at once, none for silence; a new set starts with stem N on bus N. Buses 1–4 and AUX are
 **post fader**, **PH** (PHONES) is **pre fader**. Knob and mute act on all of them. Below the
 stems, the channel fader and **PHONES**, which puts the whole deck on the phones bus, pre fader.

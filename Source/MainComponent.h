@@ -6,6 +6,7 @@
 #include "StemLibrary.h"
 #include "DeckPanel.h"
 #include "MixerPanel.h"
+#include "Buses.h"
 #include "Waveforms.h"
 #include "JackOutput.h"
 #include "Theme.h"
@@ -21,11 +22,11 @@
 // Two stem decks and a mixer, laid out like Mixxx: scrolling waveforms on top,
 // deck A | mixer | deck B in the middle, library at the bottom.
 //
-// Output is 10 channels, i.e. five stereo buses: bus N (1-4) = stem N of
-// deck A + stem N of deck B, after the stem knobs and channel faders; stems
-// switched to AUX leave their bus and go to the aux bus instead. With a JACK
-// server running these are 10 ports (deck1_L ... deck4_R, aux_L, aux_R),
-// otherwise a regular audio device is used.
+// Output is 12 channels, six stereo buses (Buses.h): 1-4 and AUX post fader,
+// PHONES pre fader. Each stem of each deck is on any of them by its bus
+// switches (a new set: stem N on bus N). With a JACK server running these
+// are 12 ports (deck1_L ... deck4_R, aux_L/R, phones_L/R), otherwise a
+// regular audio device is used.
 class MainComponent  : public juce::Component,
 					   public juce::AudioSource,
 					   public juce::DragAndDropContainer,
@@ -51,7 +52,6 @@ private:
 	static constexpr int numDecks = 2;
 	static constexpr int numBuses = OutputMeters::numBuses;
 	static constexpr int numOutputChannels = OutputMeters::numChannels;
-	static constexpr int auxBus = numBuses - 1;
 
 	void loadSet (const StemSet& set, int deckIndex);
 	void startAnalysis (const StemSet& set, int deckIndex);
@@ -85,10 +85,11 @@ private:
 	StemDeckPlayer playerA { formatManager }, playerB { formatManager };
 	std::array<StemDeckPlayer*, numDecks> players { &playerA, &playerB };
 	std::array<juce::AudioBuffer<float>, numDecks> deckBuffers; // 8 channels each (stem pairs)
-	juce::AudioBuffer<float> busBuffer;                            // 10 channels (5 stereo buses)
+	juce::AudioBuffer<float> busBuffer;                            // 12 channels (6 stereo buses)
 
-	// 0 = stem on its main bus, 1 = on aux; ramped so switching doesn't click.
-	std::array<std::array<juce::SmoothedValue<float>, StemSet::numStems>, numDecks> auxAmounts;
+	// Stem -> bus gains (switch x fader, Buses.h); ramped so switching and
+	// fader moves don't click.
+	std::array<std::array<std::array<juce::SmoothedValue<float>, buses::count>, StemSet::numStems>, numDecks> routeGains;
 	std::array<std::atomic<float>, numOutputChannels> outputPeaks {};
 
 	StemThumbnails thumbsA { formatManager, thumbCache }, thumbsB { formatManager, thumbCache };

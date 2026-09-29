@@ -67,18 +67,28 @@ public:
 	void setStemMuted (int stem, bool muted);
 	bool isStemMuted (int stem) const { return stemMuted[(size_t) stem].load(); }
 
-	// Routing only, applied by the mixer: the stem goes to the aux bus instead of its main bus.
-	void setStemToAux (int stem, bool toAux) { stemToAux[(size_t) stem] = toAux; }
-	bool isStemToAux (int stem) const { return stemToAux[(size_t) stem].load(); }
+	// Routing only, applied by the mixer (Buses.h): which buses a stem is on,
+	// any number of them, and whether the whole deck goes to PHONES.
+	void setStemOnBus (int stem, int bus, bool on)
+	{
+		const auto bit = 1u << bus;
+		if (on) stemBuses[(size_t) stem] |= bit;
+		else    stemBuses[(size_t) stem] &= ~bit;
+	}
+	bool isStemOnBus (int stem, int bus) const { return (stemBuses[(size_t) stem].load() >> bus) & 1u; }
+	void setDeckPhones (bool on) { deckPhones = on; }
+	bool isDeckPhones() const { return deckPhones.load(); }
 
-	// Channel fader, applied on top of the per-stem gains.
+	// Channel fader. Not applied here: the mixer puts it on the program buses
+	// and leaves PHONES pre fader. The stem output is after knob and mute.
 	void setDeckGain (float gain) { deckGain = gain; }
+	float getDeckGain() const { return deckGain.load(); }
 
 	// Only stored here so every view can draw it; reset to 0 on load.
 	void setCuePoint (double seconds) { cuePoint = seconds; }
 	double getCuePoint() const { return cuePoint.load(); }
 
-	// Peak level after gain since the last call, for metering.
+	// Peak level after knob, mute and fader since the last call, for metering.
 	float popStemPeak (int stem);
 
 	// AudioSource: the buffer must have at least numOutputChannels channels.
@@ -141,7 +151,8 @@ private:
 	std::atomic<double> cuePoint { 0.0 };
 	std::array<std::atomic<float>, numStems> stemGain;
 	std::array<std::atomic<bool>, numStems> stemMuted;
-	std::array<std::atomic<bool>, numStems> stemToAux;
+	std::array<std::atomic<unsigned>, numStems> stemBuses;
+	std::atomic<bool> deckPhones { false };
 	std::array<std::atomic<float>, numStems> stemPeak;
 	std::array<juce::SmoothedValue<float>, numStems> gainSmoothers;
 

@@ -6,6 +6,14 @@ namespace
 {
 	constexpr float minDb = -60.0f; // bottom of knobs and fader = silence
 
+	juce::String busName (int bus) { return juce::String (buses::name (bus)); }
+
+	// A lit bus switch: the stem's own colour on 1-4, AUX and PHONES their own.
+	juce::Colour busColour (int bus, int stem)
+	{
+		return bus == buses::aux ? Theme::aux : bus == buses::phones ? Theme::cue : Theme::stem (stem);
+	}
+
 	juce::String dbText (double db)
 	{
 		return db <= minDb ? juce::String ("-inf dB") : juce::String (db, 1) + " dB";
@@ -72,7 +80,7 @@ void OutputMeters::paint (juce::Graphics& g)
 		const auto right = meters[bus * 2 + 1]->getBounds();
 		const auto pair = left.getUnion (right);
 
-		g.setColour (bus == numBuses - 1 ? Theme::aux : Theme::text);
+		g.setColour (bus < buses::aux ? Theme::text : busColour (bus, 0));
 		g.drawText (busName (bus), pair.withY (labelArea.getY()).withHeight (14).expanded (6, 0), juce::Justification::centred);
 		g.setColour (Theme::textDim);
 		g.drawText ("L", left.withY (labelArea.getY() + 14).withHeight (12), juce::Justification::centred);
@@ -125,13 +133,18 @@ ChannelStrip::ChannelStrip (StemDeckPlayer& p, int index) : player (p), deckInde
 		mute->setTooltip ("Stem stumm");
 		addAndMakeVisible (mute);
 
-		auto* aux = auxButtons.add (new juce::TextButton ("AUX"));
-		aux->setClickingTogglesState (true);
-		aux->setColour (juce::TextButton::buttonOnColourId, Theme::aux);
-		aux->setMouseClickGrabsKeyboardFocus (false);
-		aux->onClick = [this, s, aux] { player.setStemToAux (s, aux->getToggleState()); };
-		aux->setTooltip ("Stem vom Main-Bus nehmen und auf AUX schicken (post Fader)");
-		addAndMakeVisible (aux);
+		for (int bus = 0; bus < buses::count; ++bus)
+		{
+			auto* button = busButtons.add (new juce::TextButton (busName (bus)));
+			button->setClickingTogglesState (true);
+			button->setToggleState (player.isStemOnBus (s, bus), juce::dontSendNotification);
+			button->setColour (juce::TextButton::buttonOnColourId, busColour (bus, s));
+			button->setMouseClickGrabsKeyboardFocus (false);
+			button->onClick = [this, s, bus, button] { player.setStemOnBus (s, bus, button->getToggleState()); };
+			button->setTooltip (bus == buses::phones ? juce::String ("Stem auf PHONES (pre Fader)")
+													 : "Stem auf Bus " + busName (bus) + " (post Fader)");
+			addAndMakeVisible (button);
+		}
 
 		auto* label = stemLabels.add (new juce::Label ({}, "Stem " + juce::String (s + 1)));
 		label->setFont (juce::FontOptions (11.0f, juce::Font::bold));
@@ -155,6 +168,13 @@ ChannelStrip::ChannelStrip (StemDeckPlayer& p, int index) : player (p), deckInde
 	};
 	addAndMakeVisible (fader);
 	addAndMakeVisible (meter);
+
+	phonesButton.setClickingTogglesState (true);
+	phonesButton.setColour (juce::TextButton::buttonOnColourId, busColour (buses::phones, 0));
+	phonesButton.setMouseClickGrabsKeyboardFocus (false);
+	phonesButton.onClick = [this] { player.setDeckPhones (phonesButton.getToggleState()); };
+	phonesButton.setTooltip ("Ganzes Deck auf PHONES (pre Fader)");
+	addAndMakeVisible (phonesButton);
 }
 
 void ChannelStrip::setStemNames (const std::array<juce::String, StemSet::numStems>& names)
@@ -210,12 +230,21 @@ void ChannelStrip::resized()
 		knobs[s]->setBounds (row.removeFromLeft (rowHeight));
 		row.removeFromLeft (4);
 		stemLabels[s]->setBounds (row.removeFromTop (row.getHeight() / 2));
-		muteButtons[s]->setBounds (row.removeFromLeft (28).reduced (0, 2));
+		muteButtons[s]->setBounds (row.removeFromLeft (24).reduced (0, 2));
 		row.removeFromLeft (4);
-		auxButtons[s]->setBounds (row.removeFromLeft (38).reduced (0, 2));
+
+		// The six bus switches share what is left; AUX needs a bit more.
+		const auto unit = row.getWidth() / (buses::count + 1);
+		for (int bus = 0; bus < buses::count; ++bus)
+		{
+			const auto width = bus == buses::aux ? unit * 2 : unit;
+			busButtons[s * buses::count + bus]->setBounds (row.removeFromLeft (width).reduced (1, 2));
+		}
 	}
 
 	area.removeFromTop (8);
+	phonesButton.setBounds (area.removeFromBottom (24).reduced (0, 1));
+	area.removeFromBottom (4);
 	meter.setBounds (area.removeFromRight (10).reduced (0, 4));
 	area.removeFromRight (4);
 	fader.setBounds (area);
@@ -246,7 +275,7 @@ void MixerPanel::resized()
 {
 	auto area = getLocalBounds().reduced (8);
 	const auto gap = 8;
-	const auto metersWidth = 120;
+	const auto metersWidth = 150;
 	const auto width = (area.getWidth() - metersWidth - 2 * gap) / 2;
 	stripA.setBounds (area.removeFromLeft (width));
 	stripB.setBounds (area.removeFromRight (width));

@@ -1,6 +1,7 @@
 find_package(GTest REQUIRED)
 add_executable(stemdeck-tests
     Smoke.cpp
+    Buses.cpp
     ProLinkPackets.cpp
     ${CMAKE_SOURCE_DIR}/Source/ProLinkPackets.cpp
     PioneerClock.cpp

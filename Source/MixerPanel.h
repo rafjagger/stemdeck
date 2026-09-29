@@ -2,6 +2,7 @@
 
 #include <JuceHeader.h>
 #include "StemDeckPlayer.h"
+#include "Buses.h"
 
 // Vertical peak meter fed from a player's stem peaks.
 class LevelMeter : public juce::Component
@@ -15,17 +16,17 @@ private:
 };
 
 //==============================================================================
-// Meters for all output channels: buses 1-4 and aux, each L/R.
+// Meters for all output channels: buses 1-4, AUX and PHONES, each L/R.
 class OutputMeters : public juce::Component
 {
 public:
-	static constexpr int numBuses = 5;
+	static constexpr int numBuses = buses::count;
 	static constexpr int numChannels = numBuses * 2;
 
 	OutputMeters();
 
 	void setLevel (int channel, float peak) { meters[channel]->setLevel (peak); }
-	static juce::String busName (int bus) { return bus < numBuses - 1 ? juce::String (bus + 1) : juce::String ("AUX"); }
+	static juce::String busName (int bus) { return juce::String (buses::name (bus)); }
 
 	void paint (juce::Graphics& g) override;
 	void resized() override;
@@ -36,9 +37,9 @@ private:
 };
 
 //==============================================================================
-// Channel strip of one deck: a knob per stem (with mute and aux send) above
-// the channel fader. AUX takes the stem off its main bus and sends it,
-// post fader, to the aux bus instead.
+// Channel strip of one deck: a knob per stem, with mute and one switch per
+// bus (1-4, AUX, PH -- any number at once, Buses.h), above the channel fader
+// and the deck's PHONES button (the whole deck to PHONES, pre fader).
 class ChannelStrip : public juce::Component
 {
 public:
@@ -56,7 +57,8 @@ private:
 	const int deckIndex;
 
 	juce::OwnedArray<juce::Slider> knobs;
-	juce::OwnedArray<juce::TextButton> muteButtons, auxButtons;
+	juce::OwnedArray<juce::TextButton> muteButtons, busButtons;   // busButtons: stem * buses::count + bus
+	juce::TextButton phonesButton { "PHONES" };
 	juce::OwnedArray<juce::Label> stemLabels;
 	juce::Slider fader { juce::Slider::LinearVertical, juce::Slider::NoTextBox };
 	LevelMeter meter;

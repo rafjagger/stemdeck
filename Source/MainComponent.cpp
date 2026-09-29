@@ -398,17 +398,17 @@ void MainComponent::askTargetFolder (const juce::Array<juce::File>& files, const
 {
 	const auto count = files.size() == 1 ? files.getFirst().getFileNameWithoutExtension()
 										 : juce::String (files.size()) + " Tracks";
-	const auto library = this->library.getFolder();
+	const auto libraryFolder = library.getFolder();
 
 	stemDialog = std::make_unique<juce::AlertWindow> ("Stems erstellen",
-		count + juce::String::fromUTF8 ("\n\nZielordner in ") + library.getFullPathName()
+		count + juce::String::fromUTF8 ("\n\nZielordner in ") + libraryFolder.getFullPathName()
 			  + juce::String::fromUTF8 (":\n(Artist/Album \xe2\x80\x93 leer: direkt in den Library-Ordner)"),
 		juce::MessageBoxIconType::NoIcon, this);
 	stemDialog->addTextEditor ("folder", preset, "Zielordner");
 	stemDialog->addButton ("Erstellen", 1, juce::KeyPress (juce::KeyPress::returnKey));
 	stemDialog->addButton (juce::String::fromUTF8 ("Durchsuchen\xe2\x80\xa6"), 2);
 	stemDialog->addButton ("Abbrechen", 0, juce::KeyPress (juce::KeyPress::escapeKey));
-	stemDialog->enterModalState (true, juce::ModalCallbackFunction::create ([this, files, library] (int result)
+	stemDialog->enterModalState (true, juce::ModalCallbackFunction::create ([this, files, libraryFolder] (int result)
 	{
 		const auto typed = stemDialog->getTextEditorContents ("folder").trim();
 		stemDialog.reset();
@@ -421,21 +421,21 @@ void MainComponent::askTargetFolder (const juce::Array<juce::File>& files, const
 		}
 		else if (result == 2)
 		{
-			const auto start = library.getChildFile (juce::String (sanitiseFolder (typed.toStdString())));
-			folderChooser = std::make_unique<juce::FileChooser> ("Zielordner", start.isDirectory() ? start : library);
+			const auto start = libraryFolder.getChildFile (juce::String (sanitiseFolder (typed.toStdString())));
+			folderChooser = std::make_unique<juce::FileChooser> ("Zielordner", start.isDirectory() ? start : libraryFolder);
 			folderChooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories,
-				[this, files, library, typed] (const juce::FileChooser& fc)
+				[this, files, libraryFolder, typed] (const juce::FileChooser& fc)
 				{
 					const auto chosen = fc.getResult();
 					if (chosen == juce::File())
 						return askTargetFolder (files, typed);   // closed: back to the question
-					if (chosen != library && ! chosen.isAChildOf (library))
+					if (chosen != libraryFolder && ! chosen.isAChildOf (libraryFolder))
 					{
 						juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Stems erstellen",
-							juce::String::fromUTF8 ("Der Zielordner muss im Library-Ordner liegen:\n") + library.getFullPathName());
+							juce::String::fromUTF8 ("Der Zielordner muss im Library-Ordner liegen:\n") + libraryFolder.getFullPathName());
 						return askTargetFolder (files, typed);
 					}
-					askTargetFolder (files, chosen == library ? juce::String() : chosen.getRelativePathFrom (library));
+					askTargetFolder (files, chosen == libraryFolder ? juce::String() : chosen.getRelativePathFrom (libraryFolder));
 				});
 		}
 	}));
@@ -533,7 +533,7 @@ void MainComponent::initialiseAudio()
 
 	for (int bus = 0; bus < numBuses; ++bus)
 	{
-		const auto name = bus == auxBus ? juce::String ("aux") : "deck" + juce::String (bus + 1);
+		const auto name = juce::String (buses::portName (bus));
 		portNames.addArray ({ name + "_L", name + "_R" });
 	}
 
@@ -672,12 +672,14 @@ void MainComponent::prepareToPlay (int samplesPerBlockExpected, double sampleRat
 		deckBuffers[(size_t) d].setSize (StemDeckPlayer::numOutputChannels, maxBlock);
 		players[(size_t) d]->prepareToPlay (samplesPerBlockExpected, sampleRate);
 
+		const auto& player = *players[(size_t) d];
 		for (int s = 0; s < StemSet::numStems; ++s)
-		{
-			auto& amount = auxAmounts[(size_t) d][(size_t) s];
-			amount.reset (sampleRate, 0.01);
-			amount.setCurrentAndTargetValue (players[(size_t) d]->isStemToAux (s) ? 1.0f : 0.0f);
-		}
+			for (int bus = 0; bus < buses::count; ++bus)
+			{
+				auto& route = routeGains[(size_t) d][(size_t) s][(size_t) bus];
+				route.reset (sampleRate, 0.01);
+				route.setCurrentAndTargetValue (buses::gain (bus, player.isStemOnBus (s, bus), player.isDeckPhones(), player.getDeckGain()));
+			}
 	}
 }
 
@@ -713,22 +715,24 @@ void MainComponent::getNextAudioBlock (const juce::AudioSourceChannelInfo& buffe
 
 		player.getNextAudioBlock (juce::AudioSourceChannelInfo (&deckBuffer, 0, numSamples));
 
-		// Stem N -> bus N, or -> aux bus (post fader), crossfaded over 10 ms on change.
+		// Each stem onto every bus it is switched to: post fader on 1-4 and
+		// AUX, pre fader on PHONES; ramped over 10 ms on any change.
+		const auto fader = player.getDeckGain();
+		const auto phones = player.isDeckPhones();
 		for (int s = 0; s < StemSet::numStems; ++s)
-		{
-			auto& amount = auxAmounts[(size_t) d][(size_t) s];
-			amount.setTargetValue (player.isStemToAux (s) ? 1.0f : 0.0f);
-			const auto from = amount.getCurrentValue();
-			amount.skip (numSamples);
-			const auto to = amount.getCurrentValue();
-
-			for (int c = 0; c < 2; ++c)
+			for (int bus = 0; bus < buses::count; ++bus)
 			{
-				const auto* source = deckBuffer.getReadPointer (s * 2 + c);
-				busBuffer.addFromWithRamp (s * 2 + c, 0, source, numSamples, 1.0f - from, 1.0f - to);
-				busBuffer.addFromWithRamp (auxBus * 2 + c, 0, source, numSamples, from, to);
+				auto& route = routeGains[(size_t) d][(size_t) s][(size_t) bus];
+				route.setTargetValue (buses::gain (bus, player.isStemOnBus (s, bus), phones, fader));
+				const auto from = route.getCurrentValue();
+				route.skip (numSamples);
+				const auto to = route.getCurrentValue();
+				if (from == 0.0f && to == 0.0f)
+					continue;
+
+				for (int c = 0; c < 2; ++c)
+					busBuffer.addFromWithRamp (bus * 2 + c, 0, deckBuffer.getReadPointer (s * 2 + c), numSamples, from, to);
 			}
-		}
 	}
 
 	for (int ch = 0; ch < numOutputChannels; ++ch)

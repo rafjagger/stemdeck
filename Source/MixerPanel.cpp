@@ -68,10 +68,6 @@ void OutputMeters::paint (juce::Graphics& g)
 	g.setColour (Theme::panelRaised);
 	g.fillRoundedRectangle (getLocalBounds().toFloat(), 6.0f);
 
-	g.setColour (Theme::textDim);
-	g.setFont (juce::FontOptions (12.0f, juce::Font::bold));
-	g.drawText ("MAIN", getLocalBounds().removeFromTop (24), juce::Justification::centred);
-
 	g.setFont (juce::FontOptions (10.0f, juce::Font::bold));
 
 	for (int bus = 0; bus < numBuses; ++bus)
@@ -90,9 +86,9 @@ void OutputMeters::paint (juce::Graphics& g)
 
 void OutputMeters::resized()
 {
-	auto area = getLocalBounds().reduced (6);
-	area.removeFromTop (22);
-	labelArea = area.removeFromBottom (26);
+	// Bars top-aligned with the faders; captions where the PHONES buttons are.
+	auto area = getLocalBounds().withTrimmedLeft (4).withTrimmedRight (4);
+	labelArea = area.removeFromBottom (28);
 
 	const auto pairGap = 5;
 	const auto meterWidth = (area.getWidth() - pairGap * (numBuses - 1)) / numChannels;
@@ -214,6 +210,14 @@ void ChannelStrip::paint (juce::Graphics& g)
 	g.setColour (juce::Colours::black);
 	g.setFont (juce::FontOptions (14.0f, juce::Font::bold));
 	g.drawText ("DECK " + Theme::deckName (deckIndex), header, juce::Justification::centred);
+
+	for (const auto& frame : stemFrames)
+	{
+		g.setColour (Theme::panel);
+		g.fillRoundedRectangle (frame.toFloat(), 4.0f);
+		g.setColour (Theme::outline);
+		g.drawRoundedRectangle (frame.toFloat().reduced (0.5f), 4.0f, 1.0f);
+	}
 }
 
 void ChannelStrip::resized()
@@ -221,16 +225,21 @@ void ChannelStrip::resized()
 	auto area = getLocalBounds().reduced (8);
 	area.removeFromTop (24);
 
-	// Four stem rows: [knob][name / mute][bus switches 1 2 3 / 4 5 6, right-aligned]
-	const auto rowHeight = 56;
+	// Four stem rows, each in a frame: [knob][name / mute][bus switches 1 2 3 / 4 5 6, right-aligned]
+	const auto rowHeight = 52;
+	const auto rowGap = 6;
 	const auto columns = 3;
 	const auto rows = buses::count / columns;
 	const auto switchSize = rowHeight / rows;   // square, as big as the row allows
 
 	for (int s = 0; s < StemSet::numStems; ++s)
 	{
-		auto row = area.removeFromTop (rowHeight);
-		knobs[s]->setBounds (row.removeFromLeft (rowHeight - 6).withSizeKeepingCentre (rowHeight - 6, rowHeight - 6));
+		if (s > 0)
+			area.removeFromTop (rowGap);
+		stemFrames[(size_t) s] = area.removeFromTop (rowHeight + 8);
+		auto row = stemFrames[(size_t) s].reduced (4);
+
+		knobs[s]->setBounds (row.removeFromLeft (rowHeight).withSizeKeepingCentre (rowHeight - 4, rowHeight - 4));
 		row.removeFromLeft (4);
 
 		auto grid = row.removeFromRight (switchSize * columns);
@@ -244,7 +253,10 @@ void ChannelStrip::resized()
 		muteButtons[s]->setBounds (row.removeFromLeft (28).reduced (0, 2));
 	}
 
+	// Below: fader, deck meter and PHONES; the output meters take the side
+	// towards the middle (deck A: right, deck B: left).
 	area.removeFromTop (8);
+	meterZone = deckIndex == 0 ? area.removeFromRight (meterReserve) : area.removeFromLeft (meterReserve);
 	phonesButton.setBounds (area.removeFromBottom (24).reduced (0, 1));
 	area.removeFromBottom (4);
 	meter.setBounds (area.removeFromRight (10).reduced (0, 4));
@@ -257,8 +269,8 @@ MixerPanel::MixerPanel (StemDeckPlayer& playerA, StemDeckPlayer& playerB)
 	: stripA (playerA, 0), stripB (playerB, 1)
 {
 	addAndMakeVisible (stripA);
-	addAndMakeVisible (outputMeters);
 	addAndMakeVisible (stripB);
+	addAndMakeVisible (outputMeters);   // last: over the strips' inner corners
 }
 
 void MixerPanel::refresh()
@@ -277,9 +289,16 @@ void MixerPanel::resized()
 {
 	auto area = getLocalBounds().reduced (8);
 	const auto gap = 8;
-	const auto metersWidth = 150;
-	const auto width = (area.getWidth() - metersWidth - 2 * gap) / 2;
+	const auto metersWidth = 170;
+
+	// The strips meet in the middle; below the stems, each leaves half the
+	// output meters' width free on its inner side, and the meters sit there,
+	// as tall as the faders.
+	const auto width = (area.getWidth() - gap) / 2;
+	for (auto* strip : { &stripA, &stripB })
+		strip->setMeterReserve ((metersWidth - gap) / 2);
 	stripA.setBounds (area.removeFromLeft (width));
 	stripB.setBounds (area.removeFromRight (width));
-	outputMeters.setBounds (area.reduced (gap, 0));
+	outputMeters.setBounds (stripA.getMeterZone().translated (stripA.getX(), stripA.getY())
+								.getUnion (stripB.getMeterZone().translated (stripB.getX(), stripB.getY())));
 }

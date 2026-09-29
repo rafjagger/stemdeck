@@ -777,13 +777,13 @@ void MainComponent::resized()
 	deviceStatus.setBounds (topBar);
 	area.removeFromTop (4);
 
-	const auto waveHeight = juce::jlimit (90, 180, getHeight() / 7);
+	const auto waveHeight = juce::jlimit (70, 130, getHeight() / 10);
 	waveA.setBounds (area.removeFromTop (waveHeight));
 	area.removeFromTop (3);
 	waveB.setBounds (area.removeFromTop (waveHeight));
 	area.removeFromTop (6);
 
-	auto middle = area.removeFromTop (juce::jmin (380, area.getHeight() - 150));
+	auto middle = area.removeFromTop (juce::jmin (460, area.getHeight() - 150));
 	const auto mixerWidth = juce::jlimit (460, 560, getWidth() / 3);
 	const auto deckWidth = (middle.getWidth() - mixerWidth) / 2;
 	deckA.setBounds (middle.removeFromLeft (deckWidth));

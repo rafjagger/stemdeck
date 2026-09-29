@@ -1,0 +1,6 @@
+build/
+stems/
+.idea/
+.vscode/
+*.user
+playlist.csv

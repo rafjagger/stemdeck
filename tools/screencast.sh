@@ -22,6 +22,7 @@
 #
 # PREVIEW=240x320: statt des ffplay-Fensters rohe BGRA-Bilder dieser Größe
 # (15 fps) auf stdout -- so zeigt StemDeck den Screencast in seinem Fenster.
+# Dazu auf Deskriptor 3 der Ton, nur zum Messen: 8 kHz, Stereo, s16le.
 #
 # Das Live-Fenster darf man schließen, die Aufnahme läuft weiter. Strg+C
 # beendet sie; die .ts-Datei wird dann zu .mp4 umverpackt (verlustfrei).
@@ -61,9 +62,10 @@ if [[ -n "${PREVIEW:-}" ]]; then
     ssh -o BatchMode=yes "$HOST" "bash -c $(printf '%q' "$REMOTE")" 2> >(grep -v '^Jack:' >&2) \
         | tee -p "$OUT" \
         | ffmpeg -hide_banner -loglevel error -nostdin -fflags nobuffer -flags low_delay \
-                 -probesize 500000 -analyzeduration 500000 -i - -an \
-                 -vf "fps=15,scale=$W:$H:force_original_aspect_ratio=decrease,pad=$W:$H:(ow-iw)/2:(oh-ih)/2" \
-                 -pix_fmt bgra -f rawvideo - \
+                 -probesize 4000000 -analyzeduration 2000000 -i - \
+                 -map 0:v -vf "fps=15,scale=$W:$H:force_original_aspect_ratio=decrease,pad=$W:$H:(ow-iw)/2:(oh-ih)/2" \
+                 -pix_fmt bgra -f rawvideo pipe:1 \
+                 -map 0:a -ac 2 -ar 8000 -f s16le pipe:3 \
         || true
 elif [[ -n "${NOVIEW:-}" ]]; then
     ssh -o BatchMode=yes "$HOST" "bash -c $(printf '%q' "$REMOTE")" 2> >(grep -v '^Jack:' >&2) > "$OUT" || true

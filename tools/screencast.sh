@@ -3,6 +3,7 @@
 # in recordings/ auf und zeigt ihn live an.
 #
 #   tools/screencast.sh [host]          Standard: a3nuc1_mango
+#   tools/screencast.sh local           dieser Rechner selbst, ohne ssh
 #
 # Drüben: der X-Bildschirm :0 (x11grab), H.264 per x264 auf der CPU, der Ton
 # per JACK: ein Client "screencast" mit input_1 / input_2. Die Eingänge werden
@@ -33,6 +34,9 @@ set -euo pipefail
 cd "$(dirname "$(readlink -f "$0")")/.."
 
 HOST="${1:-a3nuc1_mango}"
+# Die Kerne für den Encoder. Drüben CPU 0; hier nie CPU 1 -- da sitzt
+# StemDeck's Audio-Thread -- aber genug für diesen breiten Bildschirm.
+if [[ "$HOST" == local ]]; then CPUS="${CPUS:-0,2-5}"; else CPUS="${CPUS:-0}"; fi
 FPS="${FPS:-30}"
 CRF="${CRF:-20}"
 DURATION="${DURATION:-}"
@@ -46,13 +50,23 @@ read -r -d '' REMOTE <<EOF || true
 set -e
 export DISPLAY=:0
 SIZE=\$(xdpyinfo | awk '/dimensions:/ { print \$2 }')
-exec nice -n 19 taskset -c 0 ffmpeg -hide_banner -loglevel warning -nostdin \\
+exec nice -n 19 taskset -c $CPUS ffmpeg -hide_banner -loglevel warning -nostdin \\
     -thread_queue_size 1024 -f x11grab -framerate $FPS -video_size "\$SIZE" -draw_mouse 1 -i :0 \\
     -thread_queue_size 1024 -f jack -channels 2 -i screencast \\
     -c:v libx264 -preset veryfast -tune zerolatency -crf $CRF -pix_fmt yuv420p -g $((FPS * 2)) \\
     -c:a aac -b:a 256k \\
     $LIMIT -f mpegts -
 EOF
+
+# Der Stream: drüben per ssh, oder hier direkt.
+stream()
+{
+    if [[ "$HOST" == local ]]; then
+        bash -c "$REMOTE"
+    else
+        ssh -o BatchMode=yes "$HOST" "bash -c $(printf '%q' "$REMOTE")"
+    fi
+}
 
 if [[ -n "${NOREC:-}" ]]; then
     OUT=/dev/null   # nur ansehen: tee schreibt ins Leere, nichts wird umverpackt
@@ -66,7 +80,7 @@ trap ':' INT
 
 if [[ -n "${PREVIEW:-}" ]]; then
     W="${PREVIEW%x*}"; H="${PREVIEW#*x}"
-    ssh -o BatchMode=yes "$HOST" "bash -c $(printf '%q' "$REMOTE")" 2> >(grep -v '^Jack:' >&2) \
+    stream 2> >(grep -v '^Jack:' >&2) \
         | tee -p "$OUT" \
         | ffmpeg -hide_banner -loglevel error -nostdin -fflags nobuffer -flags low_delay \
                  -probesize 4000000 -analyzeduration 2000000 -i - \
@@ -75,10 +89,10 @@ if [[ -n "${PREVIEW:-}" ]]; then
                  -map 0:a -ac 2 -ar 8000 -f s16le pipe:3 \
         || true
 elif [[ -n "${NOVIEW:-}" ]]; then
-    ssh -o BatchMode=yes "$HOST" "bash -c $(printf '%q' "$REMOTE")" 2> >(grep -v '^Jack:' >&2) > "$OUT" || true
+    stream 2> >(grep -v '^Jack:' >&2) > "$OUT" || true
 else
     # tee -p: wird das Live-Fenster geschlossen, schreibt tee trotzdem weiter.
-    ssh -o BatchMode=yes "$HOST" "bash -c $(printf '%q' "$REMOTE")" 2> >(grep -v '^Jack:' >&2) \
+    stream 2> >(grep -v '^Jack:' >&2) \
         | tee -p "$OUT" \
         | ffplay -hide_banner -loglevel error -an -fflags nobuffer -flags low_delay -framedrop \
                  -window_title "Screencast $HOST" - \

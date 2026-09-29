@@ -87,6 +87,14 @@ MainComponent::MainComponent()
 	addAndMakeVisible (castRecordButton);
 	addAndMakeVisible (castMeterL);
 	addAndMakeVisible (castMeterR);
+
+	screenButton.setMouseClickGrabsKeyboardFocus (false);
+	screenButton.setColour (juce::TextButton::buttonOnColourId, Theme::mute);
+	screenButton.setTooltip (juce::String::fromUTF8 ("Diesen Bildschirm aufnehmen, nach recordings/ \xe2\x80\x93 den Ton an screencast:input_1/2 hier selbst verbinden"));
+	screenButton.onClick = [this] { toggleScreenRecording(); };
+	addAndMakeVisible (screenButton);
+	addAndMakeVisible (screenMeterL);
+	addAndMakeVisible (screenMeterR);
 	addChildComponent (castView);
 
 	recButton.setMouseClickGrabsKeyboardFocus (false);
@@ -737,8 +745,34 @@ void MainComponent::toggleScreencast()
 						   + juce::String::fromUTF8 (" \xe2\x80\x93 den Ton dr\xc3\xbc" "ben selbst an screencast:input_1/2 verbinden"));
 }
 
+void MainComponent::toggleScreenRecording()
+{
+	if (screenRecording.isRunning())
+	{
+		screenRecording.stop();
+		return;
+	}
+	const auto script = juce::File::getCurrentWorkingDirectory().getChildFile ("tools/screencast.sh");
+	if (const auto error = screenRecording.start (script, "local", true); error.isNotEmpty())
+		juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Bildschirmaufnahme", error);
+}
+
 void MainComponent::updateRecorder()
 {
+	screenMeterL.setLevel (screenRecording.popPeak (0));
+	screenMeterR.setLevel (screenRecording.popPeak (1));
+	const auto screening = screenRecording.isRunning();
+	screenButton.setToggleState (screening, juce::dontSendNotification);
+	if (screening)
+	{
+		const auto seconds = (int) screenRecording.getSeconds();
+		screenButton.setButtonText (juce::String::fromUTF8 ("\xe2\x97\x8f SCREEN ") + juce::String (seconds / 60) + ":" + juce::String (seconds % 60).paddedLeft ('0', 2));
+	}
+	else
+	{
+		screenButton.setButtonText ("SCREEN");
+	}
+
 	const auto casting = screencast.isRunning();
 	castButton.setToggleState (casting, juce::dontSendNotification);
 
@@ -1304,6 +1338,12 @@ void MainComponent::resized()
 	castRecordButton.setBounds (topBar.removeFromRight (30));
 	topBar.removeFromRight (2);
 	castButton.setBounds (topBar.removeFromRight (100));
+	topBar.removeFromRight (6);
+	screenMeterR.setBounds (topBar.removeFromRight (6).reduced (0, 3));
+	topBar.removeFromRight (2);
+	screenMeterL.setBounds (topBar.removeFromRight (6).reduced (0, 3));
+	topBar.removeFromRight (4);
+	screenButton.setBounds (topBar.removeFromRight (100));
 	pioPlayer.setBounds (topBar.removeFromRight (90));
 	pioStatus.setBounds (topBar.removeFromRight (220));
 	deviceStatus.setBounds (topBar);

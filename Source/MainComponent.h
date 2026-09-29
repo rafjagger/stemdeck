@@ -222,6 +222,14 @@ private:
 		}
 	};
 	LevelMeter castMeterL, castMeterR;   // always there, beside CAST
+
+	// SCREEN: the same for this machine's own screen (tools/screencast.sh
+	// local), always recorded, no picture; its JACK client "screencast"
+	// here is connected by hand like the other.
+	Screencast screenRecording;
+	juce::TextButton screenButton { "SCREEN" };
+	LevelMeter screenMeterL, screenMeterR;
+	void toggleScreenRecording();
 	CastView castView;
 	int castFramesShown = -1;
 	bool castRecordingNow = false;   // how the running cast was started

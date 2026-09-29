@@ -61,6 +61,49 @@ TEST (FollowLeader, FarOffJumpsIntoPhase)
 	EXPECT_DOUBLE_EQ (r.nudge, 1.0);
 }
 
+TEST (FollowLeader, WithBarsTheDownbeatsLineUp)
+{
+	auto in = playingAt (120.0, 120.0);
+	in.alignBars = true;
+	in.leaderBeatPhase = 8.0;       // on a 1
+	in.followerBeatPhase = 13.0;    // on a 2: one beat ahead in the bar
+	const auto r = followLeader (in);
+	ASSERT_TRUE (r.jumpBeats.has_value());
+	EXPECT_NEAR (*r.jumpBeats, -1.0, 1e-9);
+}
+
+TEST (FollowLeader, WithBarsTheShortWayRound)
+{
+	auto in = playingAt (120.0, 120.0);
+	in.alignBars = true;
+	in.leaderBeatPhase = 8.0;       // on a 1
+	in.followerBeatPhase = 15.1;    // on a 4, a little past: 0.9 beats to the next 1
+	const auto r = followLeader (in);
+	ASSERT_TRUE (r.jumpBeats.has_value());
+	EXPECT_NEAR (*r.jumpBeats, 0.9, 1e-9);
+}
+
+TEST (FollowLeader, WithBarsInTheRightBeatItIsTheUsualNudge)
+{
+	auto in = playingAt (120.0, 120.0);
+	in.alignBars = true;
+	in.leaderBeatPhase = 5.02;
+	in.followerBeatPhase = 9.0;     // both in beat 2 of the bar, 10 ms apart
+	const auto r = followLeader (in);
+	EXPECT_FALSE (r.jumpBeats.has_value());
+	EXPECT_NEAR (r.nudge, 1.015, 1e-9);
+}
+
+TEST (FollowLeader, BarsOnlyAtTheSameTempo)
+{
+	auto in = playingAt (120.0, 120.0);
+	in.alignBars = true;
+	in.multiple = 2.0;
+	in.leaderBeatPhase = 4.0;
+	in.followerBeatPhase = 13.0;    // beats in phase, bars can't be at double tempo
+	EXPECT_FALSE (followLeader (in).jumpBeats.has_value());
+}
+
 TEST (FollowLeader, CloseIsNudged)
 {
 	auto in = playingAt (120.0, 120.0);

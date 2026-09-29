@@ -33,6 +33,20 @@ FollowResult followLeader (const FollowInput& in)
 	error -= std::round (error); // -0.5 .. 0.5 beats, positive: follower is behind
 
 	const auto beatLength = 60.0 / in.followerGridBpm;
+
+	if (in.alignBars && out.multiple == 1.0)
+	{
+		// Where each is in its bar; -2 .. 2 beats the short way round.
+		constexpr double bar = 4.0;
+		auto barError = std::fmod (leaderBeats, bar) - std::fmod (in.followerBeatPhase, bar);
+		barError -= bar * std::round (barError / bar);
+		if (std::abs (barError - error) >= 0.5)
+		{
+			out.jumpBeats = barError;   // on the wrong beat of the bar: jump to the right one
+			return out;
+		}
+	}
+
 	const auto errorSeconds = error * beatLength / in.followerEffectiveRate; // in real time
 
 	if (std::abs (errorSeconds) > 0.05)

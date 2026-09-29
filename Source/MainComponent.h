@@ -131,6 +131,11 @@ private:
 	juce::ThreadPool analysisPool { juce::ThreadPoolOptions{}.withThreadName ("Tempo analysis").withNumberOfThreads (2) };
 	std::array<int, numDecks> loadGeneration {}; // drops results for a set no longer loaded
 	std::array<juce::String, numDecks> loadedSetIds; // StemLibrary's id: the first stem's path
+	std::array<std::optional<StemSet>, numDecks> loadedSets;
+
+	// Grid Adjust on a deck (DeckPanel::GridAction): edits its grid, keeps the
+	// correction in the analysis cache (written with the session).
+	void editGrid (int deckIndex, DeckPanel::GridAction action, double seconds);
 
 	// The deck with SYNC on follows the other one's tempo and beat phase.
 	int syncFollower = -1;

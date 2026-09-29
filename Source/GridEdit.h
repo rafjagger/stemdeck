@@ -1,0 +1,35 @@
+#pragma once
+
+// Correcting a beat grid by hand, as a CDJ-3000's Grid Adjust mode does.
+// Pure: no JUCE, testable. A grid is beats at firstBeat + n * 60 / bpm, and
+// the bar counts from firstBeat: that beat is the downbeat (1 of 4).
+//
+// Every edit keeps the result's firstBeat in [0, one bar), moved by whole
+// bars, so the downbeat it defines stays where it is.
+namespace GridEdit
+{
+	constexpr int beatsPerBar = 4;
+
+	struct Grid
+	{
+		double bpm = 0.0;
+		double firstBeat = 0.0;
+	};
+
+	// firstBeat moved by whole bars into [0, one bar).
+	Grid normalised (Grid grid);
+
+	// The whole grid later (+) or earlier (-) by `seconds`: the jog wheel,
+	// the mouse wheel, and <1/2 1/2> (half a beat).
+	Grid shift (Grid grid, double seconds);
+	Grid shiftHalfBeat (Grid grid, bool forwards);
+
+	// SNAP GRID (CUE): the downbeat onto the cue point.
+	Grid snapToCue (Grid grid, double cueSeconds);
+
+	// SHIFT GRID: the grid moved so that, at `position`, this deck is at the
+	// same point in its beat as the leader (`leaderBeatPhase`, the leader's
+	// position in beats) -- what was aligned by ear with the jog wheel goes
+	// into the grid. The smaller way round: at most half a beat.
+	Grid shiftToPhase (Grid grid, double position, double leaderBeatPhase);
+}

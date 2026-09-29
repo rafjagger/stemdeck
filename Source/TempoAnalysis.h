@@ -38,12 +38,22 @@ class AnalysisCache
 public:
 	explicit AnalysisCache (const juce::File& file);
 
+	// The grid to use: corrected by hand if it was, else as analysed.
 	std::optional<BeatGrid> find (const StemSet& set) const;
-	void store (const StemSet& set, const BeatGrid& grid);
+	void store (const StemSet& set, const BeatGrid& grid);   // the analysis
+
+	// A grid corrected by hand (Grid Adjust), kept beside the analysed one;
+	// clearing it brings the analysed one back (RESET).
+	void storeCorrected (const StemSet& set, const BeatGrid& grid);
+	void clearCorrected (const StemSet& set);
+	std::optional<BeatGrid> findAnalysed (const StemSet& set) const;
+	// Corrections are many small steps (the jog): kept in memory, written here.
+	void flush();
 
 private:
 	static juce::String keyFor (const StemSet& set);
 
 	juce::File file;
 	std::unique_ptr<juce::XmlElement> xml;
+	bool unwritten = false;
 };

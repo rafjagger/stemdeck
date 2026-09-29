@@ -46,3 +46,9 @@ target_link_libraries(StemDeck
         juce::juce_recommended_config_flags
         juce::juce_recommended_lto_flags
         juce::juce_recommended_warning_flags)
+
+option(STEMDECK_TESTS "Build the unit tests" OFF)
+if(STEMDECK_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()

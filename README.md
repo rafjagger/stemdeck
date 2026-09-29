@@ -137,6 +137,8 @@ protocol (sysex setup, IDs, LEDs) follows Mixxx's SCS.3d mapping.
   channel faders cross (equal power). The button shows how far (`MIX 40 %`).
 - Then the old deck stops and SYNC comes off; the new track keeps the tempo the mix gave it.
 - A track without a beat grid is crossfaded over 10 s, unsynced.
+- A loop is yours: nothing is loaded onto a deck that loops, and no mix starts while the
+  playing deck loops — it waits until you turn the loop off.
 
 You can play along — change stems, routing, knobs; the Auto-DJ only moves the faders during a
 mix. Turning it off leaves everything as it is. It stays on across a restart.

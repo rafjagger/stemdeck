@@ -95,8 +95,8 @@ AutoDj::Commands AutoDj::update (const std::array<DeckView, 2>& decks)
 			}
 
 			const auto length = mixLength (playing);
-			if (playing.length - playing.position > length)
-				break;
+			if (playing.looping || playing.length - playing.position > length)
+				break;   // not yet -- or the DJ loops: the mix waits for the loop to end
 
 			bool onDownbeat = playing.gridBpm <= 0.0;
 			if (! onDownbeat)
@@ -124,6 +124,8 @@ AutoDj::Commands AutoDj::update (const std::array<DeckView, 2>& decks)
 			const auto& playing = decks[(size_t) current];
 			if (! playing.loaded)
 				break;
+			if (decks[(size_t) other].looping)
+				break;   // a loop there is the DJ's: not loaded over
 			if (remaining (playing) <= mixLength (playing) / std::max (0.01, playing.rate) + loadAheadSeconds || ! playing.playing)
 			{
 				out.load = other;

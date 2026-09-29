@@ -145,6 +145,35 @@ TEST (AutoDj, WithoutAGridItCrossfadesUnsynced)
 	EXPECT_LE (rig.decks[0].length - rig.decks[0].position, AutoDj::noGridMixSeconds + 0.1);
 }
 
+TEST (AutoDj, NothingIsLoadedOverALoop)
+{
+	Rig rig;
+	rig.dj.setEnabled (true);
+	rig.runFor (0.2);
+	rig.decks[1] = { true, false, 20.0, 240.0, 120.0, 0.5, 1.0, true };   // the DJ loops on B
+	const auto loads = rig.loads;
+	rig.runFor (240.0 - 32.0 - 20.0);
+	EXPECT_EQ (rig.loads, loads) << "B keeps its loop";
+	rig.decks[1].looping = false;
+	rig.runFor (0.2);
+	EXPECT_EQ (rig.loads, loads + 1) << "loop off: now it loads";
+}
+
+TEST (AutoDj, TheMixWaitsWhileThePlayingDeckLoops)
+{
+	Rig rig;
+	rig.dj.setEnabled (true);
+	rig.runFor (0.2);
+	rig.runFor (240.0 - 40.0);          // the next one is loaded
+	rig.decks[0].looping = true;
+	rig.runFor (20.0);
+	EXPECT_FALSE (rig.decks[1].playing) << "no mix while A loops";
+	rig.decks[0].looping = false;
+	while (! rig.decks[1].playing && rig.decks[0].playing)
+		rig.tick();
+	EXPECT_TRUE (rig.decks[1].playing) << "loop off: the mix starts";
+}
+
 TEST (AutoDj, TheFadeIsEqualPower)
 {
 	EXPECT_DOUBLE_EQ (AutoDj::fadeInDb (0.0), AutoDj::silentDb);

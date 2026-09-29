@@ -855,6 +855,7 @@ void MainComponent::runAutoDj()
 		view.gridBpm = grid.isValid() ? grid.bpm : 0.0;
 		view.firstBeat = grid.firstBeat;
 		view.rate = player.getEffectiveRate();
+		view.looping = player.hasLoop();
 	}
 
 	const auto c = autoDj.update (views);

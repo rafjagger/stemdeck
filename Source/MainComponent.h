@@ -8,6 +8,7 @@
 #include "MixerPanel.h"
 #include "Buses.h"
 #include "Session.h"
+#include "AutoDj.h"
 #include "Waveforms.h"
 #include "JackOutput.h"
 #include "Theme.h"
@@ -136,6 +137,14 @@ private:
 	// Grid Adjust on a deck (DeckPanel::GridAction): edits its grid, keeps the
 	// correction in the analysis cache (written with the session).
 	void editGrid (int deckIndex, DeckPanel::GridAction action, double seconds);
+
+	// Auto-DJ (AutoDj.h): run every tick while on; picks at random from what
+	// the library's search shows, each set once until all were played.
+	AutoDj autoDj;
+	juce::TextButton autoDjButton { "AUTO DJ" };
+	std::set<juce::String> autoDjPlayed;
+	void setAutoDj (bool on);
+	void runAutoDj();
 
 	// The deck with SYNC on follows the other one's tempo and beat phase.
 	int syncFollower = -1;

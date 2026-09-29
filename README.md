@@ -100,6 +100,23 @@ Laid out like a CDJ:
 The scrolling waveforms scroll past a fixed playhead; drag to move through the track, mouse wheel
 to zoom.
 
+### Auto-DJ
+
+**AUTO DJ** in the top bar plays on its own, track after track, mixed like a DJ would:
+
+- It picks at random from the sets the library shows — so the search box is its playlist: type
+  an artist, an album or a word and it plays from those. Each set once, until all were played.
+- With nothing playing it starts a track on deck A; a deck already playing it takes as it is.
+- Half a minute before the mix it loads the next track onto the other deck, fader down.
+- The mix starts on a downbeat, 16 bars before the end of the playing track: the new track
+  from its first downbeat, with SYNC on (tempo, beats and bars), and over those 16 bars the
+  channel faders cross (equal power). The button shows how far (`MIX 40 %`).
+- Then the old deck stops and SYNC comes off; the new track keeps the tempo the mix gave it.
+- A track without a beat grid is crossfaded over 10 s, unsynced.
+
+You can play along — change stems, routing, knobs; the Auto-DJ only moves the faders during a
+mix. Turning it off leaves everything as it is. It stays on across a restart.
+
 ### Mixer
 
 <!-- IMAGE: the mixer between the decks: both channel strips with stem knobs, M and the 2×3 bus switches 1 2 3 / 4 A P per stem, channel faders, PHONES buttons, and the output meters 1-4 / AUX / PH -->

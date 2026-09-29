@@ -3,6 +3,8 @@ add_executable(stemdeck-tests
     Smoke.cpp
     Buses.cpp
     GridEdit.cpp
+    AutoDj.cpp
+    ${CMAKE_SOURCE_DIR}/Source/AutoDj.cpp
     ${CMAKE_SOURCE_DIR}/Source/GridEdit.cpp
     ProLinkPackets.cpp
     ${CMAKE_SOURCE_DIR}/Source/ProLinkPackets.cpp

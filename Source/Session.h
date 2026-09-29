@@ -56,6 +56,7 @@ struct Session
 	std::array<DeckSession, 2> decks;
 	int masterDeck = -1;
 	bool masterTurnedOff = false;
+	bool autoDj = false;
 	LibrarySession library;
 	std::vector<QueuedStemJob> stemJobs;
 

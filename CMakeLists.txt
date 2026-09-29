@@ -42,7 +42,8 @@ target_sources(StemDeck PRIVATE
     Source/ProcessGroup.cpp
     Source/MeterBallistics.cpp
     Source/Session.cpp
-    Source/GridEdit.cpp)
+    Source/GridEdit.cpp
+    Source/AutoDj.cpp)
 
 target_compile_definitions(StemDeck PRIVATE
     JUCE_WEB_BROWSER=0

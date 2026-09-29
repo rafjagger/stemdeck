@@ -78,6 +78,13 @@ MainComponent::MainComponent()
 	deviceStatus.setColour (juce::Label::textColourId, Theme::textDim);
 	addAndMakeVisible (deviceStatus);
 
+	autoDjButton.setClickingTogglesState (true);
+	autoDjButton.setMouseClickGrabsKeyboardFocus (false);
+	autoDjButton.setColour (juce::TextButton::buttonOnColourId, Theme::play);
+	autoDjButton.setTooltip (juce::String::fromUTF8 ("Auto-DJ: spielt zuf\xc3\xa4llig aus der Library-Auswahl (Suche/Filter) und mischt taktgenau \xc3\xbc" "ber 16 Takte"));
+	autoDjButton.onClick = [this] { setAutoDj (autoDjButton.getToggleState()); };
+	addAndMakeVisible (autoDjButton);
+
 	// SYNC source: the other deck, or the Pioneer tempo master (PIO).
 	syncSourceButton.setClickingTogglesState (true);
 	syncSourceButton.setMouseClickGrabsKeyboardFocus (false);
@@ -466,6 +473,7 @@ Session MainComponent::gatherSession() const
 	}
 	session.masterDeck = masterDeck;
 	session.masterTurnedOff = masterTurnedOff;
+	session.autoDj = autoDj.isEnabled();
 	library.saveState (session.library);
 	for (const auto& job : stemCreator.pendingJobs())
 		session.stemJobs.push_back ({ juce::String (job.input), juce::String (job.folder), juce::String (job.track) });
@@ -529,6 +537,84 @@ void MainComponent::editGrid (int deckIndex, DeckPanel::GridAction action, doubl
 	analysisCache->storeCorrected (*set, edited);
 }
 
+void MainComponent::setAutoDj (bool on)
+{
+	autoDjButton.setToggleState (on, juce::dontSendNotification);
+	autoDjButton.setButtonText ("AUTO DJ");
+	autoDj.setEnabled (on);
+	if (on)
+		runAutoDj();
+}
+
+void MainComponent::runAutoDj()
+{
+	if (! autoDj.isEnabled())
+		return;
+
+	std::array<AutoDj::DeckView, numDecks> views;
+	for (int d = 0; d < numDecks; ++d)
+	{
+		const auto& player = *players[(size_t) d];
+		auto& view = views[(size_t) d];
+		const auto grid = player.getBeatGrid();
+		view.loaded = player.isLoaded();
+		view.playing = player.isPlaying();
+		view.position = player.getPosition();
+		view.length = player.getLength();
+		view.gridBpm = grid.isValid() ? grid.bpm : 0.0;
+		view.firstBeat = grid.firstBeat;
+		view.rate = player.getEffectiveRate();
+	}
+
+	const auto c = autoDj.update (views);
+	autoDjButton.setButtonText (autoDj.phase() == AutoDj::Phase::mixing
+									? "MIX " + juce::String (juce::roundToInt (autoDj.mixProgress() * 100.0)) + " %"
+									: juce::String ("AUTO DJ"));
+
+	if (c.load >= 0)
+	{
+		if (const auto* set = library.randomVisibleSet (autoDjPlayed))
+		{
+			if (autoDjPlayed.count (set->files[0].getFullPathName()) > 0)
+				autoDjPlayed.clear();   // every one was played: round again
+			autoDjPlayed.insert (set->files[0].getFullPathName());
+			loadSet (*set, c.load);
+		}
+		else
+		{
+			setAutoDj (false);   // nothing to play: the search shows no sets
+			return;
+		}
+	}
+
+	for (int d = 0; d < numDecks; ++d)
+		if (const auto db = c.faderDb[(size_t) d])
+			mixer.strip (d).setFaderDb (*db);
+
+	if (c.syncOn >= 0)
+	{
+		decks[(size_t) c.syncOn]->setSyncEnabled (true);
+		setSync (c.syncOn, true);
+	}
+
+	if (c.start >= 0)
+	{
+		auto& player = *players[(size_t) c.start];
+		const auto grid = player.getBeatGrid();
+		player.setPosition (grid.isValid() ? grid.firstBeat : 0.0);
+		player.play();
+	}
+
+	if (c.stop >= 0)
+		players[(size_t) c.stop]->pause();
+
+	if (c.syncOff >= 0)
+	{
+		decks[(size_t) c.syncOff]->setSyncEnabled (false);
+		setSync (c.syncOff, false);
+	}
+}
+
 void MainComponent::saveSession()
 {
 	analysisCache->flush();   // grid corrections, written with the session
@@ -581,6 +667,9 @@ void MainComponent::restoreSession()
 	for (int d = 0; d < numDecks; ++d)
 		if (session->decks[(size_t) d].playing && players[(size_t) d]->isLoaded())
 			players[(size_t) d]->play();
+
+	if (session->autoDj)
+		setAutoDj (true);   // takes the playing deck as it is
 
 	for (const auto& job : session->stemJobs)
 		if (juce::File (job.input).existsAsFile())
@@ -799,6 +888,8 @@ void MainComponent::timerCallback()
 	updatePioneerStatus();
 	updateCreatorStatus();
 
+	runAutoDj();
+
 	if (--sessionCountdown <= 0)
 	{
 		sessionCountdown = 120;   // two seconds at 60 Hz
@@ -926,6 +1017,8 @@ void MainComponent::resized()
 	audioSettingsButton.setBounds (topBar.removeFromRight (160));
 	topBar.removeFromRight (6);
 	syncSourceButton.setBounds (topBar.removeFromRight (110));
+	topBar.removeFromRight (6);
+	autoDjButton.setBounds (topBar.removeFromRight (100));
 	pioPlayer.setBounds (topBar.removeFromRight (90));
 	pioStatus.setBounds (topBar.removeFromRight (220));
 	deviceStatus.setBounds (topBar);

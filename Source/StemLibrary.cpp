@@ -126,6 +126,19 @@ double StemLibrary::bpmOf (const StemSet& set) const
 	return 0.0;
 }
 
+const StemSet* StemLibrary::randomVisibleSet (const std::set<juce::String>& played) const
+{
+	std::vector<const StemSet*> fresh;
+	for (const auto* set : visibleSets)
+		if (played.count (idFor (*set)) == 0)
+			fresh.push_back (set);
+
+	const auto& from = fresh.empty() ? visibleSets : fresh;
+	if (from.empty())
+		return nullptr;
+	return from[(size_t) juce::Random::getSystemRandom().nextInt ((int) from.size())];
+}
+
 void StemLibrary::saveState (LibrarySession& state) const
 {
 	state.sortColumn = sortColumn;

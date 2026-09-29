@@ -241,8 +241,8 @@ thread from a ten-second buffer; should the disk ever fall that far behind, the 
 `tools/screencast.sh`: over ssh, ffmpeg there grabs its screen (x11grab, x264 at the lowest
 priority on CPU 0) and its sound from a JACK client `screencast` — **connect
 `screencast:input_1/2` there yourself** while it runs. Here the stream goes unchanged into
-`recordings/` and into a live window (`screencastView` 0 turns that off; closing the window keeps
-recording). Pressing CAST again ends it: the ffmpeg over there ends with the connection, and
+`recordings/`, and its picture shows small beside the waveforms. **Nothing of it is played
+here**: a new output in the running audio graph ends zita-j2n. Pressing CAST again ends it: the ffmpeg over there ends with the connection, and
 the file becomes an `.mp4`. The script also runs on its own (`tools/screencast.sh [host]`).
 
 - The ports are **never connected automatically**. Route them with qjackctl, a patchbay or

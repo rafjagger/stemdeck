@@ -4,6 +4,7 @@
 #include "StemDeckPlayer.h"
 #include "StemThumbnails.h"
 #include "StemLibrary.h"
+#include "SettingsPanel.h"
 #include "DeckPanel.h"
 #include "MixerPanel.h"
 #include "Buses.h"
@@ -90,6 +91,7 @@ private:
 	int sessionCountdown = 0;
 	void updateDeviceStatus();
 	void showAudioSettings();
+	void showSettings();
 
 	DJLookAndFeel lookAndFeel;
 	juce::TooltipWindow tooltips { this, 600 };
@@ -121,7 +123,8 @@ private:
 	std::array<ScrollingWaveform*, numDecks> waves { &waveA, &waveB };
 	std::array<DeckPanel*, numDecks> decks { &deckA, &deckB };
 
-	juce::TextButton audioSettingsButton { "Audio-Einstellungen" };
+	juce::TextButton audioSettingsButton { "Audio" };
+	juce::TextButton settingsButton { "Settings" };
 	juce::Label deviceStatus;
 	int statusCountdown = 0;
 

@@ -27,6 +27,7 @@ target_sources(StemDeck PRIVATE
     Source/TempoAnalysis.cpp
     Source/MixerPanel.cpp
     Source/StemLibrary.cpp
+    Source/SettingsPanel.cpp
     Source/JackOutput.cpp
     Source/ProLinkPackets.cpp
     Source/PioneerClock.cpp

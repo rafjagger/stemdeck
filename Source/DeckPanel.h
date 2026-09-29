@@ -78,7 +78,7 @@ private:
 	OverviewWaveform overview;
 	JogWheel jog;
 
-	juce::TextButton cueButton { "CUE" }, playButton { "PLAY" }, loopOffButton { "LOOP AUS" }, repeatButton { "REPEAT" };
+	juce::TextButton cueButton { "CUE" }, playButton { "PLAY" }, loopOffButton { "LOOP OFF" }, repeatButton { "REPEAT" };
 	juce::TextButton syncButton { "SYNC" }, masterButton { "MASTER" }, rangeButton, vinylButton { "VINYL" };
 	juce::TextButton gridButton { "GRID" };
 	juce::TextButton halfBackButton { juce::String::fromUTF8 ("\xe2\x80\xb9" "1/2") }, halfForwardButton { juce::String::fromUTF8 ("1/2\xe2\x80\xba") };

@@ -62,7 +62,8 @@ started) and remembers the last folder you picked.
 
 Scrolling waveforms of both decks across the top, deck A | mixer | deck B in the middle, the
 library at the bottom. The top bar shows the audio status (JACK client, rate, buffer, connected
-ports, xruns) and the SYNC source. Some on-screen labels are still German.
+ports, xruns) and the SYNC source. **Settings** holds where the stem library is (chosen with
+**Choose…**, remembered); **Audio** the audio device.
 
 ### Decks
 
@@ -75,7 +76,7 @@ Laid out like a CDJ:
   stops; while stopped, it sets the cue point, or, if already on it, plays for as long as it is
   held.
 - **PLAY** starts and pauses.
-- **Overview waveform** (four stem lanes): click to jump, drag to set a loop. **LOOP AUS** clears
+- **Overview waveform** (four stem lanes): click to jump, drag to set a loop. **LOOP OFF** clears
   it; **REPEAT** starts the track over at its end.
 - **Jog wheel**: in **VINYL** mode the platter scratches, forwards or backwards; the outer ring
   bends the pitch while playing and searches while stopped. The mouse wheel nudges or fine-searches.
@@ -158,18 +159,18 @@ In the middle, output meters for buses 1–4, AUX and PH.
 
 ### Library
 
-<!-- IMAGE: the library with a few sets listed, BPM column filled, the search box and the "Laden in A / Laden in B" buttons -->
+<!-- IMAGE: the library with a few sets listed, BPM column filled, the search box and the "Load to A / Load to B" buttons -->
 ![The library](docs/stemdeck-library.png)
 
 Columns: set, BPM (once analysed), stem names, length, folder; click a header to sort. The search
-box filters as you type. Load a set with the **Laden in A / B** buttons, by double-click or Return
+box filters as you type. Load a set with the **Load to A / B** buttons, by double-click or Return
 (first deck that is not playing), or by dragging a row onto a deck or its waveform.
 
 ### Creating stems from stereo files
 
-Drop stereo files, or a whole folder, on the library, or press **Stems erstellen…**. FLAC, WAV,
+Drop stereo files, or a whole folder, on the library, or press **Create stems…**. FLAC, WAV,
 MP3, AIFF, OGG, M4A and Opus work. StemDeck asks once for the whole batch: the **target
-folder**, relative to the library — typed (`Artist/Album`) or picked with **Durchsuchen…**, and
+folder**, relative to the library — typed (`Artist/Album`) or picked with **Browse…**, and
 empty for the library folder itself. It is preset from where the files lie: `Artist/Album` for
 `…/Artist/Album/*.flac`, only `Artist` when they come from several of its albums. Every track
 of the batch lands in that one folder and becomes a set:
@@ -194,7 +195,7 @@ StemDeck's audio thread is pinned to **CPU 1**, and the separator takes every ot
 fewer cores, set `<VALUE name="separatorCores" val="1"/>` in
 `~/.config/StemDeck/StemDeck.settings` (1 is CPU 0 only; a track then takes about 1.2× its
 length). The strip under the library bar shows the track,
-the progress and how many wait; **Abbrechen** stops the running one and leaves nothing behind.
+the progress and how many wait; **Cancel** stops the running one and leaves nothing behind.
 When a set is done the library rescans and selects it. A track name already in the album gets
 ` (2)`.
 
@@ -244,7 +245,7 @@ Demo and promo videos are recorded with OBS Studio, outside StemDeck.
   whatever you like.
 - StemDeck never starts a JACK server. `./start.sh` uses a running `jackd`/`jackdbus`; if there is
   none but PipeWire is running, it starts StemDeck through `pw-jack`. Without either, StemDeck
-  falls back to a regular audio device (ALSA), chosen with the **Audio-Einstellungen** button; with
+  falls back to a regular audio device (ALSA), chosen with the **Audio** button; with
   fewer than 12 outputs the buses are summed down onto the ones there are.
 - It takes the graph's sample rate and buffer size as they are and resamples the stems itself. It
   requests nothing on purpose — changing a running graph ends clients like zita-j2n. Set the rate
@@ -291,7 +292,7 @@ Their ports are connected by hand like StemDeck's (qjackctl patchbay).
 
 ## Sync
 
-<!-- IMAGE: the top bar, right side: the PIO status readout (e.g. "PIO 128.0 · CDJ 2"), the CDJ player box if visible, the "SYNC: PIO" button and "Audio-Einstellungen" -->
+<!-- IMAGE: the top bar, right side: the PIO status readout (e.g. "PIO 128.0 · CDJ 2"), the CDJ player box if visible, the "SYNC: PIO" button and "Audio" -->
 ![Top bar with the SYNC source](docs/stemdeck-topbar.png)
 
 The **SYNC: DECK | PIO** button in the top bar chooses what SYNC on a deck follows. Switching it

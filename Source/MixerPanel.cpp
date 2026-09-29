@@ -138,8 +138,8 @@ ChannelStrip::ChannelStrip (StemDeckPlayer& p, int index) : player (p), deckInde
 			button->setColour (juce::TextButton::buttonOnColourId, busColour (bus, s));
 			button->setMouseClickGrabsKeyboardFocus (false);
 			button->onClick = [this, s, bus, button] { player.setStemOnBus (s, bus, button->getToggleState()); };
-			button->setTooltip (bus == buses::phones ? juce::String ("Stem auf PHONES (pre Fader)")
-													 : "Stem auf Bus " + busName (bus) + " (post Fader)");
+			button->setTooltip (bus == buses::phones ? juce::String ("Stem to PHONES (pre fader)")
+													 : "Stem to bus " + busName (bus) + " (post fader)");
 			addAndMakeVisible (button);
 		}
 
@@ -170,7 +170,7 @@ ChannelStrip::ChannelStrip (StemDeckPlayer& p, int index) : player (p), deckInde
 	phonesButton.setColour (juce::TextButton::buttonOnColourId, busColour (buses::phones, 0));
 	phonesButton.setMouseClickGrabsKeyboardFocus (false);
 	phonesButton.onClick = [this] { player.setDeckPhones (phonesButton.getToggleState()); };
-	phonesButton.setTooltip ("Ganzes Deck auf PHONES (pre Fader)");
+	phonesButton.setTooltip ("Whole deck to PHONES (pre fader)");
 	addAndMakeVisible (phonesButton);
 }
 

@@ -56,7 +56,7 @@ juce::String StemDeckPlayer::load (const StemSet& set)
 		}
 
 		if (reader == nullptr)
-			return "Datei nicht lesbar: " + file.getFileName();
+			return "Cannot read the file: " + file.getFileName();
 
 		if (i == 0)
 			newSet->sampleRate = reader->sampleRate;

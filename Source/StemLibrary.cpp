@@ -5,7 +5,6 @@
 
 StemLibrary::StemLibrary (juce::AudioFormatManager& fm) : formatManager (fm)
 {
-	folderButton.onClick = [this] { chooseFolder(); };
 	rescanButton.onClick = [this] { setFolder (folder); };
 	loadAButton.onClick = [this] { loadSelected (0); };
 	loadBButton.onClick = [this] { loadSelected (1); };
@@ -14,7 +13,7 @@ StemLibrary::StemLibrary (juce::AudioFormatManager& fm) : formatManager (fm)
 	loadAButton.setColour (juce::TextButton::textColourOffId, Theme::deck (0));
 	loadBButton.setColour (juce::TextButton::textColourOffId, Theme::deck (1));
 
-	for (auto* b : { &folderButton, &rescanButton, &loadAButton, &loadBButton, &createButton, &cancelCreateButton })
+	for (auto* b : { &rescanButton, &loadAButton, &loadBButton, &createButton, &cancelCreateButton })
 	{
 		b->setMouseClickGrabsKeyboardFocus (false);
 		addAndMakeVisible (b);
@@ -29,7 +28,7 @@ StemLibrary::StemLibrary (juce::AudioFormatManager& fm) : formatManager (fm)
 	addChildComponent (creatorLabel);
 	cancelCreateButton.setVisible (false);
 
-	searchBox.setTextToShowWhenEmpty ("Suchen...", Theme::textDim);
+	searchBox.setTextToShowWhenEmpty ("Search...", Theme::textDim);
 	searchBox.setColour (juce::TextEditor::backgroundColourId, Theme::background);
 	searchBox.setColour (juce::TextEditor::outlineColourId, Theme::outline);
 	searchBox.onTextChange = [this] { applyFilter(); };
@@ -45,7 +44,7 @@ StemLibrary::StemLibrary (juce::AudioFormatManager& fm) : formatManager (fm)
 	header.addColumn ("Set", nameColumn, 280, 120);
 	header.addColumn ("BPM", bpmColumn, 70, 50);
 	header.addColumn ("Stems", stemsColumn, 200, 80);
-	header.addColumn (juce::String::fromUTF8 ("L\xc3\xa4nge"), lengthColumn, 70, 50);
+	header.addColumn (juce::String ("Length"), lengthColumn, 70, 50);
 	// Into the window's width rather than past its right edge (768 px on the rig).
 	header.setStretchToFitActive (true);
 	header.setSortColumnId (artistColumn, true);
@@ -62,7 +61,7 @@ void StemLibrary::setFolder (const juce::File& newFolder)
 {
 	folder = newFolder;
 	allSets = folder.isDirectory() ? StemSet::scanFolder (folder, formatManager) : std::vector<StemSet>();
-	folderLabel.setText (folder.getFullPathName() + "  -  " + juce::String ((int) allSets.size()) + " Sets",
+	folderLabel.setText (folder.getFullPathName() + "  -  " + juce::String ((int) allSets.size()) + " sets",
 						 juce::dontSendNotification);
 	applyFilter();
 
@@ -206,17 +205,6 @@ void StemLibrary::loadSelected (int deckIndex)
 		onLoadSet (*visibleSets[(size_t) row], deckIndex);
 }
 
-void StemLibrary::chooseFolder()
-{
-	chooser = std::make_unique<juce::FileChooser> ("Stem-Ordner", folder);
-	chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories,
-						  [this] (const juce::FileChooser& fc)
-	{
-		if (fc.getResult().isDirectory())
-			setFolder (fc.getResult());
-	});
-}
-
 //==============================================================================
 int StemLibrary::getNumRows()
 {
@@ -291,20 +279,28 @@ void StemLibrary::resized()
 {
 	auto area = getLocalBounds().reduced (10);
 
+	// Two rows where one does not hold them all (the rig's 768 px screen): the
+	// search and the load keys, then where the library is, creating and
+	// rescanning. The folder itself is chosen in Settings (2026-09-30).
+	const auto twoRows = getWidth() < 1000;
+
 	auto bar = area.removeFromTop (30);
-	searchBox.setBounds (bar.removeFromLeft (280));
-	bar.removeFromLeft (10);
+	auto folderBar = twoRows ? (area.removeFromTop (6), area.removeFromTop (30)) : bar;
+
+	searchBox.setBounds (bar.removeFromLeft (twoRows ? bar.getWidth() - 2 * 100 - 2 * 6 : 280));
+	bar.removeFromLeft (twoRows ? 6 : 10);
 	loadAButton.setBounds (bar.removeFromLeft (100));
 	bar.removeFromLeft (6);
 	loadBButton.setBounds (bar.removeFromLeft (100));
 	bar.removeFromLeft (16);
-	rescanButton.setBounds (bar.removeFromRight (110));
-	bar.removeFromRight (6);
-	createButton.setBounds (bar.removeFromRight (130));
-	bar.removeFromRight (6);
-	folderButton.setBounds (bar.removeFromRight (90));
-	bar.removeFromRight (10);
-	folderLabel.setBounds (bar);
+	if (! twoRows)
+		folderBar = bar;
+
+	rescanButton.setBounds (folderBar.removeFromRight (110));
+	folderBar.removeFromRight (6);
+	createButton.setBounds (folderBar.removeFromRight (130));
+	folderBar.removeFromRight (10);
+	folderLabel.setBounds (folderBar);
 
 	if (creatorLabel.isVisible())
 	{
@@ -393,11 +389,11 @@ void StemLibrary::offerForStems (const juce::StringArray& paths)
 		return;
 	}
 
-	juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::InfoIcon, "Stems erstellen",
-		juce::String::fromUTF8 ("Keine Stereo-Datei zum Zerlegen gefunden.\n\n"
-								"Dateien, die schon im Library-Ordner liegen, werden nicht zerlegt: "
-								"Leg die Originale au\xc3\x9f" "erhalb von\n") + folder.getFullPathName()
-		+ "\nab und zieh sie von dort herein.\n\nFormate: FLAC, WAV, MP3, AIFF, OGG, M4A, Opus.");
+	juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::InfoIcon, "Create stems",
+		juce::String ("No stereo file to separate.\n\n"
+					  "Files already in the library folder are not separated: put the originals outside\n")
+		+ folder.getFullPathName()
+		+ "\nand drag them in from there.\n\nFormats: FLAC, WAV, MP3, AIFF, OGG, M4A, Opus.");
 }
 
 void StemLibrary::setDropHighlight (bool on)

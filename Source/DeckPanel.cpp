@@ -10,7 +10,7 @@ DeckPanel::DeckPanel (StemDeckPlayer& p, StemThumbnails& thumbnails, int index)
 	: player (p), deckIndex (index), overview (p, thumbnails), jog (p, index)
 {
 	titleLabel.setFont (juce::FontOptions (18.0f, juce::Font::bold));
-	titleLabel.setText ("Leer - Set hierher ziehen", juce::dontSendNotification);
+	titleLabel.setText ("Empty - drag a set here", juce::dontSendNotification);
 	titleLabel.setMinimumHorizontalScale (0.7f);
 	stemsLabel.setColour (juce::Label::textColourId, Theme::textDim);
 	elapsedLabel.setFont (juce::FontOptions (20.0f));
@@ -48,20 +48,20 @@ DeckPanel::DeckPanel (StemDeckPlayer& p, StemThumbnails& thumbnails, int index)
 	playButton.onClick = [this] { togglePlay(); };
 	playButton.setColour (juce::TextButton::buttonOnColourId, Theme::play);
 	loopOffButton.onClick = [this] { player.clearLoop(); };
-	loopOffButton.setTooltip (juce::String::fromUTF8 ("Loop setzen: in der \xc3\x9c" "bersicht ziehen"));
+	loopOffButton.setTooltip (juce::String ("Set a loop: drag in the overview"));
 	loopOffButton.setColour (juce::TextButton::buttonOnColourId, Theme::loop);
 
 	repeatButton.setClickingTogglesState (true);
 	repeatButton.setColour (juce::TextButton::buttonOnColourId, Theme::play.darker (0.3f));
-	repeatButton.setTooltip ("Am Ende des Tracks wieder von vorne");
+	repeatButton.setTooltip ("Start over at the end of the track");
 	repeatButton.onClick = [this] { player.setRepeat (repeatButton.getToggleState()); };
 
 	syncButton.setClickingTogglesState (true);
 	syncButton.setColour (juce::TextButton::buttonOnColourId, Theme::deck (deckIndex));
-	syncButton.setTooltip ("Tempo und Beats an das andere Deck koppeln");
+	syncButton.setTooltip ("Lock tempo and beats to the other deck");
 	syncButton.onClick = [this] { if (onSyncToggled) onSyncToggled (syncButton.getToggleState()); };
 	masterButton.setColour (juce::TextButton::buttonOnColourId, Theme::deck (deckIndex));
-	masterButton.setTooltip ("Dieses Deck gibt den Takt ins Pioneer-Netz (wie MASTER am CDJ)");
+	masterButton.setTooltip ("This deck gives the beat to the Pioneer network (like MASTER on a CDJ)");
 	masterButton.onClick = [this] { if (onMasterPressed) onMasterPressed(); };
 
 	rangeButton.setTooltip ("Tempo-Bereich umschalten");
@@ -86,7 +86,7 @@ DeckPanel::DeckPanel (StemDeckPlayer& p, StemThumbnails& thumbnails, int index)
 
 	gridButton.setClickingTogglesState (true);
 	gridButton.setColour (juce::TextButton::buttonOnColourId, Theme::loop);
-	gridButton.setTooltip ("Grid Adjust: Jogwheel verschiebt das Beatgrid (wie CDJ-3000)");
+	gridButton.setTooltip ("Grid Adjust: the controller's jog wheel moves the beat grid (like a CDJ-3000)");
 	gridButton.onClick = [this] { setGridMode (gridButton.getToggleState()); };
 	jog.onGridShift = [this] (double seconds) { if (onGridEdit) onGridEdit (GridAction::shift, seconds); };
 
@@ -97,10 +97,10 @@ DeckPanel::DeckPanel (StemDeckPlayer& p, StemThumbnails& thumbnails, int index)
 		b.onClick = [this, action] { if (onGridEdit) onGridEdit (action, 0.0); };
 		addChildComponent (b);
 	};
-	gridAction (halfBackButton, GridAction::halfBack, "Grid einen halben Beat fr\xc3\xbc" "her");
-	gridAction (halfForwardButton, GridAction::halfForward, "Grid einen halben Beat sp\xc3\xa4ter");
-	gridAction (snapButton, GridAction::snapToCue, "SNAP GRID (CUE): die Eins des Takts auf den Cue-Punkt");
-	gridAction (shiftButton, GridAction::shiftToLeader, "SHIFT GRID: den nach Geh\xc3\xb6r angeglichenen Beat ins Grid \xc3\xbc" "bernehmen");
+	gridAction (halfBackButton, GridAction::halfBack, "Grid half a beat earlier");
+	gridAction (halfForwardButton, GridAction::halfForward, "Grid half a beat later");
+	gridAction (snapButton, GridAction::snapToCue, "SNAP GRID (CUE): the bar's one onto the cue point");
+	gridAction (shiftButton, GridAction::shiftToLeader, "SHIFT GRID: take the beat matched by ear into the grid");
 	gridAction (resetGridButton, GridAction::reset, "Grid wie analysiert");
 
 	tempo.setValue (1.0, juce::dontSendNotification);

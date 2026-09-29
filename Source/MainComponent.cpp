@@ -70,6 +70,9 @@ MainComponent::MainComponent()
 	audioSettingsButton.onClick = [this] { showAudioSettings(); };
 	audioSettingsButton.setMouseClickGrabsKeyboardFocus (false);
 	addAndMakeVisible (audioSettingsButton);
+	settingsButton.onClick = [this] { showSettings(); };
+	settingsButton.setMouseClickGrabsKeyboardFocus (false);
+	addAndMakeVisible (settingsButton);
 	deviceStatus.setColour (juce::Label::textColourId, Theme::textDim);
 	addAndMakeVisible (deviceStatus);
 
@@ -83,7 +86,7 @@ MainComponent::MainComponent()
 	autoDjButton.setClickingTogglesState (true);
 	autoDjButton.setMouseClickGrabsKeyboardFocus (false);
 	autoDjButton.setColour (juce::TextButton::buttonOnColourId, Theme::play);
-	autoDjButton.setTooltip (juce::String::fromUTF8 ("Auto-DJ: spielt zuf\xc3\xa4llig aus der Library-Auswahl (Suche/Filter) und mischt taktgenau \xc3\xbc" "ber 16 Takte"));
+	autoDjButton.setTooltip (juce::String ("Auto DJ: plays at random from the library as searched/filtered and mixes on the beat over 16 bars"));
 	autoDjButton.onClick = [this] { setAutoDj (autoDjButton.getToggleState()); };
 	addAndMakeVisible (autoDjButton);
 
@@ -171,7 +174,7 @@ void MainComponent::loadSet (const StemSet& set, int deckIndex)
 
 	if (error.isNotEmpty())
 	{
-		juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Set konnte nicht geladen werden", error);
+		juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Cannot load the set", error);
 		return;
 	}
 
@@ -408,11 +411,11 @@ void MainComponent::createStems (const juce::Array<juce::File>& files)
 {
 	if (! stemCreator.isInstalled())
 	{
-		juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Stems erstellen",
-			"Der Stem-Separator (Demucs) ist nicht installiert:\n" + stemCreator.venv().getChildFile ("bin/demucs").getFullPathName()
-			+ juce::String::fromUTF8 (" fehlt.\n\nEinmalig einrichten (ca. 1 GB):\n"
-									  "  sudo apt install ffmpeg python3-venv\n"
-									  "  tools/setup-separator.sh"));
+		juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Create stems",
+			"The stem separator (Demucs) is not installed:\n" + stemCreator.venv().getChildFile ("bin/demucs").getFullPathName()
+			+ juce::String (" is missing.\n\nSet it up once (about 1 GB):\n"
+							"  sudo apt install ffmpeg python3-venv\n"
+							"  tools/setup-separator.sh"));
 		return;
 	}
 
@@ -425,17 +428,17 @@ void MainComponent::createStems (const juce::Array<juce::File>& files)
 void MainComponent::askTargetFolder (const juce::Array<juce::File>& files, const juce::String& preset)
 {
 	const auto count = files.size() == 1 ? files.getFirst().getFileNameWithoutExtension()
-										 : juce::String (files.size()) + " Tracks";
+										 : juce::String (files.size()) + " tracks";
 	const auto libraryFolder = library.getFolder();
 
-	stemDialog = std::make_unique<juce::AlertWindow> ("Stems erstellen",
-		count + juce::String::fromUTF8 ("\n\nZielordner in ") + libraryFolder.getFullPathName()
-			  + juce::String::fromUTF8 (":\n(Artist/Album \xe2\x80\x93 leer: direkt in den Library-Ordner)"),
+	stemDialog = std::make_unique<juce::AlertWindow> ("Create stems",
+		count + juce::String ("\n\nTarget folder in ") + libraryFolder.getFullPathName()
+			  + juce::String::fromUTF8 (":\n(Artist/Album \xe2\x80\x93 empty: straight into the library folder)"),
 		juce::MessageBoxIconType::NoIcon, this);
-	stemDialog->addTextEditor ("folder", preset, "Zielordner");
-	stemDialog->addButton ("Erstellen", 1, juce::KeyPress (juce::KeyPress::returnKey));
-	stemDialog->addButton (juce::String::fromUTF8 ("Durchsuchen\xe2\x80\xa6"), 2);
-	stemDialog->addButton ("Abbrechen", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+	stemDialog->addTextEditor ("folder", preset, "Target folder");
+	stemDialog->addButton ("Create", 1, juce::KeyPress (juce::KeyPress::returnKey));
+	stemDialog->addButton (juce::String::fromUTF8 ("Browse\xe2\x80\xa6"), 2);
+	stemDialog->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
 	stemDialog->enterModalState (true, juce::ModalCallbackFunction::create ([this, files, libraryFolder] (int result)
 	{
 		const auto typed = stemDialog->getTextEditorContents ("folder").trim();
@@ -450,7 +453,7 @@ void MainComponent::askTargetFolder (const juce::Array<juce::File>& files, const
 		else if (result == 2)
 		{
 			const auto start = libraryFolder.getChildFile (juce::String (sanitiseFolder (typed.toStdString())));
-			folderChooser = std::make_unique<juce::FileChooser> ("Zielordner", start.isDirectory() ? start : libraryFolder);
+			folderChooser = std::make_unique<juce::FileChooser> ("Target folder", start.isDirectory() ? start : libraryFolder);
 			folderChooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories,
 				[this, files, libraryFolder, typed] (const juce::FileChooser& fc)
 				{
@@ -459,8 +462,8 @@ void MainComponent::askTargetFolder (const juce::Array<juce::File>& files, const
 						return askTargetFolder (files, typed);   // closed: back to the question
 					if (chosen != libraryFolder && ! chosen.isAChildOf (libraryFolder))
 					{
-						juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Stems erstellen",
-							juce::String::fromUTF8 ("Der Zielordner muss im Library-Ordner liegen:\n") + libraryFolder.getFullPathName());
+						juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Create stems",
+							juce::String ("The target folder has to be inside the library folder:\n") + libraryFolder.getFullPathName());
 						return askTargetFolder (files, typed);
 					}
 					askTargetFolder (files, chosen == libraryFolder ? juce::String() : chosen.getRelativePathFrom (libraryFolder));
@@ -698,7 +701,7 @@ void MainComponent::toggleRecording()
 	}
 	else if (const auto error = recorder.start (Recorder::defaultFolder(), jack.getSampleRate()); error.isNotEmpty())
 	{
-		juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Aufnahme", error);
+		juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Recording", error);
 	}
 	updateRecorder();
 }
@@ -716,15 +719,15 @@ void MainComponent::updateRecorder()
 		recButton.setButtonText (juce::String::fromUTF8 ("\xe2\x97\x8f ") + juce::String (seconds / 60) + ":" + juce::String (seconds % 60).paddedLeft ('0', 2)
 								 + (recorder.hasDropped() ? " !" : ""));
 		recButton.setTooltip (recorder.getFile().getFullPathName()
-							  + (recorder.hasDropped() ? juce::String::fromUTF8 ("\n! Die Platte kam nicht mit: L\xc3\xbc" "cken in der Aufnahme") : juce::String()));
+							  + (recorder.hasDropped() ? juce::String ("\n! The disk fell behind: gaps in the recording") : juce::String()));
 	}
 	else
 	{
 		recButton.setButtonText ("REC");
 		if (! usingJack)
-			recButton.setTooltip (juce::String::fromUTF8 ("Aufnahme nur unter JACK (Eing\xc3\xa4nge rec_L / rec_R)"));
+			recButton.setTooltip (juce::String ("Recording needs JACK (inputs rec_L / rec_R)"));
 		else if (recButton.getTooltip().isEmpty())
-			recButton.setTooltip (juce::String::fromUTF8 ("Nimmt die JACK-Eing\xc3\xa4nge StemDeck:rec_L / rec_R als FLAC auf, nach ")
+			recButton.setTooltip (juce::String ("Records the JACK inputs StemDeck:rec_L / rec_R as FLAC into ")
 								  + Recorder::defaultFolder().getFullPathName());
 	}
 }
@@ -880,10 +883,10 @@ void MainComponent::updateCreatorStatus()
 	{
 		text = "Stems: " + status.track + "  " + juce::String (juce::roundToInt (status.progress * 100.0)) + " %";
 		if (status.waiting > 0)
-			text << "  +" << status.waiting << " wartend";
+			text << "  +" << status.waiting << " waiting";
 	}
 	else if (status.lastError.isNotEmpty())
-		text = "Stems: Fehler bei " + status.lastError;
+		text = "Stems: failed: " + status.lastError;
 
 	library.setCreatorStatus (text, status.running, ! status.running && status.lastError.isNotEmpty());
 }
@@ -979,7 +982,7 @@ void MainComponent::initialiseAudio()
 		initialiseDeviceManager();
 
 	audioSettingsButton.setEnabled (! usingJack);
-	audioSettingsButton.setTooltip (usingJack ? "Unter JACK: Routing per qjackctl oder Patchbay" : juce::String());
+	audioSettingsButton.setTooltip (usingJack ? "Under JACK: route with qjackctl or a patchbay" : juce::String());
 	updateDeviceStatus();
 }
 
@@ -1036,7 +1039,7 @@ void MainComponent::updateDeviceStatus()
 
 	if (device == nullptr)
 	{
-		deviceStatus.setText (juce::String::fromUTF8 ("Kein Audioger\xc3\xa4t offen"), juce::dontSendNotification);
+		deviceStatus.setText (juce::String ("No audio device open"), juce::dontSendNotification);
 		deviceStatus.setColour (juce::Label::textColourId, Theme::mute);
 		return;
 	}
@@ -1045,10 +1048,10 @@ void MainComponent::updateDeviceStatus()
 	auto text = deviceManager.getCurrentAudioDeviceType() + ": " + device->getName()
 			  + "  |  " + juce::String (device->getCurrentSampleRate(), 0) + " Hz, "
 			  + juce::String (device->getCurrentBufferSizeSamples()) + " Samples  |  "
-			  + juce::String (outputs) + juce::String::fromUTF8 (" Ausg\xc3\xa4nge");
+			  + juce::String (outputs) + juce::String (" outputs");
 
 	if (outputs < numOutputChannels)
-		text << "  (Busse werden zusammengemischt)";
+		text << "  (buses summed down)";
 
 	deviceStatus.setText (text, juce::dontSendNotification);
 	deviceStatus.setColour (juce::Label::textColourId, outputs < numOutputChannels ? Theme::cue : Theme::textDim);
@@ -1062,10 +1065,22 @@ void MainComponent::showAudioSettings()
 
 	juce::DialogWindow::LaunchOptions dialog;
 	dialog.content.setOwned (selector.release());
-	dialog.dialogTitle = "Audio-Einstellungen";
+	dialog.dialogTitle = "Audio";
 	dialog.dialogBackgroundColour = Theme::panel;
 	dialog.useNativeTitleBar = true;
 	dialog.resizable = true;
+	dialog.launchAsync();
+}
+
+void MainComponent::showSettings()
+{
+	juce::DialogWindow::LaunchOptions dialog;
+	dialog.content.setOwned (new SettingsPanel (library.getFolder(),
+												[this] (const juce::File& folder) { library.setFolder (folder); }));
+	dialog.dialogTitle = "Settings";
+	dialog.dialogBackgroundColour = Theme::panel;
+	dialog.useNativeTitleBar = true;
+	dialog.resizable = false;
 	dialog.launchAsync();
 }
 
@@ -1221,7 +1236,9 @@ void MainComponent::resized()
 	auto area = getLocalBounds().reduced (6);
 
 	auto topBar = area.removeFromTop (30);
-	audioSettingsButton.setBounds (topBar.removeFromRight (160));
+	settingsButton.setBounds (topBar.removeFromRight (90));
+	topBar.removeFromRight (6);
+	audioSettingsButton.setBounds (topBar.removeFromRight (70));
 	topBar.removeFromRight (6);
 	syncSourceButton.setBounds (topBar.removeFromRight (110));
 	topBar.removeFromRight (6);

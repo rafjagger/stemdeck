@@ -17,7 +17,7 @@ juce::String Recorder::start (const juce::File& folder, double sampleRate)
 	stop();
 
 	if (! folder.createDirectory())
-		return "Ordner nicht anlegbar: " + folder.getFullPathName();
+		return "Cannot create the folder: " + folder.getFullPathName();
 
 	const auto now = juce::Time::getCurrentTime();
 	auto target = folder.getChildFile (recordingFileName (now.getYear(), now.getMonth() + 1, now.getDayOfMonth(),
@@ -26,7 +26,7 @@ juce::String Recorder::start (const juce::File& folder, double sampleRate)
 
 	std::unique_ptr<juce::OutputStream> stream = std::make_unique<juce::FileOutputStream> (target);
 	if (static_cast<juce::FileOutputStream*> (stream.get())->failedToOpen())
-		return "Datei nicht schreibbar: " + target.getFullPathName();
+		return "Cannot write the file: " + target.getFullPathName();
 
 	juce::FlacAudioFormat flac;
 	auto flacWriter = flac.createWriterFor (stream, juce::AudioFormatWriterOptions{}
@@ -34,7 +34,7 @@ juce::String Recorder::start (const juce::File& folder, double sampleRate)
 														.withNumChannels (2)
 														.withBitsPerSample (24));
 	if (flacWriter == nullptr)
-		return "FLAC-Writer konnte nicht angelegt werden";
+		return "Cannot create the FLAC writer";
 
 	// Ten seconds of FIFO: room for a slow disk moment.
 	auto threaded = std::make_unique<juce::AudioFormatWriter::ThreadedWriter> (flacWriter.release(), writerThread, (int) (sampleRate * 10));

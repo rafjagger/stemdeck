@@ -78,7 +78,6 @@ private:
 	static juce::String idFor (const StemSet& set) { return set.files[0].getFullPathName(); }
 	void applyFilter();
 	void loadSelected (int deckIndex);
-	void chooseFolder();
 	void chooseFilesForStems();
 	void setDropHighlight (bool on);
 	juce::Array<juce::File> separableFiles (const juce::StringArray& paths) const;
@@ -91,9 +90,9 @@ private:
 	int sortColumn = artistColumn;
 	bool sortForwards = true;
 
-	juce::TextButton folderButton { "Ordner..." }, rescanButton { "Neu scannen" };
-	juce::TextButton loadAButton { "Laden in A" }, loadBButton { "Laden in B" };
-	juce::TextButton createButton { juce::String::fromUTF8 ("Stems erstellen\xe2\x80\xa6") }, cancelCreateButton { "Abbrechen" };
+	juce::TextButton rescanButton { "Rescan" };
+	juce::TextButton loadAButton { "Load to A" }, loadBButton { "Load to B" };
+	juce::TextButton createButton { juce::String::fromUTF8 ("Create stems\xe2\x80\xa6") }, cancelCreateButton { "Cancel" };
 	juce::Label folderLabel, creatorLabel;
 	bool dropHighlight = false;
 	juce::TextEditor searchBox;

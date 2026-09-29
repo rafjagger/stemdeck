@@ -135,7 +135,7 @@ ChannelStrip::ChannelStrip (StemDeckPlayer& p, int index) : player (p), deckInde
 
 		for (int bus = 0; bus < buses::count; ++bus)
 		{
-			auto* button = busButtons.add (new juce::TextButton (busName (bus)));
+			auto* button = busButtons.add (new juce::TextButton (juce::String (bus + 1)));   // 5 = AUX, 6 = PH
 			button->setClickingTogglesState (true);
 			button->setToggleState (player.isStemOnBus (s, bus), juce::dontSendNotification);
 			button->setColour (juce::TextButton::buttonOnColourId, busColour (bus, s));
@@ -221,25 +221,27 @@ void ChannelStrip::resized()
 	auto area = getLocalBounds().reduced (8);
 	area.removeFromTop (24);
 
-	// Four knob rows: [knob][name / mute]
-	const auto rowHeight = 50;
+	// Four stem rows: [knob][name / mute][bus switches 1 2 3 / 4 5 6, right-aligned]
+	const auto rowHeight = 56;
+	const auto columns = 3;
+	const auto rows = buses::count / columns;
+	const auto switchSize = rowHeight / rows;   // square, as big as the row allows
 
 	for (int s = 0; s < StemSet::numStems; ++s)
 	{
 		auto row = area.removeFromTop (rowHeight);
-		knobs[s]->setBounds (row.removeFromLeft (rowHeight));
-		row.removeFromLeft (4);
-		stemLabels[s]->setBounds (row.removeFromTop (row.getHeight() / 2));
-		muteButtons[s]->setBounds (row.removeFromLeft (24).reduced (0, 2));
+		knobs[s]->setBounds (row.removeFromLeft (rowHeight - 6).withSizeKeepingCentre (rowHeight - 6, rowHeight - 6));
 		row.removeFromLeft (4);
 
-		// The six bus switches share what is left; AUX needs a bit more.
-		const auto unit = row.getWidth() / (buses::count + 1);
+		auto grid = row.removeFromRight (switchSize * columns);
 		for (int bus = 0; bus < buses::count; ++bus)
-		{
-			const auto width = bus == buses::aux ? unit * 2 : unit;
-			busButtons[s * buses::count + bus]->setBounds (row.removeFromLeft (width).reduced (1, 2));
-		}
+			busButtons[s * buses::count + bus]->setBounds (juce::Rectangle<int> (grid.getX() + (bus % columns) * switchSize,
+																				 grid.getY() + (bus / columns) * switchSize,
+																				 switchSize, switchSize).reduced (1));
+
+		row.removeFromRight (4);
+		stemLabels[s]->setBounds (row.removeFromTop (row.getHeight() / 2));
+		muteButtons[s]->setBounds (row.removeFromLeft (28).reduced (0, 2));
 	}
 
 	area.removeFromTop (8);

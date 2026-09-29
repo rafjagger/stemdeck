@@ -186,6 +186,37 @@ void ChannelStrip::setStemNames (const std::array<juce::String, StemSet::numStem
 	}
 }
 
+void ChannelStrip::saveState (DeckSession& state) const
+{
+	for (int s = 0; s < StemSet::numStems; ++s)
+	{
+		auto& stem = state.stems[(size_t) s];
+		stem.gainDb = knobs[s]->getValue();
+		stem.muted = muteButtons[s]->getToggleState();
+		stem.buses = 0;
+		for (int bus = 0; bus < buses::count; ++bus)
+			if (busButtons[s * buses::count + bus]->getToggleState())
+				stem.buses |= 1u << bus;
+	}
+	state.faderDb = fader.getValue();
+	state.phones = phonesButton.getToggleState();
+}
+
+void ChannelStrip::restoreState (const DeckSession& state)
+{
+	// Through the controls, so the player follows exactly as on a click.
+	for (int s = 0; s < StemSet::numStems; ++s)
+	{
+		const auto& stem = state.stems[(size_t) s];
+		knobs[s]->setValue (stem.gainDb, juce::sendNotificationSync);
+		muteButtons[s]->setToggleState (stem.muted, juce::sendNotificationSync);
+		for (int bus = 0; bus < buses::count; ++bus)
+			busButtons[s * buses::count + bus]->setToggleState ((stem.buses >> bus) & 1u, juce::sendNotificationSync);
+	}
+	fader.setValue (state.faderDb, juce::sendNotificationSync);
+	phonesButton.setToggleState (state.phones, juce::sendNotificationSync);
+}
+
 void ChannelStrip::toggleMute (int stem)
 {
 	if (auto* b = muteButtons[stem])

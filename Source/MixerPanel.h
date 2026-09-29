@@ -3,6 +3,7 @@
 #include <JuceHeader.h>
 #include "StemDeckPlayer.h"
 #include "Buses.h"
+#include "Session.h"
 
 // Vertical peak meter fed from a player's stem peaks.
 class LevelMeter : public juce::Component
@@ -49,6 +50,10 @@ public:
 	void toggleMute (int stem);
 	void refresh(); // meters, called by the main timer
 
+	// Knobs, mutes, bus switches, fader and PHONES, for the session.
+	void saveState (DeckSession& state) const;
+	void restoreState (const DeckSession& state);
+
 	// Room left free beside the fader on the side towards the mixer's middle,
 	// for the output meters; where that room is, in this strip's coordinates.
 	void setMeterReserve (int width) { meterReserve = width; resized(); }
@@ -82,6 +87,7 @@ public:
 	MixerPanel (StemDeckPlayer& playerA, StemDeckPlayer& playerB);
 
 	ChannelStrip& strip (int deckIndex) { return deckIndex == 0 ? stripA : stripB; }
+	const ChannelStrip& strip (int deckIndex) const { return deckIndex == 0 ? stripA : stripB; }
 	void refresh();
 	void setOutputLevel (int channel, float peak) { outputMeters.setLevel (channel, peak); }
 

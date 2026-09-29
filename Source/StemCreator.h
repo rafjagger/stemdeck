@@ -35,6 +35,8 @@ public:
 	// `folder`: the target, relative to the library (StemJob.h).
 	int add (const juce::File& input, const juce::String& folder, const juce::String& track);
 	void cancel (int id);
+	// Every job not done yet, the running one first, for the session.
+	std::vector<StemJobEntry> pendingJobs() const;
 	void cancelRunning();
 
 	struct Status

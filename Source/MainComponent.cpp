@@ -119,12 +119,14 @@ MainComponent::MainComponent()
 
 	setWantsKeyboardFocus (true);
 	setSize (1500, 960);
+	restoreSession();
 	startTimerHz (60);
 }
 
 MainComponent::~MainComponent()
 {
 	stopTimer();
+	saveSession();
 	pioSender.setMaster (nullptr);
 	pioSender.stop();   // before the players it reads go away
 	proLink.stop();
@@ -160,6 +162,7 @@ void MainComponent::loadSet (const StemSet& set, int deckIndex)
 		return;
 	}
 
+	loadedSetIds[d] = set.files[0].getFullPathName();
 	thumbs[d]->setSet (set);
 	decks[d]->setSet (set);
 	waves[d]->setTitle (set.name);
@@ -441,6 +444,89 @@ void MainComponent::askTargetFolder (const juce::Array<juce::File>& files, const
 	}));
 }
 
+//==============================================================================
+Session MainComponent::gatherSession() const
+{
+	Session session;
+	for (int d = 0; d < numDecks; ++d)
+	{
+		auto& deck = session.decks[(size_t) d];
+		const auto& player = *players[(size_t) d];
+		deck.setId = loadedSetIds[(size_t) d];
+		deck.position = player.getPosition();
+		deck.playing = player.isPlaying();
+		deck.cuePoint = player.getCuePoint();
+		deck.loop = player.hasLoop() ? player.getLoop() : juce::Range<double>();
+		decks[(size_t) d]->saveState (deck);
+		mixer.strip (d).saveState (deck);
+	}
+	session.masterDeck = masterDeck;
+	session.masterTurnedOff = masterTurnedOff;
+	library.saveState (session.library);
+	for (const auto& job : stemCreator.pendingJobs())
+		session.stemJobs.push_back ({ juce::String (job.input), juce::String (job.folder), juce::String (job.track) });
+	return session;
+}
+
+void MainComponent::saveSession()
+{
+	// Nothing playing and nothing touched: no write.
+	const auto text = gatherSession().toXml()->toString();
+	if (text == lastSessionText)
+		return;
+	if (Session::file (settings().getFile()).replaceWithText (text))
+		lastSessionText = text;
+}
+
+void MainComponent::restoreSession()
+{
+	const auto session = Session::load (Session::file (settings().getFile()));
+	if (! session)
+		return;
+
+	library.restoreState (session->library);
+
+	for (int d = 0; d < numDecks; ++d)
+	{
+		const auto& deck = session->decks[(size_t) d];
+		auto& player = *players[(size_t) d];
+
+		mixer.strip (d).restoreState (deck);
+
+		if (deck.setId.isEmpty())
+			continue;
+		if (const auto* set = library.findSet (deck.setId))
+			loadSet (*set, d);
+		if (! player.isLoaded())
+			continue;
+
+		decks[(size_t) d]->restoreState (deck);
+		player.setCuePoint (deck.cuePoint);
+		if (! deck.loop.isEmpty())
+			player.setLoop (deck.loop.getStart(), deck.loop.getEnd());
+		player.setPosition (deck.position);
+	}
+
+	for (int d = 0; d < numDecks; ++d)
+		if (session->decks[(size_t) d].sync && players[(size_t) d]->isLoaded())
+			setSync (d, true);
+
+	masterTurnedOff = session->masterTurnedOff;
+	if (session->masterDeck >= 0 && players[(size_t) session->masterDeck]->isLoaded())
+		setMasterDeck (session->masterDeck);
+
+	// Last: what was playing plays on.
+	for (int d = 0; d < numDecks; ++d)
+		if (session->decks[(size_t) d].playing && players[(size_t) d]->isLoaded())
+			players[(size_t) d]->play();
+
+	for (const auto& job : session->stemJobs)
+		if (juce::File (job.input).existsAsFile())
+			stemCreator.add (juce::File (job.input), job.folder, job.track);
+
+	lastSessionText = session->toXml()->toString();
+}
+
 void MainComponent::updateCreatorStatus()
 {
 	// No pause while a deck plays: the separator keeps off the audio CPU.
@@ -650,6 +736,12 @@ void MainComponent::timerCallback()
 
 	updatePioneerStatus();
 	updateCreatorStatus();
+
+	if (--sessionCountdown <= 0)
+	{
+		sessionCountdown = 120;   // two seconds at 60 Hz
+		saveSession();
+	}
 
 	for (int ch = 0; ch < numOutputChannels; ++ch)
 		mixer.setOutputLevel (ch, outputPeaks[(size_t) ch].exchange (0.0f));

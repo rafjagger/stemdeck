@@ -3,6 +3,7 @@
 #include <JuceHeader.h>
 #include "StemSet.h"
 #include "TempoAnalysis.h"
+#include "Session.h"
 
 // Table of the complete stem sets found in a folder. Sets are loaded with the
 // deck buttons, by double-click (first deck that is not playing) or by
@@ -25,6 +26,10 @@ public:
 
 	// Looks up a set by the id carried in drag-and-drop descriptions.
 	const StemSet* findSet (const juce::String& setId) const;
+
+	// Sort order, search and selection, for the session.
+	void saveState (LibrarySession& state) const;
+	void restoreState (const LibrarySession& state);
 
 	void paint (juce::Graphics& g) override;
 	void resized() override;

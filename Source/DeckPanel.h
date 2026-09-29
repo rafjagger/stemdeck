@@ -5,6 +5,7 @@
 #include "StemThumbnails.h"
 #include "Waveforms.h"
 #include "JogWheel.h"
+#include "Session.h"
 
 // One deck, laid out like a CDJ: title, times and overview on top; cue/play
 // on the left, the jog wheel in the middle, BPM, sync and tempo range on the
@@ -38,6 +39,11 @@ public:
 	// MASTER, like a CDJ's: this deck's beat goes out to the Pioneer network.
 	std::function<void()> onMasterPressed;
 	void setMaster (bool isMaster) { masterButton.setToggleState (isMaster, juce::dontSendNotification); }
+
+	// The deck's own controls for the session (tempo, range, vinyl, repeat,
+	// SYNC); restoring SYNC is the caller's, through onSyncToggled.
+	void saveState (DeckSession& state) const;
+	void restoreState (const DeckSession& state);
 
 	void paint (juce::Graphics& g) override;
 	void resized() override;

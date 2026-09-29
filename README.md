@@ -291,8 +291,13 @@ Ninja needed), rebuilds incrementally when something changed, and starts StemDec
 `pw-jack` / ALSA choice described above. The binary is
 `build/StemDeck_artefacts/Release/StemDeck`.
 
-Settings (library folder, sync source, audio device) live in `~/.config/StemDeck/`, next to
-`analysis.xml`, the tempo analysis cache.
+Settings (library folder, sync source, audio device, window) live in `~/.config/StemDeck/`, next to
+`analysis.xml`, the tempo analysis cache, and `session.xml`: what StemDeck picks up again on the
+next start. Both decks come back with their set, position, cue, loop, tempo, SYNC and MASTER,
+the mixer with every knob, mute, bus switch, fader and PHONES, the library with its sort,
+search and selection, and the stem creator with the tracks it had not finished (the running
+one starts again). **A deck that was playing plays on** — after a crash or a power cut too,
+since the session is written every two seconds while anything changes.
 
 ### Tests
 

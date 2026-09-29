@@ -7,6 +7,7 @@
 #include "DeckPanel.h"
 #include "MixerPanel.h"
 #include "Buses.h"
+#include "Session.h"
 #include "Waveforms.h"
 #include "JackOutput.h"
 #include "Theme.h"
@@ -36,6 +37,9 @@ class MainComponent  : public juce::Component,
 public:
 	MainComponent();
 	~MainComponent() override;
+
+	// The window's place and size, kept with the other settings.
+	juce::PropertiesFile& settings() { return *appProperties.getUserSettings(); }
 
 	//==============================================================================
 	void prepareToPlay (int samplesPerBlockExpected, double sampleRate) override;
@@ -72,6 +76,15 @@ private:
 	void createStems (const juce::Array<juce::File>& files);
 	void askTargetFolder (const juce::Array<juce::File>& files, const juce::String& preset);
 	void updateCreatorStatus();
+
+	// The session (Session.h): gathered from the decks, the mixer, the library
+	// and the stem creator; written when it changed, every two seconds and on
+	// quit; brought back once at start.
+	Session gatherSession() const;
+	void saveSession();
+	void restoreSession();
+	juce::String lastSessionText;
+	int sessionCountdown = 0;
 	void updateDeviceStatus();
 	void showAudioSettings();
 
@@ -117,6 +130,7 @@ private:
 	std::unique_ptr<AnalysisCache> analysisCache;
 	juce::ThreadPool analysisPool { juce::ThreadPoolOptions{}.withThreadName ("Tempo analysis").withNumberOfThreads (2) };
 	std::array<int, numDecks> loadGeneration {}; // drops results for a set no longer loaded
+	std::array<juce::String, numDecks> loadedSetIds; // StemLibrary's id: the first stem's path
 
 	// The deck with SYNC on follows the other one's tempo and beat phase.
 	int syncFollower = -1;

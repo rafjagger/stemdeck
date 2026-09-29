@@ -57,6 +57,18 @@ void StemCreator::cancel (int id)
 	}
 }
 
+std::vector<StemJobEntry> StemCreator::pendingJobs() const
+{
+	std::lock_guard<std::mutex> guard (lock);
+	std::vector<StemJobEntry> pending;
+	for (const auto& e : queue.jobs())
+		if (e.state == JobState::running)
+			pending.insert (pending.begin(), e);
+		else if (e.state == JobState::queued)
+			pending.push_back (e);
+	return pending;
+}
+
 void StemCreator::cancelRunning()
 {
 	std::optional<int> id;

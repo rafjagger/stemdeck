@@ -1,6 +1,7 @@
 #include "ProLinkPackets.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 
 namespace prolink
@@ -60,6 +61,47 @@ namespace prolink
 		const auto rawBpm = readBE16 (data + offStatusBpm);
 		status.bpm = rawBpm == noTrack ? 0.0 : rawBpm / 100.0;
 		return status;
+	}
+
+	namespace
+	{
+		constexpr size_t statusSize = 0xd4;
+
+		void writeBE16 (uint8_t* p, uint32_t v) { p[0] = (uint8_t) (v >> 8); p[1] = (uint8_t) v; }
+		void writeBE24 (uint8_t* p, uint32_t v) { p[0] = (uint8_t) (v >> 16); p[1] = (uint8_t) (v >> 8); p[2] = (uint8_t) v; }
+
+		uint32_t bpmField (double bpm)
+		{
+			// 0xffff means "no track", so a real tempo stops one short of it.
+			return (uint32_t) std::clamp (std::lround (bpm * 100.0), 0L, (long) noTrack - 1);
+		}
+
+		std::vector<uint8_t> packet (size_t size, uint8_t type, int device, const std::string& name)
+		{
+			std::vector<uint8_t> p (size, 0);
+			std::memcpy (p.data(), magic, sizeof (magic));
+			p[0x0a] = type;
+			std::memcpy (p.data() + offName, name.data(), std::min<size_t> (name.size(), 20));
+			p[offDevice] = (uint8_t) device;
+			return p;
+		}
+	}
+
+	std::vector<uint8_t> beatPacket (int device, const std::string& name, double bpm, double pitch, int beatInBar)
+	{
+		auto p = packet (beatSize, typeBeat, device, name);
+		writeBE24 (p.data() + offPitch, (uint32_t) std::lround (pitch * neutralPitch));
+		writeBE16 (p.data() + offBpm, bpmField (bpm));
+		p[offBeatInBar] = (uint8_t) beatInBar;
+		return p;
+	}
+
+	std::vector<uint8_t> statusPacket (int device, const std::string& name, double bpm, bool master, bool playing)
+	{
+		auto p = packet (statusSize, typeStatus, device, name);
+		p[offFlags] = (uint8_t) ((master ? flagMaster : 0) | (playing ? flagPlaying : 0));
+		writeBE16 (p.data() + offStatusBpm, bpmField (bpm));
+		return p;
 	}
 
 	std::vector<uint8_t> keepAlive (int deviceNumber, const std::string& name,

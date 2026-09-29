@@ -38,6 +38,13 @@ namespace prolink
 	// A CDJ status packet, or nothing.
 	std::optional<StatusPacket> parseStatus (const uint8_t* data, size_t size);
 
+	// What StemDeck sends as the tempo master: a beat packet on every beat
+	// (port 50001) and a status packet every 200 ms (port 50002), carrying
+	// every field beat-analyzer reads. `pitch` is the fader ratio, `bpm` the
+	// track's own; the effective tempo is their product.
+	std::vector<uint8_t> beatPacket (int device, const std::string& name, double bpm, double pitch, int beatInBar);
+	std::vector<uint8_t> statusPacket (int device, const std::string& name, double bpm, bool master, bool playing);
+
 	// The keep-alive a virtual CDJ announces itself with, every 1.5 s on port 50000.
 	std::vector<uint8_t> keepAlive (int deviceNumber, const std::string& name,
 									const std::array<uint8_t, 6>& mac, uint32_t ipNetworkOrder);

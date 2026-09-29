@@ -112,3 +112,40 @@ TEST (ProLinkPackets, TheKeepAliveMatchesTheLayout)
 	EXPECT_EQ (std::memcmp (k.data() + 0x26, mac.data(), 6), 0);
 	EXPECT_EQ (std::memcmp (k.data() + 0x2c, &ip, 4), 0);
 }
+
+// Part 2: StemDeck as the tempo master. What it sends must read back through
+// the same parsers beat-analyzer's layout is copied from.
+TEST (ProLinkPackets, ABuiltBeatPacketParsesBack)
+{
+	const auto b = prolink::beatPacket (6, "StemDeck", 125.5, 1.024, 3);
+	const auto beat = prolink::parseBeat (b.data(), b.size());
+	ASSERT_TRUE (beat.has_value());
+	EXPECT_EQ (beat->device, 6);
+	EXPECT_DOUBLE_EQ (beat->trackBpm, 125.5);
+	EXPECT_NEAR (beat->pitch, 1.024, 1e-6);
+	EXPECT_NEAR (beat->effectiveBpm, 128.512, 0.01);
+	EXPECT_EQ (beat->beatInBar, 3);
+	EXPECT_EQ (std::string ((const char*) b.data() + 0x0b, 8), "StemDeck");
+}
+
+TEST (ProLinkPackets, ABuiltStatusPacketParsesBack)
+{
+	const auto playing = prolink::statusPacket (6, "StemDeck", 128.0, true, true);
+	const auto stopped = prolink::statusPacket (6, "StemDeck", 128.0, true, false);
+	const auto p = prolink::parseStatus (playing.data(), playing.size());
+	const auto s = prolink::parseStatus (stopped.data(), stopped.size());
+	ASSERT_TRUE (p.has_value());
+	ASSERT_TRUE (s.has_value());
+	EXPECT_EQ (p->device, 6);
+	EXPECT_TRUE (p->isMaster);
+	EXPECT_TRUE (p->isPlaying);
+	EXPECT_DOUBLE_EQ (p->bpm, 128.0);
+	EXPECT_TRUE (s->isMaster);
+	EXPECT_FALSE (s->isPlaying);
+}
+
+TEST (ProLinkPackets, BuiltPacketsHaveTheRightSize)
+{
+	EXPECT_EQ (prolink::beatPacket (6, "StemDeck", 120.0, 1.0, 1).size(), 0x60u);
+	EXPECT_EQ (prolink::statusPacket (6, "StemDeck", 120.0, true, true).size(), 0xd4u);
+}

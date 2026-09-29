@@ -45,10 +45,13 @@ FollowResult followLeader (const FollowInput& in)
 
 double positionAt (double position, double stampSeconds, double nowSeconds, double rate, bool moving)
 {
+	// Longer than any audio block: a stamp this old is from before a pause or
+	// a stall and says nothing about now.
 	constexpr double longestCarry = 0.1;
-	if (! moving)
+	const auto age = nowSeconds - stampSeconds;
+	if (! moving || age <= 0.0 || age > longestCarry)
 		return position;
-	return position + std::clamp (nowSeconds - stampSeconds, 0.0, longestCarry) * rate;
+	return position + age * rate;
 }
 
 std::optional<NextBeat> nextBeat (double gridFirstBeat, double gridBpm, double position)

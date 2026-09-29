@@ -26,7 +26,12 @@ MainComponent::MainComponent()
 		waves[(size_t) d]->onSetDropped = [this, d] (const juce::String& id) { loadDroppedSet (id, d); };
 		decks[(size_t) d]->onSetDropped = [this, d] (const juce::String& id) { loadDroppedSet (id, d); };
 		decks[(size_t) d]->onSyncToggled = [this, d] (bool enabled) { setSync (d, enabled); };
-		decks[(size_t) d]->onMasterPressed = [this, d] { setMasterDeck (chooseMaster (d, decksPlaying(), masterDeck)); };
+		decks[(size_t) d]->onMasterPressed = [this, d]
+		{
+			const auto chosen = chooseMaster (d, decksPlaying(), masterDeck, true);
+			masterTurnedOff = chosen < 0;
+			setMasterDeck (chosen);
+		};
 	}
 
 	addAndMakeVisible (mixer);
@@ -534,7 +539,7 @@ void MainComponent::timerCallback()
 	updateSync();
 
 	// With no master yet, the only playing deck becomes it (like a lone CDJ).
-	if (const auto chosen = chooseMaster (-1, decksPlaying(), masterDeck); chosen != masterDeck)
+	if (const auto chosen = chooseMaster (-1, decksPlaying(), masterDeck, ! pioSource && ! masterTurnedOff); chosen != masterDeck)
 		setMasterDeck (chosen);
 
 	updatePioneerStatus();

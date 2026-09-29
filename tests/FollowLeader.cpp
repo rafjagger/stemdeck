@@ -114,7 +114,17 @@ TEST (FollowLeader, AStoppedDeckIsNotCarried)
 TEST (FollowLeader, ACarryIsNeverBackwardsNorLongerThanABlockCouldBe)
 {
 	EXPECT_DOUBLE_EQ (positionAt (10.0, 100.0, 99.9, 1.0, true), 10.0) << "stamp from the future";
-	EXPECT_NEAR (positionAt (10.0, 100.0, 105.0, 1.0, true), 10.1, 1e-9) << "a stale stamp is capped at 100 ms";
+	EXPECT_NEAR (positionAt (10.0, 100.0, 100.04, 1.0, true), 10.04, 1e-9) << "a block's worth is carried";
+}
+
+// Review 2026-09-29 (I1): right after PLAY the stamp is from before the pause.
+// Carrying it would put the deck up to 100 ms ahead, and the beat it is
+// standing on -- a cue on the downbeat -- would never be sent. A stamp older
+// than any audio block says nothing about now: not carried.
+TEST (FollowLeader, AStaleStampIsNotCarried)
+{
+	EXPECT_DOUBLE_EQ (positionAt (10.0, 100.0, 105.0, 1.0, true), 10.0);
+	EXPECT_DOUBLE_EQ (positionAt (10.0, 100.0, 100.2, 1.0, true), 10.0);
 }
 
 TEST (FollowLeader, TheNextBeatIsTheNextGridLine)

@@ -161,8 +161,11 @@ the master deck's beat goes out to the Pioneer network, and anything following t
 tempo master follows StemDeck — in the A³ system that is beat-analyzer in clock mode 2, which
 passes the beat on to A³ Motion.
 
-- Press MASTER on a deck to make it master; press it on the other deck to hand over. With no
-  master chosen, the only playing deck becomes master by itself.
+- Press MASTER on a deck to make it master; press it on the other deck to hand over; press it on
+  the master to turn MASTER off (StemDeck then leaves the Pioneer network if it is not
+  following either). With no master chosen, the only playing deck becomes master by itself —
+  but not under **SYNC: PIO** (a real CDJ may hold master, and two masters would flip every
+  listener's clock) and not once MASTER was turned off by hand.
 - StemDeck sends, as virtual CDJ 6: a **beat packet on every beat** of the master deck (tempo =
   the track's BPM × the tempo fader, beat in the bar counted from the grid's first beat) and a
   **status packet every 200 ms** (master, playing or not, tempo, beat). A stopped master stays
@@ -170,7 +173,10 @@ passes the beat on to A³ Motion.
 - Everything goes out as **broadcast**, so a listener on the same machine hears it whichever
   program started first (unicast would reach only one of them).
 - A separate thread times the beats to about a millisecond, from the deck's position carried to
-  "now"; the 60 Hz screen timer would be up to 16 ms off.
+  "now"; the 60 Hz screen timer would be up to 16 ms off. A beat is never lost to a late wake-up,
+  a cue on a beat sends that beat when you press PLAY, a jump sends no burst of skipped beats, and
+  a handover never doubles a beat.
+- Nothing is sent while the master deck has no tempo grid yet (still being analysed).
 - The readout in the top bar says `PIO master: A` (or B) while StemDeck sends.
 - The packets follow the layout [prolink-connect](https://github.com/EvanPurkhiser/prolink-connect)
   reads, so tools built on it (e.g. prolink-tools) see StemDeck like a CDJ.

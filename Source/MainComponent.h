@@ -128,6 +128,9 @@ private:
 
 	// StemDeck as the tempo master (Part 2): the deck whose beat goes out, -1 none.
 	int masterDeck = -1;
+	// The only playing deck becomes master by itself -- but not under SYNC: PIO
+	// (a real CDJ may hold master) and not once MASTER was turned off by hand.
+	bool masterTurnedOff = false;
 	ProLinkSender pioSender;
 
 	JackOutput jack;

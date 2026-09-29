@@ -1,5 +1,6 @@
 build/
-stems/
+build-make/
+stems/*
 .idea/
 .vscode/
 *.user

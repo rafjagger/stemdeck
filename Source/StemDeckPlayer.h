@@ -36,6 +36,9 @@ public:
 
 	void setPosition (double seconds);
 	double getPosition() const;
+	// When the audio thread last moved the position, in
+	// juce::Time::getMillisecondCounterHiRes() seconds -- see positionAt().
+	double getPositionStamp() const { return positionStamp.load(); }
 	double getLength() const;
 
 	// Loop between two positions in seconds; the playhead jumps to the start.
@@ -120,6 +123,7 @@ private:
 
 	std::atomic<bool> playing { false }, repeat { false };
 	std::atomic<juce::int64> readPosition { 0 };
+	std::atomic<double> positionStamp { 0.0 };
 	std::atomic<juce::int64> loopStart { 0 }, loopEnd { 0 }; // loopEnd == 0: no loop
 	std::atomic<double> fileSampleRate { 44100.0 }, deviceSampleRate { 44100.0 }, speed { 1.0 };
 	std::atomic<double> pitchBend { 1.0 }, syncNudge { 1.0 };

@@ -27,7 +27,14 @@ target_sources(StemDeck PRIVATE
     Source/TempoAnalysis.cpp
     Source/MixerPanel.cpp
     Source/StemLibrary.cpp
-    Source/JackOutput.cpp)
+    Source/JackOutput.cpp
+    Source/ProLinkPackets.cpp
+    Source/PioneerClock.cpp
+    Source/FollowLeader.cpp
+    Source/ProLinkReceiver.cpp
+    Source/MasterDeck.cpp
+    Source/ProLinkSender.cpp
+    Source/BeatScheduler.cpp)
 
 target_compile_definitions(StemDeck PRIVATE
     JUCE_WEB_BROWSER=0
@@ -46,3 +53,9 @@ target_link_libraries(StemDeck
         juce::juce_recommended_config_flags
         juce::juce_recommended_lto_flags
         juce::juce_recommended_warning_flags)
+
+option(STEMDECK_TESTS "Build the unit tests" OFF)
+if(STEMDECK_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()

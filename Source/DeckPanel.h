@@ -35,6 +35,10 @@ public:
 
 	std::function<void (bool enabled)> onSyncToggled;
 
+	// MASTER, like a CDJ's: this deck's beat goes out to the Pioneer network.
+	std::function<void()> onMasterPressed;
+	void setMaster (bool isMaster) { masterButton.setToggleState (isMaster, juce::dontSendNotification); }
+
 	void paint (juce::Graphics& g) override;
 	void resized() override;
 
@@ -55,7 +59,7 @@ private:
 	JogWheel jog;
 
 	juce::TextButton cueButton { "CUE" }, playButton { "PLAY" }, loopOffButton { "LOOP AUS" }, repeatButton { "REPEAT" };
-	juce::TextButton syncButton { "SYNC" }, rangeButton, vinylButton { "VINYL" };
+	juce::TextButton syncButton { "SYNC" }, masterButton { "MASTER" }, rangeButton, vinylButton { "VINYL" };
 	juce::Slider tempo { juce::Slider::LinearVertical, juce::Slider::TextBoxBelow };
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DeckPanel)

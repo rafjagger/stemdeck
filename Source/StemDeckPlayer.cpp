@@ -258,6 +258,10 @@ void StemDeckPlayer::getNextAudioBlock (const juce::AudioSourceChannelInfo& info
 		resampler.getNextAudioBlock (info);
 	}
 
+	// The position is final for this block now: stamped here, the UI carries
+	// it forward from this moment (positionAt, PIO sync).
+	positionStamp = juce::Time::getMillisecondCounterHiRes() / 1000.0;
+
 	for (int s = 0; s < numStems; ++s)
 	{
 		auto& smoother = gainSmoothers[(size_t) s];

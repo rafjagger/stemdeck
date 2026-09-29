@@ -1246,7 +1246,9 @@ void MainComponent::resized()
 	area.removeFromTop (6);
 
 	auto middle = area.removeFromTop (juce::jmin (460, area.getHeight() - 150));
-	const auto mixerWidth = juce::jlimit (460, 560, getWidth() / 3);
+	// 400 at the least, so a deck column keeps ~180 px on the rig's 768 px
+	// screen; it was 460, which left them 154 and cut their right half off.
+	const auto mixerWidth = juce::jlimit (400, 560, getWidth() / 3);
 	const auto deckWidth = (middle.getWidth() - mixerWidth) / 2;
 	deckA.setBounds (middle.removeFromLeft (deckWidth));
 	deckB.setBounds (middle.removeFromRight (deckWidth));

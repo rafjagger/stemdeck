@@ -46,6 +46,8 @@ StemLibrary::StemLibrary (juce::AudioFormatManager& fm) : formatManager (fm)
 	header.addColumn ("BPM", bpmColumn, 70, 50);
 	header.addColumn ("Stems", stemsColumn, 200, 80);
 	header.addColumn (juce::String::fromUTF8 ("L\xc3\xa4nge"), lengthColumn, 70, 50);
+	// Into the window's width rather than past its right edge (768 px on the rig).
+	header.setStretchToFitActive (true);
 	header.setSortColumnId (artistColumn, true);
 	header.setColour (juce::TableHeaderComponent::backgroundColourId, Theme::panelRaised);
 	header.setColour (juce::TableHeaderComponent::textColourId, Theme::textDim);

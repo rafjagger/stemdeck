@@ -144,10 +144,10 @@ ChannelStrip::ChannelStrip (StemDeckPlayer& p, int index) : player (p), deckInde
 		}
 
 		auto* label = stemLabels.add (new juce::Label ({}, "Stem " + juce::String (s + 1)));
-		label->setFont (juce::FontOptions (11.0f, juce::Font::bold));
+		label->setFont (juce::FontOptions (10.0f, juce::Font::bold));
 		label->setColour (juce::Label::textColourId, Theme::stem (s));
 		label->setJustificationType (juce::Justification::centredLeft);
-		label->setMinimumHorizontalScale (0.6f);
+		label->setMinimumHorizontalScale (0.45f);   // "3 vocals" in the 400 px mixer
 		addAndMakeVisible (label);
 	}
 
@@ -284,7 +284,10 @@ void ChannelStrip::resized()
 																				 switchSize, switchSize).reduced (1));
 
 		row.removeFromRight (4);
-		stemLabels[s]->setBounds (row.removeFromTop (row.getHeight() / 2));
+		// One line high, so a narrow mixer squeezes the name instead of
+		// breaking it ("Ste / m 1" at 400 px).
+		const auto labelRow = row.removeFromTop (row.getHeight() / 2);
+		stemLabels[s]->setBounds (labelRow.withSizeKeepingCentre (labelRow.getWidth(), juce::jmin (labelRow.getHeight(), 16)));
 		muteButtons[s]->setBounds (row.removeFromLeft (28).reduced (0, 2));
 	}
 

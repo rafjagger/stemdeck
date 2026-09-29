@@ -99,3 +99,13 @@ void DJLookAndFeel::drawButtonBackground (juce::Graphics& g, juce::Button& butto
 	g.setColour (Theme::outline);
 	g.drawRoundedRectangle (bounds, 4.0f, 1.0f);
 }
+
+juce::Font DJLookAndFeel::getTextButtonFont (juce::TextButton& button, int buttonHeight)
+{
+	const auto font = juce::LookAndFeel_V4::getTextButtonFont (button, buttonHeight);
+	const auto room = (float) button.getWidth() - 8.0f;
+	const auto wanted = juce::GlyphArrangement::getStringWidth (font, button.getButtonText());
+	if (wanted <= room || wanted <= 0.0f)
+		return font;
+	return font.withHeight (juce::jmax (9.0f, font.getHeight() * room / wanted));
+}

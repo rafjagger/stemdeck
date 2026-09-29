@@ -56,4 +56,8 @@ public:
 
 	void drawButtonBackground (juce::Graphics&, juce::Button&, const juce::Colour& backgroundColour,
 							   bool isMouseOverButton, bool isButtonDown) override;
+
+	// Smaller where a label would not fit its button: on the rig's 768 px
+	// screen a deck's keys stand two to a row and MASTER came out "MAST...".
+	juce::Font getTextButtonFont (juce::TextButton&, int buttonHeight) override;
 };

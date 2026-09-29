@@ -188,49 +188,39 @@ void MainComponent::updateSync()
 	if (! followerGrid.isValid() || ! leaderGrid.isValid())
 		return;
 
-	// Tempo: match the leader's fader tempo, taking whichever of half, same or
-	// double tempo needs the smallest change (e.g. 70 BPM against 140).
-	const auto leaderBpm = leaderGrid.bpm * leader.getSpeed();
+	FollowInput in;
+	in.leaderBpm = leaderGrid.bpm * leader.getSpeed();
+	in.leaderBeatPhase = leaderGrid.beatsAt (leader.getPosition());
+	in.leaderPlaying = leader.isPlaying();
+	in.anyScratching = follower.isScratching() || leader.isScratching();
+	in.multiple = syncMultiple;
 
-	if (syncMultiple <= 0.0)
-	{
-		syncMultiple = 1.0;
+	syncMultiple = applyFollow (syncFollower, in);
+}
 
-		for (auto multiple : { 0.5, 2.0 })
-			if (std::abs (std::log (leaderBpm * multiple / followerGrid.bpm)) < std::abs (std::log (leaderBpm * syncMultiple / followerGrid.bpm)))
-				syncMultiple = multiple;
-	}
+// One synced deck against its leader: the rules in followLeader(), the
+// result put on the deck.
+double MainComponent::applyFollow (int deckIndex, FollowInput in)
+{
+	auto& follower = *players[(size_t) deckIndex];
+	const auto grid = follower.getBeatGrid();
 
-	const auto rate = leaderBpm * syncMultiple / followerGrid.bpm;
+	in.followerGridBpm = grid.bpm;
+	in.followerBeatPhase = grid.beatsAt (follower.getPosition());
+	in.followerSpeed = follower.getSpeed();
+	in.followerEffectiveRate = follower.getEffectiveRate();
+	in.followerPlaying = follower.isPlaying();
 
-	if (std::abs (rate - follower.getSpeed()) > 1e-6)
-		decks[(size_t) syncFollower]->setTempoFromSync (rate);
+	const auto out = followLeader (in);
 
-	// Phase: only while both play and nobody scratches.
-	if (! follower.isPlaying() || ! leader.isPlaying() || follower.isScratching() || leader.isScratching())
-	{
-		follower.setSyncNudge (1.0);
-		return;
-	}
+	if (out.tempo)
+		decks[(size_t) deckIndex]->setTempoFromSync (*out.tempo);
 
-	const auto leaderBeats = leaderGrid.beatsAt (leader.getPosition()) * syncMultiple;
-	const auto followerBeats = followerGrid.beatsAt (follower.getPosition());
-	auto error = (leaderBeats - std::floor (leaderBeats)) - (followerBeats - std::floor (followerBeats));
-	error -= std::round (error); // -0.5 .. 0.5 beats, positive: follower is behind
+	if (out.jumpBeats)
+		follower.setPosition (follower.getPosition() + *out.jumpBeats * grid.beatLength());
 
-	const auto errorSeconds = error * followerGrid.beatLength() / follower.getEffectiveRate(); // in real time
-
-	if (std::abs (errorSeconds) > 0.05)
-	{
-		// Far off (e.g. just started): jump into phase.
-		follower.setPosition (follower.getPosition() + error * followerGrid.beatLength());
-		follower.setSyncNudge (1.0);
-	}
-	else
-	{
-		// Close: speed up or slow down slightly until the beats line up.
-		follower.setSyncNudge (1.0 + juce::jlimit (-0.02, 0.02, errorSeconds * 1.5));
-	}
+	follower.setSyncNudge (out.nudge);
+	return out.multiple;
 }
 
 void MainComponent::loadDroppedSet (const juce::String& setId, int deckIndex)

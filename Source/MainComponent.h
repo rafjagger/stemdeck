@@ -10,6 +10,7 @@
 #include "JackOutput.h"
 #include "Theme.h"
 #include "TempoAnalysis.h"
+#include "FollowLeader.h"
 
 //==============================================================================
 // Two stem decks and a mixer, laid out like Mixxx: scrolling waveforms on top,
@@ -51,6 +52,7 @@ private:
 	void startAnalysis (const StemSet& set, int deckIndex);
 	void setSync (int deckIndex, bool enabled);
 	void updateSync();
+	double applyFollow (int deckIndex, FollowInput in);
 	void loadDroppedSet (const juce::String& setId, int deckIndex);
 	void initialiseAudio();
 	void initialiseDeviceManager();

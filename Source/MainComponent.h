@@ -20,6 +20,7 @@
 #include "TempoAnalysis.h"
 #include "FollowLeader.h"
 #include "PioneerClock.h"
+#include "OscTruth.h"
 #include "ProLinkReceiver.h"
 #include "ProLinkSender.h"
 #include "MasterDeck.h"
@@ -178,6 +179,8 @@ private:
 	std::array<bool, numDecks> pioSynced {};
 	std::array<double, numDecks> pioMultiple {};
 	ProLinkReceiver proLink;
+	// The Pro DJ Link ports, from the one truth (a3-osc.json), read once.
+	osctruth::ProLinkPorts proLinkPorts;
 	PioneerClock pioClock;
 	juce::TextButton syncSourceButton { "SYNC: DECK" };
 	juce::Label pioStatus;

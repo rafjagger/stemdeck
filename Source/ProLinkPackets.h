@@ -13,7 +13,8 @@
 // after the dysentery protocol analysis. Pure: no sockets, no JUCE.
 namespace prolink
 {
-	constexpr int announcePort = 50000, beatPort = 50001, statusPort = 50002;
+	// The ports are not here: they come from the one truth, a3-osc.json --
+	// see OscTruth.h.
 
 	struct BeatPacket
 	{

@@ -318,7 +318,10 @@ SYNC follows the Pioneer Pro DJ Link tempo master: its tempo (BPM including pitc
 Both decks may be synced at once, each with its own half/same/double choice.
 
 - StemDeck joins the network as virtual CDJ **number 6** (setting `pioDevice` in
-  `~/.config/StemDeck/StemDeck.settings`) and listens on UDP 50000–50002. The sockets use
+  `~/.config/StemDeck/StemDeck.settings`) and listens on the Pro DJ Link ports, UDP
+  50000–50002, which it reads from the A³ system's one truth, `/usr/share/a3/a3-osc.json`
+  (or the file `$A3_OSC_TRUTH` names); without it the status line says `PIO: no
+  a3-osc.json`. The sockets use
   `SO_REUSEADDR`, so it can share a machine with beat-analyzer (number 7) and both get the
   broadcast beats. If the network is not up yet, it retries every two seconds.
 - The master comes from the CDJs' status packets. Some of those go to one address only, so on a

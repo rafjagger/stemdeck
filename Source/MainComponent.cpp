@@ -1,7 +1,9 @@
 #include "MainComponent.h"
 #include "StemJob.h"
 #include "GridEdit.h"
+#include "OscTruthFile.h"
 
+#include <iostream>
 #include <pthread.h>
 #include <sched.h>
 
@@ -9,6 +11,15 @@
 MainComponent::MainComponent()
 {
 	setLookAndFeel (&lookAndFeel);
+
+	// Where Pro DJ Link listens: the one truth. Without it the PIO clock
+	// does not start and its status line says why.
+	{
+		std::string truthError;
+		proLinkPorts = osctruth::proLinkPortsFrom (osctruth::readListeners (osctruth::truthPath(), truthError));
+		if (! truthError.empty())
+			std::cerr << "StemDeck: " << truthError << std::endl;
+	}
 
 	juce::PropertiesFile::Options options;
 	options.applicationName = "StemDeck";
@@ -939,10 +950,10 @@ void MainComponent::updateNetwork()
 	}
 
 	if (! proLink.isRunning())
-		proLink.start (device);
+		proLink.start (device, proLinkPorts);
 
 	if (masterDeck >= 0 && proLink.isRunning() && ! pioSender.isRunning())
-		pioSender.start (device, proLink.broadcastAddress());
+		pioSender.start (device, proLink.broadcastAddress(), proLinkPorts);
 	else if (masterDeck < 0)
 		pioSender.stop();
 }

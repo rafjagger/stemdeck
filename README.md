@@ -279,6 +279,12 @@ Two systemd user services carry the audio over the network, kept in this reposit
 - `zita-j2n.service` sends StemDeck's 10 channels to A³ Core (UDP 65100);
 - `zita-n2j.service` receives 2 channels back from it (UDP 55100).
 
+Both take their address and port from the A³ system's one truth, `a3-osc.json`, through
+`tools/zita-from-truth.py` — on radla a copy of the Core's `/usr/share/a3/a3-osc.json` at the same
+path (`sudo mkdir -p /usr/share/a3 && sudo cp a3-osc.json /usr/share/a3/`), which StemDeck's PIO
+clock reads too. The j2n unit used to name Core's address itself, and after the rig moved to
+192.168.8.x it sent to the old one without a word.
+
 Both restart by themselves 2 s after they drop out (zita ends on some graph changes, and
 reports that as a normal exit), with no limit on how often. Install or update them with
 

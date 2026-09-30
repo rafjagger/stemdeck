@@ -28,6 +28,8 @@ target_sources(StemDeck PRIVATE
     Source/MixerPanel.cpp
     Source/StemLibrary.cpp
     Source/SettingsPanel.cpp
+    Source/Workspaces.cpp
+    Source/WorkspacePanel.cpp
     Source/JackOutput.cpp
     Source/ProLinkPackets.cpp
     Source/PioneerClock.cpp

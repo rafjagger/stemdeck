@@ -5,6 +5,8 @@
 #include "StemThumbnails.h"
 #include "StemLibrary.h"
 #include "SettingsPanel.h"
+#include "Workspaces.h"
+#include "WorkspacePanel.h"
 #include "DeckPanel.h"
 #include "MixerPanel.h"
 #include "Buses.h"
@@ -93,6 +95,11 @@ private:
 	void showAudioSettings();
 	void showSettings();
 
+	// Over to A3 Motion in one tap, or to any of the rig's i3 workspaces from
+	// the list beside it -- named in a3-core's i3 config, read from i3.
+	void goToWorkspace (int number);
+	void showWorkspaces();
+
 	DJLookAndFeel lookAndFeel;
 	juce::TooltipWindow tooltips { this, 600 };
 	juce::ApplicationProperties appProperties;
@@ -125,6 +132,9 @@ private:
 
 	juce::TextButton audioSettingsButton { "Audio" };
 	juce::TextButton settingsButton { "Settings" };
+	juce::TextButton motionButton { "MOTION" };
+	juce::TextButton workspacesButton { juce::String::fromUTF8 ("\xe2\x96\xbe") };
+	WorkspacePanel workspacePanel;
 	juce::Label deviceStatus;
 	int statusCountdown = 0;
 

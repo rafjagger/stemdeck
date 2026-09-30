@@ -259,7 +259,7 @@ Demo and promo videos are recorded with OBS Studio, outside StemDeck.
 
 ### Always running on the rig
 
-On the A³ Core machine StemDeck runs as a user service and sits on i3 workspace 4, full screen
+On the A³ Core machine StemDeck runs as a user service and sits alone on i3 workspace 2, filling it
 (the rule is in the a3-core package's i3 config):
 
 ```sh

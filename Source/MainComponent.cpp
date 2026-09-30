@@ -73,6 +73,17 @@ MainComponent::MainComponent()
 	settingsButton.onClick = [this] { showSettings(); };
 	settingsButton.setMouseClickGrabsKeyboardFocus (false);
 	addAndMakeVisible (settingsButton);
+	motionButton.setTooltip ("Over to A3 Motion (i3 workspace 1)");
+	motionButton.onClick = [this] { goToWorkspace (1); };
+	workspacesButton.setTooltip ("Any of the rig's workspaces");
+	workspacesButton.onClick = [this] { showWorkspaces(); };
+	for (auto* b : { &motionButton, &workspacesButton })
+	{
+		b->setMouseClickGrabsKeyboardFocus (false);
+		addAndMakeVisible (b);
+	}
+	workspacePanel.onChosen = [this] (int number) { goToWorkspace (number); };
+	addChildComponent (workspacePanel);
 	deviceStatus.setColour (juce::Label::textColourId, Theme::textDim);
 	addAndMakeVisible (deviceStatus);
 
@@ -1080,6 +1091,40 @@ void MainComponent::showAudioSettings()
 	dialog.launchAsync();
 }
 
+void MainComponent::goToWorkspace (int number)
+{
+	juce::ChildProcess i3;
+	if (i3.start (juce::StringArray { "i3-msg", "-q", "workspace number " + juce::String (number) }))
+		i3.waitForProcessToFinish (1000);
+}
+
+void MainComponent::showWorkspaces()
+{
+	juce::ChildProcess i3;
+	if (! i3.start (juce::StringArray { "i3-msg", "-t", "get_workspaces" }))
+		return;
+
+	// Held in a named var: getArray() points into it, and a temporary's list
+	// was gone before the loop read it (SIGSEGV on the rig, 2026-09-30).
+	const auto workspaces = juce::JSON::parse (i3.readAllProcessOutput());
+	const auto* list = workspaces.getArray();
+	if (list == nullptr)
+		return;
+
+	std::vector<WorkspacePanel::Entry> entries;
+	for (const auto& workspace : *list)
+	{
+		const auto name = workspace["name"].toString().toStdString();
+		if (const auto number = workspaceNumber (name); number > 0)
+			entries.push_back ({ number, juce::String (workspaceLabel (name)), (bool) workspace["focused"] });
+	}
+
+	if (entries.empty())
+		return;
+	workspacePanel.setBounds (getLocalBounds());
+	workspacePanel.show (entries, workspacesButton.getBounds().getUnion (motionButton.getBounds()));
+}
+
 void MainComponent::showSettings()
 {
 	juce::DialogWindow::LaunchOptions dialog;
@@ -1247,6 +1292,10 @@ void MainComponent::resized()
 	settingsButton.setBounds (topBar.removeFromRight (90));
 	topBar.removeFromRight (6);
 	audioSettingsButton.setBounds (topBar.removeFromRight (70));
+	topBar.removeFromRight (6);
+	workspacesButton.setBounds (topBar.removeFromRight (30));
+	topBar.removeFromRight (2);
+	motionButton.setBounds (topBar.removeFromRight (80));
 	topBar.removeFromRight (6);
 	syncSourceButton.setBounds (topBar.removeFromRight (110));
 	topBar.removeFromRight (6);

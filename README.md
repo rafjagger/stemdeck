@@ -7,7 +7,6 @@ StemDeck is part of the [A³ Audio](https://github.com/a3-audio) system, a live 
 setup. Its buses 1–4 and AUX feed A³ Core, where a stem sent to aux can be put onto a movement
 and flown around the room; a sixth bus, PHONES, is for the headphones.
 
-<!-- IMAGE: the whole main window with a set loaded on both decks, one of them playing -->
 ![StemDeck main window](docs/stemdeck-main.png)
 
 ---
@@ -67,7 +66,6 @@ ports, xruns) and the SYNC source. **Settings** holds where the stem library is 
 
 ### Decks
 
-<!-- IMAGE: one deck close-up: title, overview waveform with a loop set, BPM readout with "Original", CUE/PLAY, and at the foot the tempo fader with LOOP OFF/REPEAT, SYNC/MASTER, range/VINYL, GRID -->
 ![A deck](docs/stemdeck-deck.png)
 
 Laid out like a CDJ, in one column for the rig's 768x1024 screen; the jog wheels are the
@@ -152,7 +150,6 @@ mix. Turning it off leaves everything as it is. It stays on across a restart.
 
 ### Mixer
 
-<!-- IMAGE: the mixer between the decks: both channel strips with stem knobs, M and the 2×3 bus switches 1 2 3 / 4 A P per stem, channel faders, PHONES buttons, and the output meters 1-4 / AUX / PH -->
 ![The mixer](docs/stemdeck-mixer.png)
 
 One channel strip per deck. Per stem: a gain knob (−60 to +6 dB, double-click for 0 dB), **M**
@@ -165,7 +162,6 @@ In the middle, output meters for buses 1–4, AUX and PH.
 
 ### Library
 
-<!-- IMAGE: the library with a few sets listed, BPM column filled, the search box and the "Load to A / Load to B" buttons -->
 ![The library](docs/stemdeck-library.png)
 
 Columns: set, BPM (once analysed), stem names, length, folder; click a header to sort. The search

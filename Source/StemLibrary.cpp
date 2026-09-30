@@ -404,7 +404,7 @@ void StemLibrary::setDropHighlight (bool on)
 
 void StemLibrary::chooseFilesForStems()
 {
-	chooser = std::make_unique<juce::FileChooser> ("Stereo-Dateien in Stems zerlegen",
+	chooser = std::make_unique<juce::FileChooser> ("Split stereo files into stems",
 		juce::File::getSpecialLocation (juce::File::userMusicDirectory),
 		"*.flac;*.wav;*.mp3;*.aiff;*.aif;*.ogg;*.m4a;*.opus");
 	chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles

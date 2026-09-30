@@ -279,6 +279,12 @@ Two systemd user services carry the audio over the network, kept in this reposit
 - `zita-j2n.service` sends StemDeck's 10 channels to A³ Core (UDP 65100);
 - `zita-n2j.service` receives 2 channels back from it (UDP 55100).
 
+Both take their address and port from the A³ system's one truth, `a3-osc.json`, through
+`tools/zita-from-truth.py` — on radla a copy of the Core's `/usr/share/a3/a3-osc.json` at the same
+path (`sudo mkdir -p /usr/share/a3 && sudo cp a3-osc.json /usr/share/a3/`), which StemDeck's PIO
+clock reads too. The j2n unit used to name Core's address itself, and after the rig moved to
+192.168.8.x it sent to the old one without a word.
+
 Both restart by themselves 2 s after they drop out (zita ends on some graph changes, and
 reports that as a normal exit), with no limit on how often. Install or update them with
 
@@ -318,7 +324,10 @@ SYNC follows the Pioneer Pro DJ Link tempo master: its tempo (BPM including pitc
 Both decks may be synced at once, each with its own half/same/double choice.
 
 - StemDeck joins the network as virtual CDJ **number 6** (setting `pioDevice` in
-  `~/.config/StemDeck/StemDeck.settings`) and listens on UDP 50000–50002. The sockets use
+  `~/.config/StemDeck/StemDeck.settings`) and listens on the Pro DJ Link ports, UDP
+  50000–50002, which it reads from the A³ system's one truth, `/usr/share/a3/a3-osc.json`
+  (or the file `$A3_OSC_TRUTH` names); without it the status line says `PIO: no
+  a3-osc.json`. The sockets use
   `SO_REUSEADDR`, so it can share a machine with beat-analyzer (number 7) and both get the
   broadcast beats. If the network is not up yet, it retries every two seconds.
 - The master comes from the CDJs' status packets. Some of those go to one address only, so on a

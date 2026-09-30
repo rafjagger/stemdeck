@@ -5,7 +5,8 @@ StartLimitIntervalSec=0
 [Service]
 Type=simple
 ExecStartPre=/usr/bin/sleep 2
-ExecStart=/usr/bin/zita-n2j --chan 1-2 --buff 20 --info 0.0.0.0 55100
+# Port from the one truth (a3-osc.json): see tools/zita-from-truth.py.
+ExecStart=/usr/bin/python3 %h/a3-system/stemdeck/tools/zita-from-truth.py n2j --chan 1-2 --buff 20 --info
 CPUAffinity=1 2 3
 CPUSchedulingPolicy=rr
 CPUSchedulingPriority=64

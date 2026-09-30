@@ -1,5 +1,6 @@
 #pragma once
 
+#include "OscTruth.h"
 #include "ProLinkPackets.h"
 
 #include <atomic>
@@ -29,8 +30,10 @@ public:
 	~ProLinkReceiver();
 
 	// Opens the sockets and starts the thread. False, with error() set, when
-	// the ports cannot be bound or no network interface is up.
-	bool start (int deviceNumber, const std::string& name = "StemDeck");
+	// the truth has no ports for it, the ports cannot be bound or no network
+	// interface is up.
+	bool start (int deviceNumber, const osctruth::ProLinkPorts& ports,
+				const std::string& name = "StemDeck");
 	void stop();
 	bool isRunning() const { return running.load(); }
 	std::string error() const;
@@ -51,6 +54,7 @@ private:
 	std::atomic<bool> running { false };
 	std::thread thread;
 	int sockAnnounce = -1, sockBeat = -1, sockStatus = -1;
+	osctruth::ProLinkPorts ports;
 	int deviceNumber = 6;
 	std::string name;
 	std::array<uint8_t, 6> mac {};

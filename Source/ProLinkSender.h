@@ -1,5 +1,6 @@
 #pragma once
 
+#include "OscTruth.h"
 #include "ProLinkPackets.h"
 
 #include <atomic>
@@ -22,7 +23,9 @@ class ProLinkSender
 public:
 	~ProLinkSender();
 
-	bool start (int deviceNumber, uint32_t broadcastIpNetworkOrder, const std::string& name = "StemDeck");
+	// False when the truth has no ports for it or no socket opens.
+	bool start (int deviceNumber, uint32_t broadcastIpNetworkOrder,
+				const osctruth::ProLinkPorts& ports, const std::string& name = "StemDeck");
 	void stop();
 	bool isRunning() const { return running.load(); }
 
@@ -37,6 +40,7 @@ private:
 	std::atomic<const StemDeckPlayer*> master { nullptr };
 	std::thread thread;
 	int socketFd = -1;
+	osctruth::ProLinkPorts ports;
 	int deviceNumber = 6;
 	uint32_t broadcastIp = 0;
 	std::string name;

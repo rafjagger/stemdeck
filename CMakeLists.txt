@@ -18,6 +18,8 @@ juce_generate_juce_header(StemDeck)
 target_sources(StemDeck PRIVATE
     Source/Main.cpp
     Source/MainComponent.cpp
+    Source/OscTruth.cpp
+    Source/OscTruthFile.cpp
     Source/Theme.cpp
     Source/StemSet.cpp
     Source/StemDeckPlayer.cpp

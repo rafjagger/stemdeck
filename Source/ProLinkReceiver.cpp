@@ -88,10 +88,12 @@ bool ProLinkReceiver::openSocket (int& fd, int port)
 	return bind (fd, reinterpret_cast<sockaddr*> (&address), sizeof (address)) == 0;
 }
 
-bool ProLinkReceiver::start (int number, const std::string& deviceName)
+bool ProLinkReceiver::start (int number, const osctruth::ProLinkPorts& truthPorts,
+							 const std::string& deviceName)
 {
 	stop();
 	deviceNumber = number;
+	ports = truthPorts;
 	name = deviceName;
 
 	const auto fail = [this] (const std::string& why)
@@ -103,12 +105,15 @@ bool ProLinkReceiver::start (int number, const std::string& deviceName)
 		return false;
 	};
 
+	if (! ports.complete())
+		return fail ("no a3-osc.json");
+
 	if (! detectInterface())
 		return fail ("no network");
 
-	if (! openSocket (sockAnnounce, prolink::announcePort)
-		|| ! openSocket (sockBeat, prolink::beatPort)
-		|| ! openSocket (sockStatus, prolink::statusPort))
+	if (! openSocket (sockAnnounce, ports.announce)
+		|| ! openSocket (sockBeat, ports.beat)
+		|| ! openSocket (sockStatus, ports.status))
 		return fail ("ports busy");
 
 	{
@@ -147,7 +152,7 @@ void ProLinkReceiver::sendKeepAlive()
 
 	sockaddr_in to {};
 	to.sin_family = AF_INET;
-	to.sin_port = htons ((uint16_t) prolink::announcePort);
+	to.sin_port = htons ((uint16_t) ports.announce);
 	to.sin_addr.s_addr = broadcastIp;
 	sendto (sockAnnounce, packet.data(), packet.size(), 0, reinterpret_cast<sockaddr*> (&to), sizeof (to));
 }

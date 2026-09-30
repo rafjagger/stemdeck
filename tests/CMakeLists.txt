@@ -11,6 +11,8 @@ add_executable(stemdeck-tests
     ${CMAKE_SOURCE_DIR}/Source/GridEdit.cpp
     ProLinkPackets.cpp
     ${CMAKE_SOURCE_DIR}/Source/ProLinkPackets.cpp
+    OscTruth.cpp
+    ${CMAKE_SOURCE_DIR}/Source/OscTruth.cpp
     PioneerClock.cpp
     ${CMAKE_SOURCE_DIR}/Source/PioneerClock.cpp
     FollowLeader.cpp

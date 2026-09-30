@@ -30,12 +30,17 @@ ProLinkSender::~ProLinkSender()
 	stop();
 }
 
-bool ProLinkSender::start (int number, uint32_t broadcastIpNetworkOrder, const std::string& deviceName)
+bool ProLinkSender::start (int number, uint32_t broadcastIpNetworkOrder,
+						   const osctruth::ProLinkPorts& truthPorts, const std::string& deviceName)
 {
 	stop();
 	deviceNumber = number;
 	broadcastIp = broadcastIpNetworkOrder;
+	ports = truthPorts;
 	name = deviceName;
+
+	if (! ports.complete())
+		return false;
 
 	// Sending needs no bind: a plain socket allowed to broadcast.
 	socketFd = socket (AF_INET, SOCK_DGRAM, 0);
@@ -107,7 +112,7 @@ void ProLinkSender::run()
 			}
 			send (prolink::statusPacket (deviceNumber, name, grid.bpm, player->getSpeed(), true, moving,
 										 beatNumber, beatInBar),
-				  prolink::statusPort);
+				  ports.status);
 			lastStatus = t;
 		}
 
@@ -115,6 +120,6 @@ void ProLinkSender::run()
 		sleepFor (step.sleepBefore);
 		if (step.send)
 			send (prolink::beatPacket (deviceNumber, name, grid.bpm, player->getSpeed(), step.send->beatInBar),
-				  prolink::beatPort);
+				  ports.beat);
 	}
 }

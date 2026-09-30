@@ -1,6 +1,7 @@
 #include "Workspaces.h"
 
 #include <cctype>
+#include <cmath>
 
 namespace
 {
@@ -24,4 +25,10 @@ int workspaceNumber (const std::string& name)
 {
 	const auto end = digitsEnd (name);
 	return end == 0 ? 0 : std::stoi (name.substr (0, end));
+}
+
+SwitcherGeometry switcherGeometry (int windowWidth)
+{
+	const auto share = [windowWidth] (int atRigWidth) { return (int) std::lround (atRigWidth * windowWidth / 768.0); };
+	return { share (6), share (30), share (2), share (80), share (40), share (170), share (40), share (4) };
 }

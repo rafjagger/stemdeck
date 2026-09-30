@@ -11,8 +11,9 @@ class WorkspacePanel : public juce::Component
 public:
 	struct Entry { int number; juce::String label; bool current; };
 
-	// `anchor`: the key it opens from, in this panel's parent's coordinates.
-	void show (const std::vector<Entry>& entries, juce::Rectangle<int> anchor);
+	// Laid over the whole window; the column stands where A3 Motion's does
+	// (switcherGeometry in Workspaces.h).
+	void show (const std::vector<Entry>& entries);
 
 	std::function<void (int number)> onChosen;
 
@@ -22,5 +23,5 @@ public:
 
 private:
 	juce::OwnedArray<juce::TextButton> keys;
-	juce::Rectangle<int> anchorArea, column;
+	juce::Rectangle<int> column;
 };

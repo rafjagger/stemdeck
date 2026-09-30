@@ -12,7 +12,7 @@ WorkingDirectory=/home/aaa/a3-system/stemdeck
 ExecStartPre=/home/aaa/.local/bin/a3-wait-for-the-screen
 # Its start takes the screen for a moment; put back what was showing.
 ExecStartPre=/home/aaa/a3-system/stemdeck/tools/rig-keep-the-screen.sh remember
-ExecStart=/home/aaa/a3-system/stemdeck/build-make/StemDeck_artefacts/Release/StemDeck --fullscreen
+ExecStart=/home/aaa/a3-system/stemdeck/build-make/StemDeck_artefacts/Release/StemDeck
 ExecStartPost=/home/aaa/a3-system/stemdeck/tools/rig-keep-the-screen.sh restore
 Restart=on-failure
 RestartSec=5

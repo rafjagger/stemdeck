@@ -1,5 +1,5 @@
 [Unit]
-Description=StemDeck, the stem player, always running on i3 workspace 4
+Description=StemDeck, the stem player, always running on i3 workspace 2
 # The screen first (the same wait A3 Motion uses), and JACK: StemDeck never
 # starts a server itself, it takes the one that runs.
 After=graphical.target a3-jack.service

@@ -1122,7 +1122,7 @@ void MainComponent::showWorkspaces()
 	if (entries.empty())
 		return;
 	workspacePanel.setBounds (getLocalBounds());
-	workspacePanel.show (entries, workspacesButton.getBounds().getUnion (motionButton.getBounds()));
+	workspacePanel.show (entries);
 }
 
 void MainComponent::showSettings()
@@ -1289,13 +1289,17 @@ void MainComponent::resized()
 	auto area = getLocalBounds().reduced (6);
 
 	auto topBar = area.removeFromTop (30);
+	// The switch at the very right, where A3 Motion has it: the key under the
+	// finger stays put when the workspace changes.
+	const auto switcher = switcherGeometry (getWidth());
+	auto switchArea = topBar.withRight (getWidth() - switcher.margin);
+	workspacesButton.setBounds (switchArea.removeFromRight (switcher.arrowWidth));
+	switchArea.removeFromRight (switcher.gap);
+	motionButton.setBounds (switchArea.removeFromRight (switcher.appKeyWidth));
+	topBar.setRight (motionButton.getX() - 6);
 	settingsButton.setBounds (topBar.removeFromRight (90));
 	topBar.removeFromRight (6);
 	audioSettingsButton.setBounds (topBar.removeFromRight (70));
-	topBar.removeFromRight (6);
-	workspacesButton.setBounds (topBar.removeFromRight (30));
-	topBar.removeFromRight (2);
-	motionButton.setBounds (topBar.removeFromRight (80));
 	topBar.removeFromRight (6);
 	syncSourceButton.setBounds (topBar.removeFromRight (110));
 	topBar.removeFromRight (6);

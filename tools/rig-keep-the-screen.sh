@@ -21,20 +21,13 @@ case "${1:-}" in
         visible_workspace > "$STATE" 2>/dev/null || echo 1 > "$STATE"
         ;;
     restore)
-        # Until its window is full screen -- the last thing it asks for, and
-        # the last thing that takes the screen -- then put the screen back.
+        # Until its main window is there -- the last of the three JUCE builds
+        # as it comes up -- and a moment more, then put the screen back.
         for _ in $(seq 1 60); do
-            i3-msg -t get_tree | python3 -c '
-import json, sys
-def found(n):
-    props = n.get("window_properties") or {}
-    if props.get("class") == "StemDeck" and n.get("fullscreen_mode"):
-        return True
-    return any(found(c) for c in n.get("nodes", []) + n.get("floating_nodes", []))
-sys.exit(0 if found(json.load(sys.stdin)) else 1)' && break
+            xdotool search --name '^StemDeck$' >/dev/null 2>&1 && break
             sleep 0.5
         done
-        sleep 1
+        sleep 2
         i3-msg -q "workspace number $(cat "$STATE" 2>/dev/null || echo 1)"
         ;;
     *)

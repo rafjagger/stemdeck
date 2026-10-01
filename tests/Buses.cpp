@@ -8,7 +8,7 @@ TEST (Buses, SixBusesPhonesLast)
 	EXPECT_EQ (buses::name (0), "1");
 	EXPECT_EQ (buses::name (3), "4");
 	EXPECT_EQ (buses::name (buses::aux), "AUX");
-	EXPECT_EQ (buses::name (buses::phones), "PH");
+	EXPECT_EQ (buses::name (buses::phones), "CUE");   // PH until 2026-10-01: PFL became cue everywhere
 	EXPECT_EQ (buses::portName (0), "deck1") << "the four-bus port names stay, so connections survive";
 	EXPECT_EQ (buses::portName (buses::aux), "aux");
 	EXPECT_EQ (buses::portName (buses::phones), "phones");

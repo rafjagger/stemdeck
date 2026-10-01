@@ -82,7 +82,7 @@ private:
 
 	juce::OwnedArray<juce::Slider> knobs;
 	juce::OwnedArray<juce::TextButton> muteButtons, busButtons;   // busButtons: stem * buses::count + bus
-	juce::TextButton phonesButton { "PHONES" };
+	juce::TextButton phonesButton { "CUE" };
 	juce::OwnedArray<juce::Label> stemLabels;
 	juce::Slider fader { juce::Slider::LinearVertical, juce::Slider::NoTextBox };
 	LevelMeter meter;

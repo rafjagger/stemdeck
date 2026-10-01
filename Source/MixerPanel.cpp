@@ -131,14 +131,14 @@ ChannelStrip::ChannelStrip (StemDeckPlayer& p, int index) : player (p), deckInde
 
 		for (int bus = 0; bus < buses::count; ++bus)
 		{
-			const auto label = bus == buses::aux ? juce::String ("A") : bus == buses::phones ? juce::String ("P") : juce::String (bus + 1);
+			const auto label = bus == buses::aux ? juce::String ("A") : bus == buses::phones ? juce::String ("C") : juce::String (bus + 1);
 			auto* button = busButtons.add (new juce::TextButton (label));
 			button->setClickingTogglesState (true);
 			button->setToggleState (player.isStemOnBus (s, bus), juce::dontSendNotification);
 			button->setColour (juce::TextButton::buttonOnColourId, busColour (bus, s));
 			button->setMouseClickGrabsKeyboardFocus (false);
 			button->onClick = [this, s, bus, button] { player.setStemOnBus (s, bus, button->getToggleState()); };
-			button->setTooltip (bus == buses::phones ? juce::String ("Stem to PHONES (pre fader)")
+			button->setTooltip (bus == buses::phones ? juce::String ("Stem to CUE (pre fader)")
 													 : "Stem to bus " + busName (bus) + " (post fader)");
 			addAndMakeVisible (button);
 		}
@@ -170,7 +170,7 @@ ChannelStrip::ChannelStrip (StemDeckPlayer& p, int index) : player (p), deckInde
 	phonesButton.setColour (juce::TextButton::buttonOnColourId, busColour (buses::phones, 0));
 	phonesButton.setMouseClickGrabsKeyboardFocus (false);
 	phonesButton.onClick = [this] { player.setDeckPhones (phonesButton.getToggleState()); };
-	phonesButton.setTooltip ("Whole deck to PHONES (pre fader)");
+	phonesButton.setTooltip ("Whole deck to CUE (pre fader)");
 	addAndMakeVisible (phonesButton);
 }
 

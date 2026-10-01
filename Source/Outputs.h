@@ -29,6 +29,6 @@ namespace outputs
 
 	inline std::string settingValue (Mode mode) { return mode == Mode::Stems ? "stems" : "buses"; }
 
-	// Status line: "16 OUT" or "6x ST" (with the multiplication sign, UTF-8).
-	inline std::string statusLabel (Mode mode) { return mode == Mode::Stems ? "16 OUT" : "6\xc3\x97 ST"; }
+	// Status line: "8x ST" or "6x ST" (with the multiplication sign, UTF-8).
+	inline std::string statusLabel (Mode mode) { return mode == Mode::Stems ? "8\xc3\x97 ST" : "6\xc3\x97 ST"; }
 }

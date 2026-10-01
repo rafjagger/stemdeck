@@ -60,6 +60,6 @@ TEST (Outputs, TheSettingRoundTrips)
 
 TEST (Outputs, TheStatusLineNamesTheMode)
 {
-	EXPECT_EQ (outputs::statusLabel (outputs::Mode::Stems), "16 OUT");
+	EXPECT_EQ (outputs::statusLabel (outputs::Mode::Stems), "8\xc3\x97 ST");
 	EXPECT_EQ (outputs::statusLabel (outputs::Mode::Buses), "6\xc3\x97 ST");
 }

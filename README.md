@@ -237,7 +237,7 @@ phones_L phones_R                    bus PH: stems switched to it and decks on P
 
 The names `deck1` … `deck4` are the buses', kept from when bus N was always stem N.
 
-**16 out (external routing)** — 16 ports, every stem of both decks on its own pair at full level,
+**8× stereo (external routing)** — 16 ports, every stem of both decks on its own pair at full level,
 for the A³ Mixer to mix:
 
 ```
@@ -246,7 +246,7 @@ b1_L b1_R … b4_L b4_R   deck B, stem 1–4   (outs 9/10 … 15/16)
 ```
 
 Switching re-opens the output with the other port set — an audible gap, so a setting, not a
-mid-set switch. The top bar shows `16 OUT` or `6× ST`.
+mid-set switch. The top bar shows `8× ST` or `6× ST`.
 
 Two **input** ports record: `rec_L` and `rec_R`. **REC** in the top bar writes them to a 24-bit
 FLAC in `recordings/` in StemDeck's folder (next to `stems/`), named by the time (`StemDeck 2026-09-29 19-05-12.flac`);

@@ -25,7 +25,7 @@ SettingsPanel::SettingsPanel (const juce::File& libraryFolder, std::function<voi
 	addAndMakeVisible (outputLabel);
 
 	outputChoice.addItem (juce::String::fromUTF8 ("6\xc3\x97 stereo (internal routing)"), 1);
-	outputChoice.addItem ("16 out (external routing)", 2);
+	outputChoice.addItem (juce::String::fromUTF8 ("8\xc3\x97 stereo (external routing)"), 2);
 	outputChoice.setSelectedId (outputMode == outputs::Mode::Stems ? 2 : 1, juce::dontSendNotification);
 	outputChoice.onChange = [this, onOutputMode = std::move (onOutputMode)]
 	{
@@ -34,7 +34,7 @@ SettingsPanel::SettingsPanel (const juce::File& libraryFolder, std::function<voi
 	addAndMakeVisible (outputChoice);
 
 	outputNote.setColour (juce::Label::textColourId, Theme::textDim);
-	outputNote.setText ("16 out: every stem on its own pair, full level, for the A3 Mixer. Switching re-opens the output.",
+	outputNote.setText (juce::String::fromUTF8 ("8\xc3\x97 stereo: every stem on its own pair, full level, for the A3 Mixer. Switching re-opens the output."),
 						juce::dontSendNotification);
 	outputNote.setMinimumHorizontalScale (0.6f);
 	addAndMakeVisible (outputNote);

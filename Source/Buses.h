@@ -5,8 +5,10 @@
 // The output buses and who reaches them. Pure: no JUCE, testable.
 //
 // Six stereo buses: 1-4 and AUX feed A³ Core, PHONES is for the headphones.
-// Every stem has one switch per bus and may be on several at once; a new set
-// starts with stem N on bus N. The program buses (1-4, AUX) are post fader;
+// Every stem has one switch per bus and may be on several at once. Buses 1-4
+// are the desk's channels, switched by remote control (spec stemdeck-remote),
+// and a stem there silences that channel's analog input -- so a fresh
+// StemDeck starts with every stem on AUX and on no channel. The program buses (1-4, AUX) are post fader;
 // PHONES is pre fader and also takes the whole deck when its PHONES button
 // is on. Stem knob and mute act on every bus.
 namespace buses
@@ -15,8 +17,8 @@ namespace buses
 	constexpr int aux = 4;
 	constexpr int phones = 5;
 
-	// Which buses a stem starts on: bus N for stem N.
-	constexpr unsigned defaultMask (int stem) { return 1u << stem; }
+	// Which buses a stem starts on: the aux return only.
+	constexpr unsigned defaultMask (int) { return 1u << aux; }
 
 	// The gain from a stem into `bus`: `onBus` is the stem's switch for it,
 	// `deckPhones` the deck's PHONES button, `fader` the channel fader.

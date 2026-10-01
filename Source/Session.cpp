@@ -1,4 +1,5 @@
 #include "Session.h"
+#include "Buses.h"
 
 std::unique_ptr<juce::XmlElement> Session::toXml() const
 {
@@ -87,7 +88,7 @@ Session Session::fromXml (const juce::XmlElement& xml)
 				break;
 			deck.stems[s].gainDb = stem->getDoubleAttribute ("gain");
 			deck.stems[s].muted = stem->getBoolAttribute ("muted");
-			deck.stems[s].buses = (unsigned) stem->getIntAttribute ("buses", 1 << (int) s);
+			deck.stems[s].buses = (unsigned) stem->getIntAttribute ("buses", (int) buses::defaultMask ((int) s));
 			++s;
 		}
 	}

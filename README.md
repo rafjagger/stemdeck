@@ -22,8 +22,8 @@ Artist - Title - 01.wav …  Artist - Title - 04.wav
 Artist - Title - DUB.wav, … - KICK.wav, … - PADS.wav, … - PERC.wav
 ```
 
-The suffixes are sorted naturally (`01` before `10`, and words alphabetically), and stem N goes
-to bus N. A group with three or five files is not a set and does not show up. Any format JUCE
+The suffixes are sorted naturally (`01` before `10`, and words alphabetically); that order is
+stem 1–4. A group with three or five files is not a set and does not show up. Any format JUCE
 reads out of the box works (WAV, AIFF, FLAC, Ogg Vorbis); WAV and AIFF are memory-mapped, which
 makes seeking and looping instant.
 
@@ -153,10 +153,11 @@ mix. Turning it off leaves everything as it is. It stays on across a restart.
 ![The mixer](docs/stemdeck-mixer.png)
 
 One channel strip per deck. Per stem: a gain knob (−60 to +6 dB, double-click for 0 dB), **M**
-(mute) and six bus switches, right-aligned in two rows: **1 2 3** / **4 A P** — A is AUX, P is
-PHONES (lit, they show in AUX and PHONES colour). A stem plays on every bus that is lit — any
-number at once, none for silence; a new set starts with stem N on bus N. Buses 1–4 and AUX are
-**post fader**, **PH** (PHONES) is **pre fader**. Knob and mute act on all of them. Below the
+(mute) and six bus switches, right-aligned in two rows: **1 2 3** / **4 A C** — A is AUX, C is
+CUE (lit, they show in AUX and CUE colour). A stem plays on every bus that is lit — any
+number at once, none for silence; a fresh StemDeck starts with every stem on AUX only, so it takes
+no desk channel (the desk switches buses 1–4 by remote control). Buses 1–4 and AUX are
+**post fader**, **CUE** is **pre fader**. Knob and mute act on all of them. Below the
 stems, the channel fader and **PHONES**, which puts the whole deck on the phones bus, pre fader.
 In the middle, output meters for buses 1–4, AUX and PH.
 

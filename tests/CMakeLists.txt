@@ -2,6 +2,7 @@ find_package(GTest REQUIRED)
 add_executable(stemdeck-tests
     Smoke.cpp
     Buses.cpp
+    Outputs.cpp
     GridEdit.cpp
     AutoDj.cpp
     RecordingName.cpp

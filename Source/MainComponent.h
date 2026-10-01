@@ -97,7 +97,6 @@ private:
 	void showAudioSettings();
 	void showSettings();
 	void setOutputMode (outputs::Mode mode);
-	void applyOutputMode();
 
 	// Over to A3 Motion in one tap, or to any of the rig's i3 workspaces from
 	// the list beside it -- named in a3-core's i3 config, read from i3.

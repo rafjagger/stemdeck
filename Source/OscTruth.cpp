@@ -20,6 +20,33 @@ namespace osctruth
 		return { portOf (listeners, "announce"), portOf (listeners, "beat"), portOf (listeners, "status") };
 	}
 
+	Endpoints endpointsFrom (const std::vector<Listener>& listeners, const std::map<std::string, std::string>& hosts)
+	{
+		const auto hostOf = [&hosts] (const std::string& name) {
+			const auto found = hosts.find (name);
+			return found != hosts.end() ? found->second : std::string();
+		};
+		Endpoints e;
+		for (const auto& listener : listeners)
+		{
+			if (listener.role != "osc")
+				continue;
+			if (listener.program == "core")
+			{
+				e.coreHost = hostOf ("core");
+				e.corePort = listener.port;
+			}
+			else if (listener.program == "mixer")
+			{
+				e.mixerHost = hostOf (listener.host);
+				e.mixerPort = listener.port;
+			}
+			else if (listener.program == "stemdeck")
+				e.ownPort = listener.port;
+		}
+		return e;
+	}
+
 	std::string truthPath()
 	{
 		const auto* overridden = std::getenv ("A3_OSC_TRUTH");

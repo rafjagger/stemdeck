@@ -50,3 +50,26 @@ TEST (OscTruth, TheEnvironmentPointsAtAnotherFile)
 	unsetenv ("A3_OSC_TRUTH");
 	EXPECT_EQ (osctruth::truthPath(), "/usr/share/a3/a3-osc.json");
 }
+
+// Where StemDeck sends and listens (spec stemdeck-remote): Core's and the
+// desk's addresses by their host names, its own port. Core's listener says
+// "any"; the address the others reach it at is the `core` host.
+TEST (OscTruth, EndpointsComeFromListenersAndHosts)
+{
+	const std::vector<osctruth::Listener> l {
+		{ "core", "osc", "any", 9000 }, { "mixer", "osc", "mixer", 7772 }, { "stemdeck", "osc", "any", 7780 } };
+	const std::map<std::string, std::string> hosts { { "core", "192.168.8.10" }, { "mixer", "192.168.8.11" } };
+	const auto e = osctruth::endpointsFrom (l, hosts);
+	EXPECT_EQ (e.coreHost, "192.168.8.10");
+	EXPECT_EQ (e.corePort, 9000);
+	EXPECT_EQ (e.mixerHost, "192.168.8.11");
+	EXPECT_EQ (e.mixerPort, 7772);
+	EXPECT_EQ (e.ownPort, 7780);
+	EXPECT_TRUE (e.complete());
+}
+
+TEST (OscTruth, AMissingListenerLeavesTheEndpointsIncomplete)
+{
+	const std::map<std::string, std::string> hosts { { "core", "192.168.8.10" } };
+	EXPECT_FALSE (osctruth::endpointsFrom (listeners, hosts).complete());
+}

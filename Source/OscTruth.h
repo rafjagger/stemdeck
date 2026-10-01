@@ -1,5 +1,6 @@
 #pragma once
 
+#include <map>
 #include <string>
 #include <vector>
 
@@ -24,6 +25,21 @@ namespace osctruth
 	};
 
 	ProLinkPorts proLinkPortsFrom (const std::vector<Listener>& listeners);
+
+	// Where StemDeck talks to Core and the desk, and where it listens (spec
+	// stemdeck-remote). Hosts by the file's `hosts` names.
+	struct Endpoints
+	{
+		std::string coreHost, mixerHost;
+		int corePort = -1, mixerPort = -1, ownPort = -1;
+
+		bool complete() const
+		{
+			return ! coreHost.empty() && ! mixerHost.empty() && corePort > 0 && mixerPort > 0 && ownPort > 0;
+		}
+	};
+
+	Endpoints endpointsFrom (const std::vector<Listener>& listeners, const std::map<std::string, std::string>& hosts);
 
 	// $A3_OSC_TRUTH if set, else the installed file.
 	std::string truthPath();

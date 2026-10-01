@@ -10,6 +10,7 @@
 #include "WorkspacePanel.h"
 #include "DeckPanel.h"
 #include "MixerPanel.h"
+#include "RemoteLink.h"
 #include "Buses.h"
 #include "Session.h"
 #include "AutoDj.h"
@@ -96,7 +97,6 @@ private:
 	void updateDeviceStatus();
 	void showAudioSettings();
 	void showSettings();
-	void setOutputMode (outputs::Mode mode);
 
 	// Over to A3 Motion in one tap, or to any of the rig's i3 workspaces from
 	// the list beside it -- named in a3-core's i3 config, read from i3.
@@ -117,7 +117,6 @@ private:
 
 	// Read on the audio thread; only changed while the output is closed
 	// (setOutputMode), so a block never sees a mode its buffers aren't sized for.
-	std::atomic<outputs::Mode> outputMode { outputs::Mode::Buses };
 
 	// Stem -> bus gains (switch x fader, Buses.h); ramped so switching and
 	// fader moves don't click.
@@ -128,6 +127,8 @@ private:
 	ScrollingWaveform waveA { playerA, thumbsA, 0 }, waveB { playerB, thumbsB, 1 };
 	DeckPanel deckA { playerA, thumbsA, 0 }, deckB { playerB, thumbsB, 1 };
 	MixerPanel mixer { playerA, playerB };
+	// The desk's remote control through Core (spec stemdeck-remote).
+	RemoteLink remote { { &playerA, &playerB }, mixer };
 	StemLibrary library { formatManager };
 	StemCreator stemCreator;
 	std::unique_ptr<juce::AlertWindow> stemDialog;

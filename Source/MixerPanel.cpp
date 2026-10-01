@@ -137,7 +137,12 @@ ChannelStrip::ChannelStrip (StemDeckPlayer& p, int index) : player (p), deckInde
 			button->setToggleState (player.isStemOnBus (s, bus), juce::dontSendNotification);
 			button->setColour (juce::TextButton::buttonOnColourId, busColour (bus, s));
 			button->setMouseClickGrabsKeyboardFocus (false);
-			button->onClick = [this, s, bus, button] { player.setStemOnBus (s, bus, button->getToggleState()); };
+			button->onClick = [this, s, bus, button]
+			{
+				player.setStemOnBus (s, bus, button->getToggleState());
+				if (onBusesChanged)
+					onBusesChanged (s);
+			};
 			button->setTooltip (bus == buses::phones ? juce::String ("Stem to CUE (pre fader)")
 													 : "Stem to bus " + busName (bus) + " (post fader)");
 			addAndMakeVisible (button);
@@ -217,6 +222,12 @@ void ChannelStrip::restoreState (const DeckSession& state)
 	phonesButton.setToggleState (state.phones, juce::sendNotificationSync);
 }
 
+void ChannelStrip::showBuses (int stem)
+{
+	for (int bus = 0; bus < buses::count; ++bus)
+		busButtons[stem * buses::count + bus]->setToggleState (player.isStemOnBus (stem, bus), juce::dontSendNotification);
+}
+
 void ChannelStrip::toggleMute (int stem)
 {
 	if (auto* b = muteButtons[stem])
@@ -253,14 +264,6 @@ void ChannelStrip::paint (juce::Graphics& g)
 		g.setColour (Theme::outline);
 		g.drawRoundedRectangle (frame.toFloat().reduced (0.5f), 4.0f, 1.0f);
 	}
-}
-
-void ChannelStrip::setBusRoutingEnabled (bool enabled)
-{
-	for (auto* button : busButtons)
-		button->setEnabled (enabled);
-
-	phonesButton.setEnabled (enabled);
 }
 
 void ChannelStrip::resized()

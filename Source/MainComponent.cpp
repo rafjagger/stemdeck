@@ -31,7 +31,6 @@ MainComponent::MainComponent()
 	options.filenameSuffix = ".settings";
 	options.osxLibrarySubFolder = "Application Support";
 	appProperties.setStorageParameters (options);
-	outputMode = outputs::modeFromSetting (appProperties.getUserSettings()->getValue ("outputMode").toStdString());
 	analysisCache = std::make_unique<AnalysisCache> (appProperties.getUserSettings()->getFile().getSiblingFile ("analysis.xml"));
 
 	formatManager.registerBasicFormats();
@@ -158,6 +157,12 @@ MainComponent::MainComponent()
 	setSize (1500, 960);
 	restoreSession();
 	startTimerHz (60);
+
+	// After the session is restored: a click reports, a restore before the
+	// link runs reports nothing, and Core asks for everything on our hello.
+	for (int d = 0; d < numDecks; ++d)
+		mixer.strip (d).onBusesChanged = [this, d] (int stem) { remote.report (d, stem); };
+	remote.start();
 }
 
 MainComponent::~MainComponent()
@@ -1000,9 +1005,8 @@ void MainComponent::initialiseAudio()
 {
 	juce::StringArray portNames;
 
-	const auto mode = outputMode.load();
-	for (int ch = 0; ch < outputs::channelCount (mode); ++ch)
-		portNames.add (juce::String (outputs::portName (mode, ch)));
+	for (int ch = 0; ch < outputs::channelCount(); ++ch)
+		portNames.add (juce::String (outputs::portName (ch)));
 
 	usingJack = jack.open ("StemDeck", portNames, *this, { "rec_L", "rec_R" }, &recorder).isEmpty();
 	recButton.setEnabled (usingJack);
@@ -1010,7 +1014,6 @@ void MainComponent::initialiseAudio()
 	if (! usingJack)
 		initialiseDeviceManager();
 
-	mixer.setBusRoutingEnabled (mode == outputs::Mode::Buses);
 	audioSettingsButton.setEnabled (! usingJack);
 	audioSettingsButton.setTooltip (usingJack ? "Under JACK: route with qjackctl or a patchbay" : juce::String());
 	updateDeviceStatus();
@@ -1018,7 +1021,7 @@ void MainComponent::initialiseAudio()
 
 void MainComponent::initialiseDeviceManager()
 {
-	const auto numOutputs = outputs::channelCount (outputMode.load());
+	const auto numOutputs = outputs::channelCount();
 	const auto savedState = appProperties.getUserSettings()->getXmlValue ("audioDeviceState");
 
 	// Also the way back in when the output mode changed: nothing doubled up.
@@ -1061,8 +1064,7 @@ void MainComponent::updateDeviceStatus()
 		if (running)
 			text << "JACK: " << jack.getClientName() << "  |  " << juce::String (jack.getSampleRate(), 0) << " Hz, "
 				 << jack.getBufferSize() << " Samples  |  " << jack.getNumPorts() << " Ports, "
-				 << jack.getNumConnectedPorts() << " connected  |  Xruns: " << jack.getXrunCount()
-				 << "  |  " << outputs::statusLabel (outputMode.load());
+				 << jack.getNumConnectedPorts() << " connected  |  Xruns: " << jack.getXrunCount();
 		else
 			text = "The JACK server has stopped - please restart StemDeck";
 
@@ -1081,12 +1083,11 @@ void MainComponent::updateDeviceStatus()
 	}
 
 	const auto activeOutputs = device->getActiveOutputChannels().countNumberOfSetBits();
-	const auto wanted = outputs::channelCount (outputMode.load());
+	const auto wanted = outputs::channelCount();
 	auto text = deviceManager.getCurrentAudioDeviceType() + ": " + device->getName()
 			  + "  |  " + juce::String (device->getCurrentSampleRate(), 0) + " Hz, "
 			  + juce::String (device->getCurrentBufferSizeSamples()) + " Samples  |  "
-			  + juce::String (activeOutputs) + juce::String (" outputs")
-			  + "  |  " + outputs::statusLabel (outputMode.load());
+			  + juce::String (activeOutputs) + juce::String (" outputs");
 
 	if (activeOutputs < wanted)
 		text << "  (summed down)";
@@ -1098,7 +1099,7 @@ void MainComponent::updateDeviceStatus()
 void MainComponent::showAudioSettings()
 {
 	auto selector = std::make_unique<juce::AudioDeviceSelectorComponent> (
-		deviceManager, 0, 0, 2, outputs::channelCount (outputMode.load()), false, false, true, false);
+		deviceManager, 0, 0, 2, outputs::channelCount(), false, false, true, false);
 	selector->setSize (520, 460);
 
 	juce::DialogWindow::LaunchOptions dialog;
@@ -1148,30 +1149,12 @@ void MainComponent::showSettings()
 {
 	juce::DialogWindow::LaunchOptions dialog;
 	dialog.content.setOwned (new SettingsPanel (library.getFolder(),
-												[this] (const juce::File& folder) { library.setFolder (folder); },
-												outputMode.load(),
-												[this] (outputs::Mode mode) { setOutputMode (mode); }));
+												[this] (const juce::File& folder) { library.setFolder (folder); }));
 	dialog.dialogTitle = "Settings";
 	dialog.dialogBackgroundColour = Theme::panel;
 	dialog.useNativeTitleBar = true;
 	dialog.resizable = false;
 	dialog.launchAsync();
-}
-
-// The setting is stored at once; the output is re-opened with the other port
-// set (an audible gap -- a setting, not a mid-set switch).
-void MainComponent::setOutputMode (outputs::Mode mode)
-{
-	if (mode == outputMode.load())
-		return;
-
-	appProperties.getUserSettings()->setValue ("outputMode", juce::String (outputs::settingValue (mode)));
-	appProperties.saveIfNeeded();
-
-	jack.close();   // no more blocks before the mode and the buffers change
-	deviceManager.removeAudioCallback (&audioSourcePlayer);
-	outputMode = mode;
-	initialiseAudio();
 }
 
 void MainComponent::timerCallback()
@@ -1222,7 +1205,7 @@ void MainComponent::timerCallback()
 void MainComponent::prepareToPlay (int samplesPerBlockExpected, double sampleRate)
 {
 	const auto maxBlock = juce::jmax (samplesPerBlockExpected, 4096);
-	busBuffer.setSize (outputs::channelCount (outputMode.load()), maxBlock);
+	busBuffer.setSize (outputs::channelCount(), maxBlock);
 
 	for (int d = 0; d < numDecks; ++d)
 	{
@@ -1257,8 +1240,7 @@ void MainComponent::getNextAudioBlock (const juce::AudioSourceChannelInfo& buffe
 	const auto numSamples = bufferToFill.numSamples;
 	const auto numOut = out.getNumChannels();
 
-	const auto mode = outputMode.load();
-	const auto numBusChannels = outputs::channelCount (mode);
+	const auto numBusChannels = outputs::channelCount();
 
 	if (numSamples > busBuffer.getNumSamples())
 		busBuffer.setSize (numBusChannels, numSamples, false, false, true);
@@ -1274,16 +1256,6 @@ void MainComponent::getNextAudioBlock (const juce::AudioSourceChannelInfo& buffe
 			deckBuffer.setSize (StemDeckPlayer::numOutputChannels, numSamples, false, false, true);
 
 		player.getNextAudioBlock (juce::AudioSourceChannelInfo (&deckBuffer, 0, numSamples));
-
-		if (mode == outputs::Mode::Stems)
-		{
-			// Every stem on its own pair at unity: the desk mixes, so no
-			// switches, fader or ramps act here.
-			for (int s = 0; s < StemSet::numStems; ++s)
-				for (int c = 0; c < 2; ++c)
-					busBuffer.addFrom (outputs::stemChannel (d, s, c), 0, deckBuffer.getReadPointer (s * 2 + c), numSamples);
-			continue;
-		}
 
 		// Each stem onto every bus it is switched to: post fader on 1-4 and
 		// AUX, pre fader on PHONES; ramped over 10 ms on any change.
@@ -1305,8 +1277,8 @@ void MainComponent::getNextAudioBlock (const juce::AudioSourceChannelInfo& buffe
 			}
 	}
 
-	// The meters show the six buses; the stem outputs have none.
-	for (int ch = 0; ch < (mode == outputs::Mode::Buses ? numOutputChannels : 0); ++ch)
+	// The meters show the six buses.
+	for (int ch = 0; ch < numOutputChannels; ++ch)
 	{
 		const auto peak = busBuffer.getMagnitude (ch, 0, numSamples);
 

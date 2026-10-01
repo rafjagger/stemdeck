@@ -22,8 +22,8 @@ Artist - Title - 01.wav …  Artist - Title - 04.wav
 Artist - Title - DUB.wav, … - KICK.wav, … - PADS.wav, … - PERC.wav
 ```
 
-The suffixes are sorted naturally (`01` before `10`, and words alphabetically), and stem N goes
-to bus N. A group with three or five files is not a set and does not show up. Any format JUCE
+The suffixes are sorted naturally (`01` before `10`, and words alphabetically); that order is
+stem 1–4. A group with three or five files is not a set and does not show up. Any format JUCE
 reads out of the box works (WAV, AIFF, FLAC, Ogg Vorbis); WAV and AIFF are memory-mapped, which
 makes seeking and looping instant.
 
@@ -153,10 +153,11 @@ mix. Turning it off leaves everything as it is. It stays on across a restart.
 ![The mixer](docs/stemdeck-mixer.png)
 
 One channel strip per deck. Per stem: a gain knob (−60 to +6 dB, double-click for 0 dB), **M**
-(mute) and six bus switches, right-aligned in two rows: **1 2 3** / **4 A P** — A is AUX, P is
-PHONES (lit, they show in AUX and PHONES colour). A stem plays on every bus that is lit — any
-number at once, none for silence; a new set starts with stem N on bus N. Buses 1–4 and AUX are
-**post fader**, **PH** (PHONES) is **pre fader**. Knob and mute act on all of them. Below the
+(mute) and six bus switches, right-aligned in two rows: **1 2 3** / **4 A C** — A is AUX, C is
+CUE (lit, they show in AUX and CUE colour). A stem plays on every bus that is lit — any
+number at once, none for silence; a fresh StemDeck starts with every stem on AUX only, so it takes
+no desk channel (the desk switches buses 1–4 by remote control). Buses 1–4 and AUX are
+**post fader**, **CUE** is **pre fader**. Knob and mute act on all of them. Below the
 stems, the channel fader and **PHONES**, which puts the whole deck on the phones bus, pre fader.
 In the middle, output meters for buses 1–4, AUX and PH.
 
@@ -224,29 +225,24 @@ so when a job starts.
 
 ## Audio output
 
-StemDeck is a JACK client named `StemDeck` with 2 inputs and, depending on **Output** in
-**Settings**, 12 or 16 output ports.
-
-**6× stereo (internal routing)**, the default — 12 ports, the six buses mixed inside StemDeck:
+StemDeck is a JACK client named `StemDeck` with 2 inputs and 12 output ports, the six buses
+mixed inside StemDeck:
 
 ```
 deck1_L deck1_R … deck4_L deck4_R   bus 1–4: every stem switched to it, post fader
 aux_L   aux_R                        bus AUX: every stem switched to it, post fader
-phones_L phones_R                    bus PH: stems switched to it and decks on PHONES, pre fader
+phones_L phones_R                    bus CUE: stems switched to it and decks on CUE, pre fader
 ```
 
 The names `deck1` … `deck4` are the buses', kept from when bus N was always stem N.
 
-**8× stereo (external routing)** — 16 ports, every stem of both decks on its own pair at full level,
-for the A³ Mixer to mix:
-
-```
-a1_L a1_R … a4_L a4_R   deck A, stem 1–4   (outs 1/2 … 7/8)
-b1_L b1_R … b4_L b4_R   deck B, stem 1–4   (outs 9/10 … 15/16)
-```
-
-Switching re-opens the output with the other port set — an audible gap, so a setting, not a
-mid-set switch. The top bar shows `8× ST` or `6× ST`.
+**By remote control from the A³ Mixer** (spec stemdeck-remote, 2026-10-01): the desk's channel
+encoders switch the stems onto buses 1–4 and its aux-return encoder switches AUX, through A³ Core.
+StemDeck owns the switches: a change from Core or a click here goes back to Core
+(`/stemdeck/{deck}/{stem}/buses`), a hello every 30 s tells Core where StemDeck is, and one level
+meter per stem goes to the desk as `/vu/41`–`/vu/48` at 25 Hz. Ports and addresses come from
+the one truth (`a3-osc.json`); without it the remote control stays off and StemDeck plays on.
+The 8× stereo mode (every stem on its own pair) is gone.
 
 Two **input** ports record: `rec_L` and `rec_R`. **REC** in the top bar writes them to a 24-bit
 FLAC in `recordings/` in StemDeck's folder (next to `stems/`), named by the time (`StemDeck 2026-09-29 19-05-12.flac`);

@@ -14,10 +14,14 @@ TEST (Buses, SixBusesPhonesLast)
 	EXPECT_EQ (buses::portName (buses::phones), "phones");
 }
 
-TEST (Buses, StemNStartsOnBusN)
+// Since the desk switches the channels by remote control (spec
+// stemdeck-remote), a stem on bus N takes desk channel N and silences its
+// analog input. A fresh StemDeck must not take all four: its stems start on
+// the aux return and on no channel (final review 2026-10-02).
+TEST (Buses, StemsStartOnTheReturnAndOnNoChannel)
 {
 	for (int stem = 0; stem < 4; ++stem)
-		EXPECT_EQ (buses::defaultMask (stem), 1u << stem);
+		EXPECT_EQ (buses::defaultMask (stem), 1u << buses::aux);
 }
 
 TEST (Buses, ProgramBusesArePostFader)

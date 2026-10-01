@@ -1,4 +1,5 @@
 #include "StemDeckPlayer.h"
+#include "Remote.h"
 #include "GridEdit.h"
 #include "Buses.h"
 
@@ -10,6 +11,9 @@ StemDeckPlayer::StemDeckPlayer (juce::AudioFormatManager& fm) : formatManager (f
 		stemMuted[(size_t) i] = false;
 		stemBuses[(size_t) i] = buses::defaultMask (i);
 		stemPeak[(size_t) i] = 0.0f;
+		deskPeak[(size_t) i] = 0.0f;
+		deskSquares[(size_t) i] = 0.0;
+		deskSamples[(size_t) i] = 0;
 	}
 
 	diskThread.addTimeSliceClient (this);
@@ -182,6 +186,15 @@ float StemDeckPlayer::popStemPeak (int stem)
 	return stemPeak[(size_t) stem].exchange (0.0f);
 }
 
+StemDeckPlayer::Level StemDeckPlayer::popDeskLevel (int stem)
+{
+	const auto i = (size_t) stem;
+	const auto peak = deskPeak[i].exchange (0.0f);
+	const auto squares = deskSquares[i].exchange (0.0);
+	const auto samples = deskSamples[i].exchange (0);
+	return { peak, remote::rmsOf (squares, samples) };
+}
+
 void StemDeckPlayer::updateResamplingRatio()
 {
 	resampler.setResamplingRatio (getEffectiveRate() * fileSampleRate.load() / deviceSampleRate.load());
@@ -278,12 +291,22 @@ void StemDeckPlayer::getNextAudioBlock (const juce::AudioSourceChannelInfo& info
 		const auto to = smoother.getCurrentValue();
 
 		float peak = 0.0f;
+		double squares = 0.0;
 
 		for (int ch = s * 2; ch < s * 2 + 2; ++ch)
 		{
 			info.buffer->applyGainRamp (ch, info.startSample, info.numSamples, from, to);
 			peak = juce::jmax (peak, info.buffer->getMagnitude (ch, info.startSample, info.numSamples));
+			const double rms = info.buffer->getRMSLevel (ch, info.startSample, info.numSamples);
+			squares += rms * rms * info.numSamples;
 		}
+
+		// The desk's meter, before the fader. Only this thread adds; a pop in
+		// between loses at most one block of one meter.
+		if (peak > deskPeak[(size_t) s].load())
+			deskPeak[(size_t) s] = peak;
+		deskSquares[(size_t) s] = deskSquares[(size_t) s].load() + squares;
+		deskSamples[(size_t) s] = deskSamples[(size_t) s].load() + 2 * info.numSamples;
 
 		peak *= deckGain.load();   // the meter shows what the fader lets through
 		if (peak > stemPeak[(size_t) s].load())

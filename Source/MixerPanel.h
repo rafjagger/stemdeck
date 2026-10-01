@@ -52,6 +52,10 @@ public:
 	void toggleMute (int stem);
 	void refresh(); // meters, called by the main timer
 
+	// Off while StemDeck sends the stems out one by one for the desk to mix:
+	// the bus switches and PHONES then act on nothing.
+	void setBusRoutingEnabled (bool enabled);
+
 	// The channel fader, moved as by hand (the Auto-DJ's crossfade).
 	void setFaderDb (double db) { fader.setValue (db, juce::sendNotificationSync); }
 	// ... and as a controller's slider does: 0..1 of its travel, with the
@@ -104,6 +108,11 @@ public:
 		return strip (deckIndex).faderBounds() + strip (deckIndex).getPosition();
 	}
 	void refresh();
+	void setBusRoutingEnabled (bool enabled)
+	{
+		stripA.setBusRoutingEnabled (enabled);
+		stripB.setBusRoutingEnabled (enabled);
+	}
 	void setOutputLevel (int channel, float peak) { outputMeters.setLevel (channel, peak); }
 
 	void paint (juce::Graphics& g) override;

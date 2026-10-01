@@ -5,6 +5,7 @@
 #include "StemThumbnails.h"
 #include "StemLibrary.h"
 #include "SettingsPanel.h"
+#include "Outputs.h"
 #include "Workspaces.h"
 #include "WorkspacePanel.h"
 #include "DeckPanel.h"
@@ -95,6 +96,8 @@ private:
 	void updateDeviceStatus();
 	void showAudioSettings();
 	void showSettings();
+	void setOutputMode (outputs::Mode mode);
+	void applyOutputMode();
 
 	// Over to A3 Motion in one tap, or to any of the rig's i3 workspaces from
 	// the list beside it -- named in a3-core's i3 config, read from i3.
@@ -111,7 +114,11 @@ private:
 	StemDeckPlayer playerA { formatManager }, playerB { formatManager };
 	std::array<StemDeckPlayer*, numDecks> players { &playerA, &playerB };
 	std::array<juce::AudioBuffer<float>, numDecks> deckBuffers; // 8 channels each (stem pairs)
-	juce::AudioBuffer<float> busBuffer;                            // 12 channels (6 stereo buses)
+	juce::AudioBuffer<float> busBuffer;                            // 12 channels (6 stereo buses) or 16 (stems)
+
+	// Read on the audio thread; only changed while the output is closed
+	// (setOutputMode), so a block never sees a mode its buffers aren't sized for.
+	std::atomic<outputs::Mode> outputMode { outputs::Mode::Buses };
 
 	// Stem -> bus gains (switch x fader, Buses.h); ramped so switching and
 	// fader moves don't click.

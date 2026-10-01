@@ -255,6 +255,14 @@ void ChannelStrip::paint (juce::Graphics& g)
 	}
 }
 
+void ChannelStrip::setBusRoutingEnabled (bool enabled)
+{
+	for (auto* button : busButtons)
+		button->setEnabled (enabled);
+
+	phonesButton.setEnabled (enabled);
+}
+
 void ChannelStrip::resized()
 {
 	auto area = getLocalBounds().reduced (8);

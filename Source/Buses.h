@@ -27,10 +27,11 @@ namespace buses
 		return onBus ? fader : 0.0f;
 	}
 
-	// "1" .. "4", "AUX", "PH": button labels and meter captions.
+	// "1" .. "4", "AUX", "CUE": button labels and meter captions (PH until
+	// 2026-10-01, when PFL became cue across the A3 system).
 	inline std::string name (int bus)
 	{
-		return bus == aux ? "AUX" : bus == phones ? "PH" : std::to_string (bus + 1);
+		return bus == aux ? "AUX" : bus == phones ? "CUE" : std::to_string (bus + 1);
 	}
 
 	// JACK port base names: deck1 .. deck4 (kept from the four-bus days), aux, phones.

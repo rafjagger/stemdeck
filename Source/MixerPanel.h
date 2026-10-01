@@ -52,9 +52,11 @@ public:
 	void toggleMute (int stem);
 	void refresh(); // meters, called by the main timer
 
-	// Off while StemDeck sends the stems out one by one for the desk to mix:
-	// the bus switches and PHONES then act on nothing.
-	void setBusRoutingEnabled (bool enabled);
+	// The bus switches as the player has them, after a change from elsewhere
+	// (Core, spec stemdeck-remote); nothing is sent back from here.
+	void showBuses (int stem);
+	// Called after a click on one of the stem's bus switches.
+	std::function<void (int stem)> onBusesChanged;
 
 	// The channel fader, moved as by hand (the Auto-DJ's crossfade).
 	void setFaderDb (double db) { fader.setValue (db, juce::sendNotificationSync); }
@@ -108,11 +110,6 @@ public:
 		return strip (deckIndex).faderBounds() + strip (deckIndex).getPosition();
 	}
 	void refresh();
-	void setBusRoutingEnabled (bool enabled)
-	{
-		stripA.setBusRoutingEnabled (enabled);
-		stripB.setBusRoutingEnabled (enabled);
-	}
 	void setOutputLevel (int channel, float peak) { outputMeters.setLevel (channel, peak); }
 
 	void paint (juce::Graphics& g) override;

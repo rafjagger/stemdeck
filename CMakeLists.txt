@@ -20,6 +20,8 @@ target_sources(StemDeck PRIVATE
     Source/MainComponent.cpp
     Source/OscTruth.cpp
     Source/OscTruthFile.cpp
+    Source/Remote.cpp
+    Source/RemoteLink.cpp
     Source/Theme.cpp
     Source/StemSet.cpp
     Source/StemDeckPlayer.cpp
@@ -63,6 +65,8 @@ target_compile_definitions(StemDeck PRIVATE
 target_link_libraries(StemDeck
     PRIVATE
         juce::juce_audio_utils
+        juce::juce_cryptography
+        juce::juce_osc
         juce::juce_dsp
         PkgConfig::AUDIO_CODECS
         PkgConfig::JACK

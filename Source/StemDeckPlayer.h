@@ -92,6 +92,12 @@ public:
 	// Peak level after knob, mute and fader since the last call, for metering.
 	float popStemPeak (int stem);
 
+	// The desk's meter for a stem since the last call (spec stemdeck-remote):
+	// after knob and mute, before the fader and the buses -- what the stem
+	// gives, wherever it is routed. Peak of the louder side, rms over both.
+	struct Level { float peak = 0.0f, rms = 0.0f; };
+	Level popDeskLevel (int stem);
+
 	// AudioSource: the buffer must have at least numOutputChannels channels.
 	void prepareToPlay (int samplesPerBlockExpected, double sampleRate) override;
 	void getNextAudioBlock (const juce::AudioSourceChannelInfo& bufferToFill) override;
@@ -155,6 +161,10 @@ private:
 	std::array<std::atomic<unsigned>, numStems> stemBuses;
 	std::atomic<bool> deckPhones { false };
 	std::array<std::atomic<float>, numStems> stemPeak;
+	// The desk's meters: written by the audio thread, emptied by popDeskLevel.
+	std::array<std::atomic<float>, numStems> deskPeak;
+	std::array<std::atomic<double>, numStems> deskSquares;
+	std::array<std::atomic<int>, numStems> deskSamples;
 	std::array<juce::SmoothedValue<float>, numStems> gainSmoothers;
 
 	StemReader stemReader { *this };

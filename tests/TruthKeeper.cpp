@@ -69,3 +69,13 @@ TEST (KeeperPoll, EveryThirtySeconds)
 {
 	EXPECT_EQ (truthkeeper::pollSeconds, 30);
 }
+
+// A poll has no announcement: the header stands in for it, so the body must
+// still hash to it -- and a header equal to `own` asks for nothing.
+TEST (KeeperPoll, TheHeaderStandsInForTheAnnouncement)
+{
+	const std::string h (64, 'e');
+	EXPECT_EQ (truthkeeper::announcedOr ("", h), h);
+	EXPECT_EQ (truthkeeper::announcedOr (std::string (64, 'f'), h), std::string (64, 'f'));
+	EXPECT_FALSE (truthkeeper::needsFetch (truthkeeper::announcedOr ("", h), h));
+}

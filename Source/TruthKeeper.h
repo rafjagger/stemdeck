@@ -58,6 +58,12 @@ namespace truthkeeper
 		return announced != own;
 	}
 
+	// A poll has no announcement: the response's header stands in for it.
+	inline std::string announcedOr (const std::string& announced, const std::string& header)
+	{
+		return announced.empty() ? header : announced;
+	}
+
 	inline bool verified (const std::string& bodyHash, const std::string& header, const std::string& announced)
 	{
 		return ! bodyHash.empty() && bodyHash == header && header == announced;

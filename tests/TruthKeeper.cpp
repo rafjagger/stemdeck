@@ -45,3 +45,27 @@ TEST (KeeperStart, TheCacheIsInHome)
 {
 	EXPECT_EQ (truthkeeper::cachePath ("/home/aaa"), "/home/aaa/.cache/a3/a3-osc.json");
 }
+
+// Step 4 (radla): Core is named in a file, and polled.
+TEST (KeeperPoll, CoreIsNamedInTheConfig)
+{
+	EXPECT_EQ (truthkeeper::corePath ("/home/u"), "/home/u/.config/a3/core");
+}
+
+TEST (KeeperPoll, TheUrlIsCoresTruth)
+{
+	EXPECT_EQ (truthkeeper::pollUrl ("http://h:9080\n"), "http://h:9080/api/truth");
+	EXPECT_EQ (truthkeeper::pollUrl ("  http://h:9080/  "), "http://h:9080/api/truth");
+	EXPECT_EQ (truthkeeper::pollUrl ("http://h:9080/api/truth"), "http://h:9080/api/truth");
+}
+
+TEST (KeeperPoll, ABlankFileIsNotSet)
+{
+	EXPECT_EQ (truthkeeper::pollUrl (""), "");
+	EXPECT_EQ (truthkeeper::pollUrl (" \n\t"), "");
+}
+
+TEST (KeeperPoll, EveryThirtySeconds)
+{
+	EXPECT_EQ (truthkeeper::pollSeconds, 30);
+}

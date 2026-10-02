@@ -23,12 +23,10 @@ public:
 	RemoteLink (std::array<StemDeckPlayer*, 2> players, MixerPanel& mixer);
 	~RemoteLink() override;
 
-	void start();
+	// `path` and `hash`: the truth StemDeck chose at start, and its sha256.
+	void start (const std::string& path, const juce::String& hash);
 	// A stem's switches to Core, after any change. Ignored while off.
 	void report (int deck, int stem);
-	// The sha256 of the truth StemDeck read: Core's fingerprint when it is
-	// the body Core served.
-	juce::String getTruthHash() const { return truthHash; }
 
 private:
 	void oscMessageReceived (const juce::OSCMessage& message) override;

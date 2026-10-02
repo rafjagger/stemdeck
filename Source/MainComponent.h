@@ -132,6 +132,8 @@ private:
 	RemoteLink remote { { &playerA, &playerB }, mixer };
 	// The truth from Core (spec truth-from-core, step 3).
 	std::unique_ptr<TruthKeeperLink> truthKeeper;
+	std::string truthPath;
+	juce::String truthHash;
 	StemLibrary library { formatManager };
 	StemCreator stemCreator;
 	std::unique_ptr<juce::AlertWindow> stemDialog;

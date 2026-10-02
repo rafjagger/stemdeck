@@ -17,15 +17,14 @@ RemoteLink::~RemoteLink()
 	receiver.disconnect();
 }
 
-void RemoteLink::start()
+void RemoteLink::start (const std::string& path, const juce::String& hash)
 {
-	const auto path = osctruth::liveTruthPath();
 	std::string error;
 	const auto listeners = osctruth::readListeners (path, error);
 	const auto hosts = error.empty() ? osctruth::readHosts (path, error) : std::map<std::string, std::string>();
 	words = error.empty() ? osctruth::readRemoteWords (path, error) : remote::Words();
 	const auto endpoints = osctruth::endpointsFrom (listeners, hosts);
-	truthHash = juce::SHA256 (juce::File (path)).toHexString();
+	truthHash = hash;
 
 	if (! error.empty() || ! endpoints.complete())
 	{

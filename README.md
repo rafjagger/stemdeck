@@ -244,6 +244,18 @@ meter per stem goes to the desk as `/vu/41`–`/vu/48` at 25 Hz. Ports and addre
 the one truth (`a3-osc.json`); without it the remote control stays off and StemDeck plays on.
 The 8× stereo mode (every stem on its own pair) is gone.
 
+**Where the truth comes from** (spec truth-from-core, 2026-10-02): A³ Core serves it. StemDeck
+starts on `$A3_OSC_TRUTH` if set, else on what Core last served (`~/.cache/a3/a3-osc.json`), else
+on the package's `/usr/share/a3/a3-osc.json`. When Core's truth differs from the one it runs on,
+StemDeck fetches it, checks it, stores it in the cache and quits with 1, and systemd starts it
+again (its window reopens once). How it learns of a new truth depends on where it runs:
+
+- **On the Core machine** it hears Core's announcement, `/core/here` on UDP 7790.
+- **On radla**, on another subnet, the announcement never arrives. Instead, write Core's address
+  into `~/.config/a3/core`, one line, e.g. `http://192.168.8.10:9080`, and restart StemDeck.
+  It then asks Core's `/api/truth` at start and every 30 s. If Core cannot be reached, it says
+  so once in the journal and plays on with the truth it has.
+
 Two **input** ports record: `rec_L` and `rec_R`. **REC** in the top bar writes them to a 24-bit
 FLAC in `recordings/` in StemDeck's folder (next to `stems/`), named by the time (`StemDeck 2026-09-29 19-05-12.flac`);
 the button shows the running time, the two small meters beside it the inputs' level — also
@@ -290,10 +302,12 @@ Two systemd user services carry the audio over the network, kept in this reposit
 - `zita-n2j.service` receives 2 channels back from it (UDP 55100).
 
 Both take their address and port from the A³ system's one truth, `a3-osc.json`, through
-`tools/zita-from-truth.py` — on radla a copy of the Core's `/usr/share/a3/a3-osc.json` at the same
-path (`sudo mkdir -p /usr/share/a3 && sudo cp a3-osc.json /usr/share/a3/`), which StemDeck's PIO
-clock reads too. The j2n unit used to name Core's address itself, and after the rig moved to
-192.168.8.x it sent to the old one without a word.
+`tools/zita-from-truth.py`. It reads the truth StemDeck fetched (`~/.cache/a3/a3-osc.json`, see
+*Where the truth comes from*), else `/usr/share/a3/a3-osc.json`; radla no longer needs a hand copy
+there. They read it at their start only: after Core's address changes, restart them once
+(`systemctl --user restart zita-j2n zita-n2j`) once StemDeck has restarted. Until a truth
+exists they fail and retry every 2 s. The j2n unit used to name Core's address itself, and
+after the rig moved to 192.168.8.x it sent to the old one without a word.
 
 Both restart by themselves 2 s after they drop out (zita ends on some graph changes, and
 reports that as a normal exit), with no limit on how often. Install or update them with
@@ -335,9 +349,8 @@ Both decks may be synced at once, each with its own half/same/double choice.
 
 - StemDeck joins the network as virtual CDJ **number 6** (setting `pioDevice` in
   `~/.config/StemDeck/StemDeck.settings`) and listens on the Pro DJ Link ports, UDP
-  50000–50002, which it reads from the A³ system's one truth, `/usr/share/a3/a3-osc.json`
-  (or the file `$A3_OSC_TRUTH` names); without it the status line says `PIO: no
-  a3-osc.json`. The sockets use
+  50000–50002, which it reads from the A³ system's one truth (see *Where the truth comes from*);
+  without it the status line says `PIO: no a3-osc.json`. The sockets use
   `SO_REUSEADDR`, so it can share a machine with beat-analyzer (number 7) and both get the
   broadcast beats. If the network is not up yet, it retries every two seconds.
 - The master comes from the CDJs' status packets. Some of those go to one address only, so on a

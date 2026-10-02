@@ -58,5 +58,34 @@ class TheTruthIsResolvedOnce(unittest.TestCase):
         self.assertIn("SHA256 (juce::File (truthPath))", main)
 
 
+
+class RadlaPolls(unittest.TestCase):
+    """Step 4: where ~/.config/a3/core names Core, the keeper polls it."""
+
+    def test_a_named_core_is_polled_else_heard(self):
+        text = (SOURCE / "MainComponent.cpp").read_text()
+        self.assertIn("truthkeeper::corePath (", text)
+        self.assertIn("startPolling (", text)
+        self.assertIn("->start()", text)
+
+    def test_a_poll_with_our_own_header_writes_nothing(self):
+        text = (SOURCE / "TruthKeeperLink.cpp").read_text()
+        take = text[text.index("void TruthKeeperLink::take"):]
+        self.assertIn("needsFetch", take)
+        self.assertLess(take.index("needsFetch"), take.index("readIntoMemoryBlock"))
+
+
+class ThePoolGoesLast(unittest.TestCase):
+    """Final review of step 3: members are destroyed in reverse order, so a
+    job the pool still waits for must find `busy` and the rest alive."""
+
+    def test_the_thread_pool_is_the_last_member(self):
+        header = (SOURCE / "TruthKeeperLink.h").read_text()
+        body = header[:header.rindex("};")]
+        pool = body.index("juce::ThreadPool fetcher")
+        rest = body[pool:]
+        self.assertNotIn("busy", rest)
+        self.assertNotIn("refusals", rest)
+
 if __name__ == "__main__":
     unittest.main()

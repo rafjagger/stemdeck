@@ -12,6 +12,7 @@ TruthKeeperLink::TruthKeeperLink (std::string ownIn, juce::File cacheIn,
 
 TruthKeeperLink::~TruthKeeperLink()
 {
+	stopTimer();
 	receiver.removeListener (this);
 	receiver.disconnect();
 	fetcher.removeAllJobs (true, 6000);
@@ -28,6 +29,20 @@ bool TruthKeeperLink::start()
 	}
 	receiver.addListener (this);
 	return true;
+}
+
+void TruthKeeperLink::startPolling (juce::String url)
+{
+	pollUrl = std::move (url);
+	timerCallback();
+	startTimer (truthkeeper::pollSeconds * 1000);
+}
+
+void TruthKeeperLink::timerCallback()
+{
+	if (busy.exchange (true))
+		return;
+	fetcher.addJob ([this, url = pollUrl] { take (url, {}); busy = false; });
 }
 
 void TruthKeeperLink::oscMessageReceived (const juce::OSCMessage& message)
@@ -56,10 +71,17 @@ void TruthKeeperLink::take (juce::String url, juce::String announced)
 		refuse ("fetch failed (status " + juce::String (status) + ")");
 		return;
 	}
+	refusals.answered();
+	// Polled, there is no announcement: the header says which truth this is,
+	// and every 30 s it is the one StemDeck already holds.
+	const auto header = headers["X-A3-Truth"].toStdString();
+	const auto expected = truthkeeper::announcedOr (announced.toStdString(), header);
+	if (! truthkeeper::needsFetch (expected, own))
+		return;
 	juce::MemoryBlock body;
 	stream->readIntoMemoryBlock (body);
 	const auto hash = juce::SHA256 (body).toHexString();
-	if (! truthkeeper::verified (hash.toStdString(), headers["X-A3-Truth"].toStdString(), announced.toStdString()))
+	if (! truthkeeper::verified (hash.toStdString(), header, expected))
 	{
 		refuse ("body, header and announcement do not agree");
 		return;
@@ -85,8 +107,7 @@ void TruthKeeperLink::take (juce::String url, juce::String announced)
 void TruthKeeperLink::refuse (const juce::String& reason)
 {
 	// Said once per reason, not every 2 s while Core keeps announcing it.
-	if (reason == lastReason)
+	if (! refusals.shouldSay (reason.toStdString()))
 		return;
-	lastReason = reason;
 	std::cerr << "StemDeck: Core's truth refused: " << reason << std::endl;
 }

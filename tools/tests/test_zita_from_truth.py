@@ -8,7 +8,9 @@ through tools/zita-from-truth.py, which reads a3-core's a3-osc.json.
 
 import importlib.util
 import os
+import shutil
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -54,13 +56,42 @@ class TheUnitsCarryNoAddress(unittest.TestCase):
 
 class FindingTheTruth(unittest.TestCase):
     def test_the_environment_points_elsewhere(self):
+        # Without it: TheCacheComesFirst, against a home of its own.
+        saved = os.environ.get("A3_OSC_TRUTH")
         os.environ["A3_OSC_TRUTH"] = "/tmp/elsewhere.json"
         try:
             self.assertEqual(zita.truth_path(), Path("/tmp/elsewhere.json"))
         finally:
             del os.environ["A3_OSC_TRUTH"]
-        self.assertEqual(zita.truth_path(), Path("/usr/share/a3/a3-osc.json"))
+            if saved is not None:
+                os.environ["A3_OSC_TRUTH"] = saved
 
+
+class TheCacheComesFirst(unittest.TestCase):
+    """On radla StemDeck fetches Core's truth into ~/.cache/a3 (step 4);
+    zita reads what StemDeck fetched, so radla needs no copy in /usr/share."""
+
+    def setUp(self):
+        self.saved = os.environ.pop("A3_OSC_TRUTH", None)
+        self.home = Path(tempfile.mkdtemp())
+        self.cache = self.home / ".cache/a3/a3-osc.json"
+        self.cache.parent.mkdir(parents=True)
+
+    def tearDown(self):
+        if self.saved is not None:
+            os.environ["A3_OSC_TRUTH"] = self.saved
+        shutil.rmtree(self.home)
+
+    def test_a_cache_that_reads_is_taken(self):
+        self.cache.write_text('{"listeners": []}')
+        self.assertEqual(zita.truth_path(self.home), self.cache)
+
+    def test_a_cache_that_does_not_read_is_skipped(self):
+        self.cache.write_text("garbage")
+        self.assertEqual(zita.truth_path(self.home), Path("/usr/share/a3/a3-osc.json"))
+
+    def test_no_cache_is_the_package(self):
+        self.assertEqual(zita.truth_path(self.home), Path("/usr/share/a3/a3-osc.json"))
 
 if __name__ == "__main__":
     unittest.main()

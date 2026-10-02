@@ -5,8 +5,9 @@
   zita-from-truth.py n2j --chan 1-2           -> zita-n2j ... 0.0.0.0 <port>
 
 Every address and port of the A3 system lives in a3-core's a3-osc.json
-(decided 2026-09-30); on radla a copy sits where the package puts it on the
-Core, /usr/share/a3/a3-osc.json (or the file $A3_OSC_TRUTH names). The j2n
+(decided 2026-09-30). It is read from $A3_OSC_TRUTH if set, else from
+~/.cache/a3/a3-osc.json -- where StemDeck keeps what Core served (on radla it
+polls the Core named in ~/.config/a3/core) -- else /usr/share/a3/a3-osc.json. The j2n
 unit sent to 192.168.43.129 -- Core's address before the rig moved to
 192.168.8.x -- and UDP never said that nobody listened.
 
@@ -19,8 +20,22 @@ import sys
 from pathlib import Path
 
 
-def truth_path():
-    return Path(os.environ.get("A3_OSC_TRUTH") or "/usr/share/a3/a3-osc.json")
+PACKAGE = Path("/usr/share/a3/a3-osc.json")
+
+
+def _reads_as_truth(path):
+    try:
+        return isinstance(json.loads(path.read_text()).get("listeners"), list)
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
+def truth_path(home=None):
+    """$A3_OSC_TRUTH, else what StemDeck fetched from Core, else the package's."""
+    if os.environ.get("A3_OSC_TRUTH"):
+        return Path(os.environ["A3_OSC_TRUTH"])
+    cache = Path(home or Path.home()) / ".cache/a3/a3-osc.json"
+    return cache if _reads_as_truth(cache) else PACKAGE
 
 
 def _listener(truth, program, role):
@@ -51,8 +66,8 @@ def main(argv):
         sys.exit(__doc__)
     path = truth_path()
     if not path.exists():
-        sys.exit(f"zita-from-truth: no a3-osc.json at {path} -- copy the Core's "
-                 "/usr/share/a3/a3-osc.json there")
+        sys.exit(f"zita-from-truth: no a3-osc.json in ~/.cache/a3 nor at {path} -- "
+                 "StemDeck fetches it once ~/.config/a3/core names Core")
     command = zita_command(json.loads(path.read_text()), argv[0], argv[1:])
     print(" ".join(command), flush=True)
     os.execvp(command[0], command)

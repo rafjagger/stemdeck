@@ -1,0 +1,47 @@
+#include <gtest/gtest.h>
+
+#include "TruthKeeper.h"
+
+// StemDeck takes its truth from Core like the desk (spec truth-from-core,
+// step 3): it starts on the cache, hears /core/here, fetches a fingerprint it
+// does not have, verifies, stores and restarts. The desk's review taught the
+// cases below: no restart on its own fingerprint, none with an override.
+
+TEST (KeeperDecide, TheSameFingerprintNeedsNoFetch)
+{
+	EXPECT_FALSE (truthkeeper::needsFetch (std::string (64, 'a'), std::string (64, 'a')));
+	EXPECT_TRUE (truthkeeper::needsFetch (std::string (64, 'b'), std::string (64, 'a')));
+}
+
+TEST (KeeperDecide, AnOverrideIsNotFollowed)
+{
+	EXPECT_TRUE (truthkeeper::followsCore (nullptr));
+	EXPECT_TRUE (truthkeeper::followsCore (""));
+	EXPECT_FALSE (truthkeeper::followsCore ("/x.json"));
+}
+
+TEST (KeeperVerify, BodyHeaderAndAnnouncementMustAgree)
+{
+	const std::string h (64, 'c');
+	EXPECT_TRUE (truthkeeper::verified (h, h, h));
+	EXPECT_FALSE (truthkeeper::verified (h, h, std::string (64, 'd')));
+	EXPECT_FALSE (truthkeeper::verified (h, std::string (64, 'd'), h));
+	EXPECT_FALSE (truthkeeper::verified ("", "", ""));
+}
+
+TEST (KeeperStart, OverrideThenCacheThenPackage)
+{
+	EXPECT_EQ (truthkeeper::startPath ("/o.json", "/c.json", true, "/p.json"), "/o.json");
+	EXPECT_EQ (truthkeeper::startPath (nullptr, "/c.json", true, "/p.json"), "/c.json");
+	EXPECT_EQ (truthkeeper::startPath ("", "/c.json", true, "/p.json"), "/c.json");
+}
+
+TEST (KeeperStart, AnUnparsableCacheIsSkipped)
+{
+	EXPECT_EQ (truthkeeper::startPath (nullptr, "/c.json", false, "/p.json"), "/p.json");
+}
+
+TEST (KeeperStart, TheCacheIsInHome)
+{
+	EXPECT_EQ (truthkeeper::cachePath ("/home/aaa"), "/home/aaa/.cache/a3/a3-osc.json");
+}

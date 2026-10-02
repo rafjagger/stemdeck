@@ -15,6 +15,7 @@ add_executable(stemdeck-tests
     OscTruth.cpp
     ${CMAKE_SOURCE_DIR}/Source/OscTruth.cpp
     Remote.cpp
+    TruthKeeper.cpp
     ${CMAKE_SOURCE_DIR}/Source/Remote.cpp
     PioneerClock.cpp
     ${CMAKE_SOURCE_DIR}/Source/PioneerClock.cpp

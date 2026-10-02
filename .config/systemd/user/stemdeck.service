@@ -1,8 +1,12 @@
 [Unit]
 Description=StemDeck, the stem player, always running on i3 workspace 2
 # The screen first (the same wait A3 Motion uses), and JACK: StemDeck never
-# starts a server itself, it takes the one that runs.
+# starts a server itself, it takes the one that runs. Bound to it: after a
+# reboot with a late sound card StemDeck started without JACK and stayed
+# down when JACK came (2026-10-02). It now waits for JACK, goes with it, and
+# a3-jack's start pulls it up again (WantedBy below).
 After=graphical.target a3-jack.service
+BindsTo=a3-jack.service
 PartOf=a3-main.service
 
 [Service]
@@ -18,4 +22,4 @@ Restart=on-failure
 RestartSec=5
 
 [Install]
-WantedBy=default.target
+WantedBy=default.target a3-jack.service

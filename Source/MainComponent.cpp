@@ -188,7 +188,12 @@ MainComponent::MainComponent()
 		const auto core = juce::File (truthkeeper::corePath (home));
 		const auto url = core.existsAsFile() ? truthkeeper::pollUrl (core.loadFileAsString().toStdString()) : std::string();
 		if (url.empty())
+		{
+			if (core.existsAsFile() && core.loadFileAsString().trim().isNotEmpty())
+				std::cerr << "StemDeck: " << core.getFullPathName() << " does not name an http:// address;"
+						  << " listening for Core's broadcast instead" << std::endl;
 			truthKeeper->start();
+		}
 		else
 		{
 			std::cerr << "StemDeck: following Core's truth at " << url << " every "

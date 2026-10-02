@@ -43,7 +43,7 @@ private:
 	juce::OSCReceiver receiver;
 	juce::String pollUrl;
 	std::atomic<bool> busy { false };
-	juce::String lastReason;
+	truthkeeper::Refusals refusals;
 	// Last: destroyed first, so a job it still waits for finds the rest alive.
 	juce::ThreadPool fetcher { juce::ThreadPoolOptions{}.withNumberOfThreads (1) };
 

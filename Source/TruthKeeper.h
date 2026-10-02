@@ -28,20 +28,27 @@ namespace truthkeeper
 		return home + "/.config/a3/core";
 	}
 
-	// Core's address as the file gives it ("http://host:9080"), as the URL of
-	// its truth; empty for a blank file, which names no Core.
+	// Core's address as the file's first line gives it ("http://host:9080",
+	// "host:9080"), as the URL of its truth; empty for a blank file, which
+	// names no Core, and for another scheme, which JUCE cannot fetch.
 	inline std::string pollUrl (const std::string& fileText)
 	{
-		const std::string blank = " \t\r\n";
-		const auto first = fileText.find_first_not_of (blank);
+		const std::string blank = " \t\r";
+		auto url = fileText.substr (0, fileText.find ('\n'));
+		const auto first = url.find_first_not_of (blank);
 		if (first == std::string::npos)
 			return {};
-		auto url = fileText.substr (first, fileText.find_last_not_of (blank) - first + 1);
+		url = url.substr (first, url.find_last_not_of (blank) - first + 1);
+		const std::string scheme = "http://";
+		if (url.find ("://") == std::string::npos)
+			url = scheme + url;
+		if (url.compare (0, scheme.size(), scheme) != 0)
+			return {};
+		while (! url.empty() && url.back() == '/')
+			url.pop_back();
 		const std::string tail = "/api/truth";
 		if (url.size() >= tail.size() && url.compare (url.size() - tail.size(), tail.size(), tail) == 0)
 			return url;
-		while (! url.empty() && url.back() == '/')
-			url.pop_back();
 		return url + tail;
 	}
 
@@ -57,6 +64,21 @@ namespace truthkeeper
 	{
 		return announced != own;
 	}
+
+	// Says each refusal once -- until Core answers again, so an outage after a
+	// good answer is said again.
+	struct Refusals
+	{
+		bool shouldSay (const std::string& reason)
+		{
+			if (reason == last)
+				return false;
+			last = reason;
+			return true;
+		}
+		void answered() { last.clear(); }
+		std::string last;
+	};
 
 	// A poll has no announcement: the response's header stands in for it.
 	inline std::string announcedOr (const std::string& announced, const std::string& header)

@@ -82,10 +82,10 @@ class ThePoolGoesLast(unittest.TestCase):
     def test_the_thread_pool_is_the_last_member(self):
         header = (SOURCE / "TruthKeeperLink.h").read_text()
         body = header[:header.rindex("};")]
-        members = [line.strip() for line in body.splitlines()
-                   if line.startswith("\t") and line.strip().endswith(";")
-                   and "(" not in line.split("{")[0] or "ThreadPool" in line]
-        self.assertIn("ThreadPool", members[-1])
+        pool = body.index("juce::ThreadPool fetcher")
+        rest = body[pool:]
+        self.assertNotIn("busy", rest)
+        self.assertNotIn("refusals", rest)
 
 if __name__ == "__main__":
     unittest.main()

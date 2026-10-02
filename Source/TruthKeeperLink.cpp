@@ -71,6 +71,7 @@ void TruthKeeperLink::take (juce::String url, juce::String announced)
 		refuse ("fetch failed (status " + juce::String (status) + ")");
 		return;
 	}
+	refusals.answered();
 	// Polled, there is no announcement: the header says which truth this is,
 	// and every 30 s it is the one StemDeck already holds.
 	const auto header = headers["X-A3-Truth"].toStdString();
@@ -106,8 +107,7 @@ void TruthKeeperLink::take (juce::String url, juce::String announced)
 void TruthKeeperLink::refuse (const juce::String& reason)
 {
 	// Said once per reason, not every 2 s while Core keeps announcing it.
-	if (reason == lastReason)
+	if (! refusals.shouldSay (reason.toStdString()))
 		return;
-	lastReason = reason;
 	std::cerr << "StemDeck: Core's truth refused: " << reason << std::endl;
 }

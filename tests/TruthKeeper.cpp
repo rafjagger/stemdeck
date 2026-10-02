@@ -79,3 +79,37 @@ TEST (KeeperPoll, TheHeaderStandsInForTheAnnouncement)
 	EXPECT_EQ (truthkeeper::announcedOr (std::string (64, 'f'), h), std::string (64, 'f'));
 	EXPECT_FALSE (truthkeeper::needsFetch (truthkeeper::announcedOr ("", h), h));
 }
+
+// Final review of step 4: radla often starts before Core is reachable; the
+// "fetch failed" at boot must not silence a real outage later.
+TEST (KeeperRefusals, SaidOnceUntilCoreAnswers)
+{
+	truthkeeper::Refusals refusals;
+	EXPECT_TRUE (refusals.shouldSay ("fetch failed"));
+	EXPECT_FALSE (refusals.shouldSay ("fetch failed"));
+	refusals.answered();
+	EXPECT_TRUE (refusals.shouldSay ("fetch failed"));
+	EXPECT_TRUE (refusals.shouldSay ("body, header and announcement do not agree"));
+}
+
+// A hand-written address: without a scheme it is http; another scheme or a
+// second line cannot be fetched and must not look like "Core is off".
+TEST (KeeperPoll, AnAddressWithoutSchemeIsHttp)
+{
+	EXPECT_EQ (truthkeeper::pollUrl ("192.168.8.10:9080"), "http://192.168.8.10:9080/api/truth");
+}
+
+TEST (KeeperPoll, OnlyTheFirstLineCounts)
+{
+	EXPECT_EQ (truthkeeper::pollUrl ("http://h:9080\n# Core\n"), "http://h:9080/api/truth");
+}
+
+TEST (KeeperPoll, ATrailingSlashAfterTheTruthIsTolerated)
+{
+	EXPECT_EQ (truthkeeper::pollUrl ("http://h:9080/api/truth/"), "http://h:9080/api/truth");
+}
+
+TEST (KeeperPoll, HttpsCannotBeFetched)
+{
+	EXPECT_EQ (truthkeeper::pollUrl ("https://h:9080"), "");
+}

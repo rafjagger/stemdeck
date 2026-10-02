@@ -19,12 +19,13 @@ RemoteLink::~RemoteLink()
 
 void RemoteLink::start()
 {
-	const auto path = osctruth::truthPath();
+	const auto path = osctruth::liveTruthPath();
 	std::string error;
 	const auto listeners = osctruth::readListeners (path, error);
 	const auto hosts = error.empty() ? osctruth::readHosts (path, error) : std::map<std::string, std::string>();
 	words = error.empty() ? osctruth::readRemoteWords (path, error) : remote::Words();
 	const auto endpoints = osctruth::endpointsFrom (listeners, hosts);
+	truthHash = juce::SHA256 (juce::File (path)).toHexString();
 
 	if (! error.empty() || ! endpoints.complete())
 	{
@@ -41,7 +42,6 @@ void RemoteLink::start()
 	receiver.addListener (this);
 	toCore.connect (endpoints.coreHost, endpoints.corePort);
 	toDesk.connect (endpoints.mixerHost, endpoints.mixerPort);
-	truthHash = juce::SHA256 (juce::File (path)).toHexString();
 
 	running = true;
 	sayHello();

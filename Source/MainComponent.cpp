@@ -3,6 +3,7 @@
 #include "GridEdit.h"
 #include "OscTruthFile.h"
 
+#include <cstdlib>
 #include <iostream>
 #include <pthread.h>
 #include <sched.h>
@@ -16,7 +17,7 @@ MainComponent::MainComponent()
 	// does not start and its status line says why.
 	{
 		std::string truthError;
-		proLinkPorts = osctruth::proLinkPortsFrom (osctruth::readListeners (osctruth::truthPath(), truthError));
+		proLinkPorts = osctruth::proLinkPortsFrom (osctruth::readListeners (osctruth::liveTruthPath(), truthError));
 		if (! truthError.empty())
 			std::cerr << "StemDeck: " << truthError << std::endl;
 	}
@@ -163,6 +164,23 @@ MainComponent::MainComponent()
 	for (int d = 0; d < numDecks; ++d)
 		mixer.strip (d).onBusesChanged = [this, d] (int stem) { remote.report (d, stem); };
 	remote.start();
+
+	// Following Core's truth: with $A3_OSC_TRUTH set, that file wins at every
+	// start, and following would restart StemDeck into it forever.
+	if (truthkeeper::followsCore (std::getenv ("A3_OSC_TRUTH")))
+	{
+		truthKeeper = std::make_unique<TruthKeeperLink> (
+			remote.getTruthHash().toStdString(),
+			juce::File (truthkeeper::cachePath (juce::File::getSpecialLocation (juce::File::userHomeDirectory).getFullPathName().toStdString())),
+			[] (const juce::String& body) { return juce::String (osctruth::unusableTruth (body.toStdString())); },
+			[] {
+				juce::JUCEApplication::getInstance()->setApplicationReturnValue (1);
+				juce::JUCEApplication::quit();
+			});
+		truthKeeper->start();
+	}
+	else
+		std::cerr << "StemDeck: A3_OSC_TRUTH is set: not following Core's truth" << std::endl;
 }
 
 MainComponent::~MainComponent()

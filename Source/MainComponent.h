@@ -11,6 +11,7 @@
 #include "DeckPanel.h"
 #include "MixerPanel.h"
 #include "RemoteLink.h"
+#include "TruthKeeperLink.h"
 #include "Buses.h"
 #include "Session.h"
 #include "AutoDj.h"
@@ -129,6 +130,8 @@ private:
 	MixerPanel mixer { playerA, playerB };
 	// The desk's remote control through Core (spec stemdeck-remote).
 	RemoteLink remote { { &playerA, &playerB }, mixer };
+	// The truth from Core (spec truth-from-core, step 3).
+	std::unique_ptr<TruthKeeperLink> truthKeeper;
 	StemLibrary library { formatManager };
 	StemCreator stemCreator;
 	std::unique_ptr<juce::AlertWindow> stemDialog;

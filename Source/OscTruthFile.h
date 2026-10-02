@@ -15,4 +15,12 @@ namespace osctruth
 	// The patterns StemDeck speaks by remote control (spec stemdeck-remote).
 	// A missing one stays empty, with `error` naming it.
 	remote::Words readRemoteWords (const std::string& path, std::string& error);
+
+	// The truth StemDeck reads (spec truth-from-core, step 3): $A3_OSC_TRUTH,
+	// else what Core last served (~/.cache/a3/a3-osc.json) if it reads as a
+	// truth, else the package's file.
+	std::string liveTruthPath();
+
+	// Why `text` cannot be StemDeck's truth, or empty.
+	std::string unusableTruth (const std::string& text);
 }

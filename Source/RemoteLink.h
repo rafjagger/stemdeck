@@ -26,6 +26,9 @@ public:
 	void start();
 	// A stem's switches to Core, after any change. Ignored while off.
 	void report (int deck, int stem);
+	// The sha256 of the truth StemDeck read: Core's fingerprint when it is
+	// the body Core served.
+	juce::String getTruthHash() const { return truthHash; }
 
 private:
 	void oscMessageReceived (const juce::OSCMessage& message) override;

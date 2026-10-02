@@ -1,4 +1,7 @@
 #include "OscTruthFile.h"
+#include "TruthKeeper.h"
+
+#include <cstdlib>
 
 #include <juce_core/juce_core.h>
 
@@ -65,5 +68,24 @@ namespace osctruth
 		};
 		return { patternOf ("stemdeck.bus"), patternOf ("stemdeck.buses"), patternOf ("stemdeck.recall"),
 				 patternOf ("vu"), patternOf ("device.hello") };
+	}
+
+	std::string unusableTruth (const std::string& text)
+	{
+		juce::var truth;
+		if (juce::JSON::parse (juce::String (text), truth).failed())
+			return "not JSON";
+		if (truth["addresses"]["stemdeck.bus"]["pattern"].toString().isEmpty())
+			return "it has no stemdeck.bus";
+		return {};
+	}
+
+	std::string liveTruthPath()
+	{
+		const auto cache = truthkeeper::cachePath (juce::File::getSpecialLocation (
+			juce::File::userHomeDirectory).getFullPathName().toStdString());
+		const juce::File cached (cache);
+		const bool usable = cached.existsAsFile() && unusableTruth (cached.loadFileAsString().toStdString()).empty();
+		return truthkeeper::startPath (std::getenv ("A3_OSC_TRUTH"), cache, usable, "/usr/share/a3/a3-osc.json");
 	}
 }

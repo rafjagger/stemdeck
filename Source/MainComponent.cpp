@@ -3,6 +3,7 @@
 #include "GridEdit.h"
 #include "OscTruthFile.h"
 
+#include <cstdlib>
 #include <iostream>
 #include <pthread.h>
 #include <sched.h>
@@ -12,11 +13,17 @@ MainComponent::MainComponent()
 {
 	setLookAndFeel (&lookAndFeel);
 
+	// The one truth, chosen once and hashed at once (spec truth-from-core):
+	// the keeper's own fingerprint must be of this truth, not of a cache
+	// Motion may write a moment later.
+	truthPath = osctruth::liveTruthPath();
+	truthHash = juce::SHA256 (juce::File (truthPath)).toHexString();
+
 	// Where Pro DJ Link listens: the one truth. Without it the PIO clock
 	// does not start and its status line says why.
 	{
 		std::string truthError;
-		proLinkPorts = osctruth::proLinkPortsFrom (osctruth::readListeners (osctruth::truthPath(), truthError));
+		proLinkPorts = osctruth::proLinkPortsFrom (osctruth::readListeners (truthPath, truthError));
 		if (! truthError.empty())
 			std::cerr << "StemDeck: " << truthError << std::endl;
 	}
@@ -162,7 +169,24 @@ MainComponent::MainComponent()
 	// link runs reports nothing, and Core asks for everything on our hello.
 	for (int d = 0; d < numDecks; ++d)
 		mixer.strip (d).onBusesChanged = [this, d] (int stem) { remote.report (d, stem); };
-	remote.start();
+	remote.start (truthPath, truthHash);
+
+	// Following Core's truth: with $A3_OSC_TRUTH set, that file wins at every
+	// start, and following would restart StemDeck into it forever.
+	if (truthkeeper::followsCore (std::getenv ("A3_OSC_TRUTH")))
+	{
+		truthKeeper = std::make_unique<TruthKeeperLink> (
+			truthHash.toStdString(),
+			juce::File (truthkeeper::cachePath (juce::File::getSpecialLocation (juce::File::userHomeDirectory).getFullPathName().toStdString())),
+			[] (const juce::String& body) { return juce::String (osctruth::unusableTruth (body.toStdString())); },
+			[] {
+				juce::JUCEApplication::getInstance()->setApplicationReturnValue (1);
+				juce::JUCEApplication::quit();
+			});
+		truthKeeper->start();
+	}
+	else
+		std::cerr << "StemDeck: A3_OSC_TRUTH is set: not following Core's truth" << std::endl;
 }
 
 MainComponent::~MainComponent()

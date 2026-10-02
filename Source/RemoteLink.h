@@ -23,7 +23,8 @@ public:
 	RemoteLink (std::array<StemDeckPlayer*, 2> players, MixerPanel& mixer);
 	~RemoteLink() override;
 
-	void start();
+	// `path` and `hash`: the truth StemDeck chose at start, and its sha256.
+	void start (const std::string& path, const juce::String& hash);
 	// A stem's switches to Core, after any change. Ignored while off.
 	void report (int deck, int stem);
 

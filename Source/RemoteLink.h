@@ -8,19 +8,23 @@
 #include "StemDeckPlayer.h"
 
 #include <array>
+#include <optional>
+#include <string>
 
 // StemDeck by remote control from the A3 Mixer, through Core (spec
 // stemdeck-remote, 2026-10-01). StemDeck owns its bus switches: Core sets
 // them with /stemdeck/{deck}/{stem}/bus/{bus}, and every change -- from Core
 // or from a click here -- goes back as the stem's mask. A hello every 30 s
-// tells Core where StemDeck is; one level meter per stem goes to the desk at
-// 25 Hz. Everything is read from the one truth; without it, or with words
+// tells Core where StemDeck is; one level meter per stem and the AUX bus as a
+// stereo pair (stem_aux_L/R, decided 2026-10-04) go to the desk at 25 Hz. Everything is read from the one truth; without it, or with words
 // missing there, the link stays off and StemDeck plays on as before.
 class RemoteLink : private juce::OSCReceiver::Listener<juce::OSCReceiver::MessageLoopCallback>,
 				   private juce::Timer
 {
 public:
-	RemoteLink (std::array<StemDeckPlayer*, 2> players, MixerPanel& mixer);
+	// `auxLevels`: the AUX bus, L and R, gathered by the audio callback.
+	RemoteLink (std::array<StemDeckPlayer*, 2> players, MixerPanel& mixer,
+				std::array<remote::LevelTap, 2>& auxLevels);
 	~RemoteLink() override;
 
 	// `path` and `hash`: the truth StemDeck chose at start, and its sha256.
@@ -33,6 +37,7 @@ private:
 	void timerCallback() override;
 	void sayHello();
 	void sendLevels();
+	void sendAuxLevels();
 	void reportAll();
 
 	static constexpr int levelsPerSecond = 25;
@@ -40,6 +45,8 @@ private:
 
 	std::array<StemDeckPlayer*, 2> players;
 	MixerPanel& mixer;
+	std::array<remote::LevelTap, 2>& auxLevels;
+	std::array<std::optional<std::string>, 2> auxAddresses; // none in an older truth
 	remote::Words words;
 	juce::String truthHash;
 	juce::OSCReceiver receiver;

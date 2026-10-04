@@ -1,5 +1,6 @@
 #include "Remote.h"
 
+#include <algorithm>
 #include <cmath>
 #include <map>
 #include <vector>
@@ -127,8 +128,52 @@ namespace remote
 		return mask;
 	}
 
-	float rmsOf (double sumOfSquares, int samples)
+	float rmsOf (double sumOfSquares, long long samples)
 	{
 		return samples > 0 ? (float) std::sqrt (sumOfSquares / samples) : 0.0f;
+	}
+
+	std::optional<int> meterNumber (const std::vector<std::string>& meters, const std::string& name)
+	{
+		const auto found = std::find (meters.begin(), meters.end(), name);
+		if (found == meters.end())
+			return std::nullopt;
+		return (int) (found - meters.begin()) + 1;
+	}
+
+	std::optional<std::string> vuAddressNamed (const Words& words, const std::string& name)
+	{
+		const auto n = meterNumber (words.meters, name);
+		if (! n)
+			return std::nullopt;
+		return fill (words.vu, { { "n", *n } });
+	}
+
+	Block measure (const float* samples, int count)
+	{
+		Block block;
+		block.samples = count;
+		for (int i = 0; i < count; ++i)
+		{
+			block.peak = std::max (block.peak, std::abs (samples[i]));
+			block.squares += (double) samples[i] * samples[i];
+		}
+		return block;
+	}
+
+	void LevelTap::add (const Block& block)
+	{
+		if (block.peak > peak.load())
+			peak = block.peak;
+		squares = squares.load() + block.squares;
+		samples = samples.load() + block.samples;
+	}
+
+	Level LevelTap::pop()
+	{
+		const auto p = peak.exchange (0.0f);
+		const auto s = squares.exchange (0.0);
+		const auto n = samples.exchange (0LL);
+		return { p, rmsOf (s, n) };
 	}
 }

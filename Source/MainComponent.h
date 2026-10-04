@@ -128,8 +128,11 @@ private:
 	ScrollingWaveform waveA { playerA, thumbsA, 0 }, waveB { playerB, thumbsB, 1 };
 	DeckPanel deckA { playerA, thumbsA, 0 }, deckB { playerB, thumbsB, 1 };
 	MixerPanel mixer { playerA, playerB };
+	// StemDeck's AUX bus, L and R, for the desk's SA meter: filled by the
+	// audio callback, emptied by `remote`, so declared before it.
+	std::array<remote::LevelTap, 2> auxLevels;
 	// The desk's remote control through Core (spec stemdeck-remote).
-	RemoteLink remote { { &playerA, &playerB }, mixer };
+	RemoteLink remote { { &playerA, &playerB }, mixer, auxLevels };
 	// The truth from Core (spec truth-from-core, step 3).
 	std::unique_ptr<TruthKeeperLink> truthKeeper;
 	std::string truthPath;

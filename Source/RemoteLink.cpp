@@ -5,8 +5,8 @@
 
 #include <iostream>
 
-RemoteLink::RemoteLink (std::array<StemDeckPlayer*, 2> p, MixerPanel& m)
-	: players (p), mixer (m)
+RemoteLink::RemoteLink (std::array<StemDeckPlayer*, 2> p, MixerPanel& m, std::array<remote::LevelTap, 2>& aux)
+	: players (p), mixer (m), auxLevels (aux)
 {
 }
 
@@ -23,6 +23,7 @@ void RemoteLink::start (const std::string& path, const juce::String& hash)
 	const auto listeners = osctruth::readListeners (path, error);
 	const auto hosts = error.empty() ? osctruth::readHosts (path, error) : std::map<std::string, std::string>();
 	words = error.empty() ? osctruth::readRemoteWords (path, error) : remote::Words();
+	auxAddresses = { remote::vuAddressNamed (words, "stem_aux_L"), remote::vuAddressNamed (words, "stem_aux_R") };
 	const auto endpoints = osctruth::endpointsFrom (listeners, hosts);
 	truthHash = hash;
 
@@ -105,4 +106,15 @@ void RemoteLink::sendLevels()
 			const auto level = players[(size_t) deck]->popDeskLevel (stem);
 			toDesk.send (juce::OSCMessage (juce::String (remote::vuAddress (words, deck, stem)), level.peak, level.rms));
 		}
+	sendAuxLevels();
+}
+
+void RemoteLink::sendAuxLevels()
+{
+	for (size_t side = 0; side < auxLevels.size(); ++side)
+	{
+		const auto level = auxLevels[side].pop();
+		if (auxAddresses[side])
+			toDesk.send (juce::OSCMessage (juce::String (*auxAddresses[side]), level.peak, level.rms));
+	}
 }

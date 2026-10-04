@@ -1,8 +1,10 @@
 #pragma once
 
 #include <array>
+#include <atomic>
 #include <optional>
 #include <string>
+#include <vector>
 
 // StemDeck by remote control from the A3 Mixer (spec stemdeck-remote,
 // 2026-10-01): Core sets a stem's bus switch, StemDeck reports the stem's
@@ -15,6 +17,8 @@ namespace remote
 	struct Words
 	{
 		std::string bus, buses, recall, vu, hello;
+		// The truth's vu_meters: meter n is meters[n - 1]. Empty in an older truth.
+		std::vector<std::string> meters;
 	};
 
 	// One switch, 0-based inside StemDeck: deck 0-1, stem 0-3, bus 0-5.
@@ -31,5 +35,41 @@ namespace remote
 	unsigned maskOf (const std::array<bool, 6>& on);
 
 	// The rms of `samples` values whose squares sum to `sumOfSquares`; 0 for none.
-	float rmsOf (double sumOfSquares, int samples);
+	float rmsOf (double sumOfSquares, long long samples);
+
+	// The number of the meter called `name` in the truth's vu_meters (its
+	// place, from 1), none if the truth does not name it.
+	std::optional<int> meterNumber (const std::vector<std::string>& meters, const std::string& name);
+	// The /vu address of the meter called `name`, none if the truth lacks it.
+	std::optional<std::string> vuAddressNamed (const Words& words, const std::string& name);
+
+	struct Level
+	{
+		float peak = 0.0f, rms = 0.0f;
+	};
+
+	// One channel's block: its peak magnitude and the sum of its squares.
+	struct Block
+	{
+		float peak = 0.0f;
+		double squares = 0.0;
+		int samples = 0;
+	};
+
+	Block measure (const float* samples, int count);
+
+	// A meter gathered block by block on the audio thread and emptied by the
+	// sender. Lock-free and allocation-free; only one thread adds, so a pop in
+	// between loses at most one block -- the same terms as the stem meters.
+	class LevelTap
+	{
+	public:
+		void add (const Block& block);
+		Level pop();
+
+	private:
+		std::atomic<float> peak { 0.0f };
+		std::atomic<double> squares { 0.0 };
+		std::atomic<long long> samples { 0 };
+	};
 }

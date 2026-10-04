@@ -66,8 +66,14 @@ namespace osctruth
 				error = std::string ("a3-osc.json has no ") + key;
 			return pattern;
 		};
+		// The meter names are optional: an older truth has no AUX bus meters,
+		// and the rest of the link works without them.
+		std::vector<std::string> meters;
+		if (const auto* names = truth["vu_meters"].getArray())
+			for (const auto& name : *names)
+				meters.push_back (name.toString().toStdString());
 		return { patternOf ("stemdeck.bus"), patternOf ("stemdeck.buses"), patternOf ("stemdeck.recall"),
-				 patternOf ("vu"), patternOf ("device.hello") };
+				 patternOf ("vu"), patternOf ("device.hello"), meters };
 	}
 
 	std::string unusableTruth (const std::string& text)

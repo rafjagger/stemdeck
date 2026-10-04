@@ -1317,6 +1317,10 @@ void MainComponent::getNextAudioBlock (const juce::AudioSourceChannelInfo& buffe
 			}
 	}
 
+	// The desk's SA meter: the AUX bus as it goes to the return, side by side.
+	for (int side = 0; side < 2; ++side)
+		auxLevels[(size_t) side].add (remote::measure (busBuffer.getReadPointer (buses::aux * 2 + side), numSamples));
+
 	// The meters show the six buses.
 	for (int ch = 0; ch < numOutputChannels; ++ch)
 	{

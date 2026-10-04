@@ -2,6 +2,11 @@
 
 #include "Remote.h"
 
+#include <cmath>
+#include <optional>
+#include <string>
+#include <vector>
+
 // The desk switches StemDeck's buses through Core (spec stemdeck-remote).
 // The patterns are the truth's; here they are written out as a3-osc.json
 // has them, the way tests/OscTruth.cpp writes out its listeners.
@@ -68,4 +73,78 @@ TEST (Remote, RmsIsTheRootOfTheMeanSquare)
 {
 	EXPECT_FLOAT_EQ (remote::rmsOf (4 * 0.25, 4), 0.5f);
 	EXPECT_FLOAT_EQ (remote::rmsOf (0.0, 0), 0.0f);    // nothing played: silence, not NaN
+}
+
+// StemDeck's AUX bus as a stereo pair on the desk (decided 2026-10-04): the
+// numbers are the truth's, found by name in its vu_meters (/vu/n = index + 1).
+namespace
+{
+	std::vector<std::string> theTruthsMeters()
+	{
+		std::vector<std::string> meters (40, "reaper_out");
+		for (const char* stem : { "stem_a1", "stem_a2", "stem_a3", "stem_a4",
+								  "stem_b1", "stem_b2", "stem_b3", "stem_b4" })
+			meters.push_back (stem);
+		meters.push_back ("stem_aux_L");
+		meters.push_back ("stem_aux_R");
+		return meters;
+	}
+}
+
+TEST (Remote, AMetersNumberIsItsPlaceInTheList)
+{
+	const auto meters = theTruthsMeters();
+	EXPECT_EQ (remote::meterNumber (meters, "stem_aux_L"), std::optional<int> (49));
+	EXPECT_EQ (remote::meterNumber (meters, "stem_aux_R"), std::optional<int> (50));
+	EXPECT_EQ (remote::meterNumber (meters, "stem_a1"), std::optional<int> (41));
+}
+
+TEST (Remote, AnUnknownMeterHasNoNumber)
+{
+	EXPECT_FALSE (remote::meterNumber (theTruthsMeters(), "stem_aux_C").has_value());
+	EXPECT_FALSE (remote::meterNumber ({}, "stem_aux_L").has_value());
+}
+
+TEST (Remote, ANamedMeterHasItsAddress)
+{
+	auto withMeters = words;
+	withMeters.meters = theTruthsMeters();
+	EXPECT_EQ (remote::vuAddressNamed (withMeters, "stem_aux_R"), std::optional<std::string> ("/vu/50"));
+	EXPECT_FALSE (remote::vuAddressNamed (words, "stem_aux_R").has_value());   // an older truth: no meter
+}
+
+TEST (Remote, ABlockGivesItsPeakAndSquares)
+{
+	const float samples[] { 0.5f, -0.75f, 0.25f, 0.0f };
+	const auto block = remote::measure (samples, 4);
+	EXPECT_FLOAT_EQ (block.peak, 0.75f);
+	EXPECT_DOUBLE_EQ (block.squares, 0.25 + 0.5625 + 0.0625);
+	EXPECT_EQ (block.samples, 4);
+}
+
+TEST (Remote, TheSidesOfAStereoBlockAreMeasuredApart)
+{
+	const float left[] { 1.0f, -1.0f }, right[] { 0.0f, 0.0f };
+	remote::LevelTap tapL, tapR;
+	tapL.add (remote::measure (left, 2));
+	tapR.add (remote::measure (right, 2));
+	const auto l = tapL.pop(), r = tapR.pop();
+	EXPECT_FLOAT_EQ (l.peak, 1.0f);
+	EXPECT_FLOAT_EQ (l.rms, 1.0f);
+	EXPECT_FLOAT_EQ (r.peak, 0.0f);
+	EXPECT_FLOAT_EQ (r.rms, 0.0f);
+}
+
+TEST (Remote, ATapGathersBlocksUntilItIsEmptied)
+{
+	const float loud[] { 0.5f, 0.5f }, quiet[] { 0.0f, 0.0f };
+	remote::LevelTap tap;
+	tap.add (remote::measure (loud, 2));
+	tap.add (remote::measure (quiet, 2));
+	const auto level = tap.pop();
+	EXPECT_FLOAT_EQ (level.peak, 0.5f);
+	EXPECT_FLOAT_EQ (level.rms, std::sqrt (0.5f * 0.5f / 2.0f));   // rms over all four samples
+	const auto after = tap.pop();
+	EXPECT_FLOAT_EQ (after.peak, 0.0f);
+	EXPECT_FLOAT_EQ (after.rms, 0.0f);
 }

@@ -3,7 +3,7 @@
 A stem player for DJs: two decks, each playing a track split into four stems, and a mixer that
 sends every stem to any of six buses. It is part of the [A³ Audio](https://github.com/a3-audio/a3-system)
 system: buses 1–4 and AUX feed A³ Core, where each stem gets its own channel and can move round
-the room. StemDeck is also a Pro DJ Link tempo master when there are no CDJs.
+the room. StemDeck can also be the tempo master of a Pro DJ Link network when there are no CDJs.
 
 It makes its own stems, too: drop a stereo track on the library and Demucs (`htdemucs`) splits it
 into drums, bass, other and vocals while the decks play on. See
@@ -62,6 +62,18 @@ the documentation: [StemDeck](https://a3-audio.github.io/a3-doc/user/stemdeck.ht
 [GRID](https://a3-audio.github.io/a3-doc/user/stemdeck.html#stemdeck-grid),
 [AUTO DJ](https://a3-audio.github.io/a3-doc/user/stemdeck.html#stemdeck-autodj),
 [Session](https://a3-audio.github.io/a3-doc/user/stemdeck.html#stemdeck-session)).
+
+## Pro DJ Link
+
+Pro DJ Link and rekordbox are trademarks of AlphaTheta Corporation; Pioneer DJ is a trademark
+of Pioneer Corporation; CDJ is a product name of theirs. A³ is not affiliated with, endorsed or
+certified by AlphaTheta or Pioneer. StemDeck's Pro DJ Link support is an independent
+implementation for interoperability, built from public documentation of the protocol:
+Deep Symmetry's [DJ Link analysis](https://djl-analysis.deepsymmetry.org/) and
+[prolink-connect](https://github.com/EvanPurkhiser/prolink-connect).
+
+Using it on a network you do not run is at your own risk: ask the venue before joining their
+DJ Link network. See [Trademarks and Pro DJ Link](https://a3-audio.github.io/a3-doc/ressources/trademarks.html).
 
 ## License
 

@@ -4,16 +4,22 @@
 #include "StemDeckPlayer.h"
 #include "Buses.h"
 #include "Session.h"
+#include "MeterBallistics.h"
 
 // Vertical peak meter fed from a player's stem peaks.
+// With a clip lamp, its top segment lights only above full scale and holds.
 class LevelMeter : public juce::Component
 {
 public:
 	void setLevel (float newPeak);
+	void setShowsClip (bool shows) { showsClip = shows; repaint(); }
 	void paint (juce::Graphics& g) override;
 
 private:
 	float level = 0.0f;
+	bool showsClip = false;
+	ClipHold clipHold;
+	bool clipping = false;
 };
 
 //==============================================================================

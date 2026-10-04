@@ -43,3 +43,39 @@ TEST (MeterBallistics, ASmallMeterDrawsSegmentsItCanShow)
 	EXPECT_EQ (meterSegments (300.0f), 24) << "the mixer's, capped";
 	EXPECT_GE (meterSegments (4.0f), 1);
 }
+
+// StemDeck's output meters light a clip lamp above full scale and hold it for
+// about a second, long enough to be seen after a single peak.
+TEST (ClipHold, FullScaleIsNotAClip)
+{
+	ClipHold hold;
+	EXPECT_FALSE (hold.feed (1.0f, 1.0f / 60.0f));
+	EXPECT_FALSE (hold.feed (0.5f, 1.0f / 60.0f));
+}
+
+TEST (ClipHold, AboveFullScaleLightsAtOnce)
+{
+	ClipHold hold;
+	EXPECT_TRUE (hold.feed (1.01f, 1.0f / 60.0f));
+}
+
+TEST (ClipHold, HoldsAboutASecondAfterThePeak)
+{
+	ClipHold hold;
+	hold.feed (1.5f, 1.0f / 60.0f);
+
+	for (int tick = 0; tick < 54; ++tick)   // 0.9 s at 60 Hz
+		EXPECT_TRUE (hold.feed (0.0f, 1.0f / 60.0f)) << "tick " << tick;
+
+	for (int tick = 0; tick < 12; ++tick)   // past 1.1 s
+		hold.feed (0.0f, 1.0f / 60.0f);
+	EXPECT_FALSE (hold.feed (0.0f, 1.0f / 60.0f));
+}
+
+TEST (ClipHold, ANewClipRestartsTheHold)
+{
+	ClipHold hold;
+	hold.feed (2.0f, 0.8f);
+	hold.feed (2.0f, 0.1f);
+	EXPECT_TRUE (hold.feed (0.0f, 0.8f)) << "0.8 s after the second clip, not 1.6 s after the first";
+}

@@ -1,10 +1,11 @@
 #include "MixerPanel.h"
 #include "Theme.h"
-#include "MeterBallistics.h"
 
 namespace
 {
 	constexpr float minDb = -60.0f; // bottom of knobs and fader = silence
+	constexpr float displayTickSeconds = 1.0f / 60.0f; // the main timer feeds the meters at 60 Hz
+	const auto clipColour = juce::Colour (0xffe04848);
 
 	juce::String busName (int bus) { return juce::String (buses::name (bus)); }
 
@@ -24,10 +25,12 @@ namespace
 void LevelMeter::setLevel (float newPeak)
 {
 	const auto next = nextMeterLevel (level, newPeak);
+	const auto nextClipping = showsClip && clipHold.feed (newPeak, displayTickSeconds);
 
-	if (next != level)
+	if (next != level || nextClipping != clipping)
 	{
 		level = next;
+		clipping = nextClipping;
 		repaint();
 	}
 }
@@ -38,29 +41,45 @@ void LevelMeter::paint (juce::Graphics& g)
 	g.setColour (juce::Colours::black);
 	g.fillRoundedRectangle (bounds, 2.0f);
 
-	// Segmented LED bar, green -> yellow -> red
+	// Segmented LED bar, green -> yellow -> red; with a clip lamp, the top
+	// segment is the lamp and the bar ends at full scale one below it.
 	const int numSegments = meterSegments (bounds.getHeight());
+	const int barSegments = showsClip ? numSegments - 1 : numSegments;
 	const auto segmentHeight = bounds.getHeight() / (float) numSegments;
 	const auto db = juce::Decibels::gainToDecibels (level, minDb);
-	const auto lit = juce::roundToInt ((db - minDb) / -minDb * (float) numSegments);
+	const auto lit = juce::roundToInt ((db - minDb) / -minDb * (float) barSegments);
 
-	for (int i = 0; i < numSegments; ++i)
+	const auto segmentAt = [&] (int i)
 	{
-		const auto colour = i >= numSegments - 2 ? juce::Colour (0xffe04848)
-						  : i >= numSegments - 6 ? juce::Colour (0xffe8c33d)
+		return juce::Rectangle<float> (bounds.getX() + 1.0f, bounds.getBottom() - segmentHeight * (float) (i + 1),
+									   bounds.getWidth() - 2.0f, segmentHeight - 1.0f);
+	};
+
+	for (int i = 0; i < barSegments; ++i)
+	{
+		const auto colour = i >= barSegments - 2 ? clipColour
+						  : i >= barSegments - 6 ? juce::Colour (0xffe8c33d)
 												 : juce::Colour (0xff3ec46d);
-		const auto segment = juce::Rectangle<float> (bounds.getX() + 1.0f, bounds.getBottom() - segmentHeight * (float) (i + 1),
-													 bounds.getWidth() - 2.0f, segmentHeight - 1.0f);
 		g.setColour (i < lit ? colour : colour.withAlpha (0.12f));
-		g.fillRect (segment);
+		g.fillRect (segmentAt (i));
 	}
+
+	if (! showsClip)
+		return;
+
+	g.setColour (clipping ? clipColour.brighter (0.4f) : clipColour.withAlpha (0.12f));
+	g.fillRect (segmentAt (numSegments - 1));
 }
 
 //==============================================================================
 OutputMeters::OutputMeters()
 {
 	for (int ch = 0; ch < numChannels; ++ch)
-		addAndMakeVisible (meters.add (new LevelMeter()));
+	{
+		auto* meter = meters.add (new LevelMeter());
+		meter->setShowsClip (true);
+		addAndMakeVisible (meter);
+	}
 }
 
 void OutputMeters::paint (juce::Graphics& g)

@@ -29,6 +29,12 @@ namespace buses
 		return onBus ? fader : 0.0f;
 	}
 
+	// The fixed trim on a summed bus, linear: AUX is 6 dB down, so both decks
+	// on the return (two full tracks, up to +5.9 dBFS) stay below full scale;
+	// the channels and CUE are untouched. Exactly one half, -6.02 dB, so two
+	// in-phase full-scale peaks still land on 1.0 and not 0.02 dB over it.
+	constexpr float trimFor (int bus) { return bus == aux ? 0.5f : 1.0f; }
+
 	// "1" .. "4", "AUX", "CUE": button labels and meter captions (PH until
 	// 2026-10-01, when PFL became cue across the A3 system).
 	inline std::string name (int bus)

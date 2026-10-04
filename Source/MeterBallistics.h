@@ -9,3 +9,15 @@ float nextMeterLevel (float shownLevel, float newPeak);
 // fewer where there is not -- each needs 3 px, a 2 px light and a 1 px gap.
 // The REC meters in the 24 px top bar drew 24 segments of 0 px, nothing.
 int meterSegments (float heightPixels);
+
+// A clip lamp: lit by a peak above full scale (linear 1.0), held about a
+// second after the last one. Pure: fed once per display tick with the peak
+// since the last tick and the seconds since then.
+class ClipHold
+{
+public:
+	bool feed (float peak, float seconds);
+
+private:
+	float remaining = 0.0f;
+};

@@ -54,35 +54,14 @@ ctest --test-dir build
 `ctest` runs what was built; it does not build. The Python tools have their own tests:
 `python3 -m unittest discover -s tools/tests`.
 
-## Not in the docs yet
+## Controller, GRID, AUTO DJ, session
 
-- **Stanton SCS.3d.** Up to two are taken up as they are plugged in, one per deck; the first
-  found is deck A (`<VALUE name="scs3dSwap" val="1"/>` in `~/.config/StemDeck/StemDeck.settings`
-  swaps them). The protocol follows Mixxx's SCS.3d mapping.
-
-  | SCS.3d | StemDeck |
-  |---|---|
-  | **FX EQ LOOP TRIG** | mute stem 1–4 |
-  | **VINYL** | loop in, pressed again: loop out |
-  | **DECK** | loop off, and on again from its start |
-  | **top left / top right** of the circle | library: previous / next set |
-  | tap the **centre** of the circle | load the selected set (not onto a playing deck) |
-  | **GAIN** / **PITCH** slider | channel fader / tempo (relative) |
-  | the **ring** of the circle | scratch: touch holds the record, turning scratches |
-  | **PLAY CUE SYNC TAP** | play, cue, SYNC, MASTER |
-
-- **GRID** (Grid Adjust, as on a CDJ-3000): the jog moves the whole grid (a turn is 100 ms);
-  **‹1/2** / **1/2›** move it half a beat; **SNAP** puts the downbeat on the cue point;
-  **SET 1** puts it on the playhead; **SHIFT** takes over a beat you aligned by ear with the jog
-  ring; **RESET** brings back the analysed grid. A corrected grid is kept in `analysis.xml`.
-- **AUTO DJ** plays at random from the sets the library search shows, each once. It loads the
-  next set onto the other deck and mixes on a downbeat 16 bars before the end, with SYNC and an
-  equal-power fader cross (10 s unsynced without a beat grid). It never mixes out of a loop.
-- **Sync and MASTER.** SYNC: DECK lines up the bars, not only the beats (at the same tempo).
-  Stopping the master deck while the other deck plays hands MASTER over to it.
-- **Session.** `~/.config/StemDeck/session.xml` is written every two seconds while anything
-  changes. Decks, mixer, library and unfinished stem jobs come back on the next start, and a deck
-  that was playing plays on.
+The Stanton SCS.3d mapping, GRID, AUTO DJ, the MASTER handover and the session restore are in
+the documentation: [StemDeck](https://a3-audio.github.io/a3-doc/user/stemdeck.html)
+([SCS.3d](https://a3-audio.github.io/a3-doc/user/stemdeck.html#stemdeck-scs3d),
+[GRID](https://a3-audio.github.io/a3-doc/user/stemdeck.html#stemdeck-grid),
+[AUTO DJ](https://a3-audio.github.io/a3-doc/user/stemdeck.html#stemdeck-autodj),
+[Session](https://a3-audio.github.io/a3-doc/user/stemdeck.html#stemdeck-session)).
 
 ## License
 

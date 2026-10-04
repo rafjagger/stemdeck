@@ -1,0 +1,16 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: StemDeck
+Upstream-Contact: Raphael Eismann
+Source: https://github.com/rafjagger/stemdeck
+
+Files: *
+Copyright: 2026 Raphael Eismann
+License: GPL-3.0-or-later
+
+Files: README.md docs/*
+Copyright: 2026 Raphael Eismann
+License: CC-BY-SA-4.0
+
+Files: .gitignore .config/*
+Copyright: 2026 Raphael Eismann
+License: CC0-1.0

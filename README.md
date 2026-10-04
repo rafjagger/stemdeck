@@ -86,4 +86,5 @@ ctest --test-dir build
 
 ## License
 
-No license has been declared yet: the repository has no license file.
+GPL-3.0-or-later. REUSE-compliant: the licenses are in `LICENSES/`, which file has
+which is in `.reuse/dep5`.

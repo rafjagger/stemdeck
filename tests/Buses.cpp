@@ -44,12 +44,13 @@ TEST (Buses, PhonesIsPreFaderFromTheStemOrTheDeck)
 // The AUX bus can carry both decks at once (Core's STEM return), and the four
 // stems of a set already sum to the track's own peak: two full tracks reach
 // +5.9 dBFS. A fixed 6 dB trim on AUX keeps that below full scale (decided
-// 2026-10-04); the channels and CUE stay as they are.
-TEST (Buses, OnlyAuxIsTrimmedBySixDecibels)
+// 2026-10-04). The desk channels get the same trim, so a stem plays as loud
+// on a channel as on the return (decided the same evening); CUE stays as it is.
+TEST (Buses, ChannelsAndAuxAreTrimmedBySixDecibels)
 {
 	EXPECT_NEAR (20.0f * std::log10 (buses::trimFor (buses::aux)), -6.0f, 0.05f);
 	for (int bus = 0; bus < buses::aux; ++bus)
-		EXPECT_FLOAT_EQ (buses::trimFor (bus), 1.0f) << "desk channel " << bus + 1;
+		EXPECT_FLOAT_EQ (buses::trimFor (bus), buses::trimFor (buses::aux)) << "desk channel " << bus + 1;
 	EXPECT_FLOAT_EQ (buses::trimFor (buses::phones), 1.0f) << "CUE";
 }
 

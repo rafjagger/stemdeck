@@ -18,7 +18,7 @@ Everything else: https://a3-audio.github.io/a3-doc/
 
 ## Build and run
 
-Needs CMake ≥ 3.22, a C++17 compiler, pkg-config, **JUCE 9** (found via `CMAKE_PREFIX_PATH`,
+Needs CMake ≥ 3.22, a C++17 compiler, pkg-config, **JUCE 9.0.3** (the A³ pin, `JUCE_VERSION` in a3-system's `installer/roles/base.py`; found via `CMAKE_PREFIX_PATH`,
 default `~/local/juce`) with its Linux dependencies, and on Debian:
 
 ```sh

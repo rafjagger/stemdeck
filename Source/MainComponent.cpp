@@ -1317,10 +1317,11 @@ void MainComponent::getNextAudioBlock (const juce::AudioSourceChannelInfo& buffe
 			}
 	}
 
-	// The fixed 6 dB trim on the summed AUX bus, the only bus that has one,
-	// before the meters, so they show what leaves StemDeck.
-	for (int c = 0; c < 2; ++c)
-		busBuffer.applyGain (buses::aux * 2 + c, 0, numSamples, buses::trimFor (buses::aux));
+	// The fixed trim on each bus (6 dB on the channels and AUX), before the
+	// meters, so they show what leaves StemDeck.
+	for (int bus = 0; bus < buses::count; ++bus)
+		for (int c = 0; c < 2; ++c)
+			busBuffer.applyGain (bus * 2 + c, 0, numSamples, buses::trimFor (bus));
 
 	// The desk's SA meter: the AUX bus as it goes to the return, side by side.
 	for (int side = 0; side < 2; ++side)

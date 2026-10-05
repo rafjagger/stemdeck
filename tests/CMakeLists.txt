@@ -36,7 +36,9 @@ add_executable(stemdeck-tests
     MeterBallistics.cpp
     ${CMAKE_SOURCE_DIR}/Source/MeterBallistics.cpp
     Workspaces.cpp
-    ${CMAKE_SOURCE_DIR}/Source/Workspaces.cpp)
+    ${CMAKE_SOURCE_DIR}/Source/Workspaces.cpp
+    KeyboardPolicy.cpp
+    ${CMAKE_SOURCE_DIR}/Source/KeyboardPolicy.cpp)
 target_include_directories(stemdeck-tests PRIVATE ${CMAKE_SOURCE_DIR}/Source)
 target_compile_features(stemdeck-tests PRIVATE cxx_std_17)
 target_link_libraries(stemdeck-tests PRIVATE GTest::gtest GTest::gtest_main)

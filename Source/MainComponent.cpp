@@ -91,6 +91,20 @@ MainComponent::MainComponent()
 	settingsButton.onClick = [this] { showSettings(); };
 	settingsButton.setMouseClickGrabsKeyboardFocus (false);
 	addAndMakeVisible (settingsButton);
+	// The on-screen keyboard for a rig without a real one. The button must not
+	// take the focus, or pressing it would leave the text field it is for.
+	keysButton.setTooltip (keyboard.isAvailable() ? "On-screen keyboard (onboard): show or hide"
+												  : "On-screen keyboard: onboard is not installed");
+	keysButton.onClick = [this] { keyboard.keysPressed(); };
+	keysButton.setMouseClickGrabsKeyboardFocus (false);
+	addAndMakeVisible (keysButton);
+	keyboard.onHint = [this] (const juce::String& hint)
+	{
+		keysButton.setTooltip (hint);
+		deviceStatus.setText (hint, juce::dontSendNotification);
+		deviceStatus.setColour (juce::Label::textColourId, Theme::cue);
+		statusCountdown = 240;   // four seconds at 60 Hz, then the device again
+	};
 	motionButton.setTooltip ("Over to A3 Motion (i3 workspace 1)");
 	motionButton.onClick = [this] { goToWorkspace (1); };
 	workspacesButton.setTooltip ("Any of the rig's workspaces");
@@ -1373,6 +1387,8 @@ void MainComponent::resized()
 	settingsButton.setBounds (topBar.removeFromRight (90));
 	topBar.removeFromRight (6);
 	audioSettingsButton.setBounds (topBar.removeFromRight (70));
+	topBar.removeFromRight (6);
+	keysButton.setBounds (topBar.removeFromRight (60));
 	topBar.removeFromRight (6);
 	syncSourceButton.setBounds (topBar.removeFromRight (110));
 	topBar.removeFromRight (6);

@@ -28,6 +28,7 @@
 #include "ProLinkSender.h"
 #include "MasterDeck.h"
 #include "StemCreator.h"
+#include "OnScreenKeyboard.h"
 
 //==============================================================================
 // Two stem decks and a mixer, laid out like Mixxx: scrolling waveforms on top,
@@ -148,6 +149,8 @@ private:
 
 	juce::TextButton audioSettingsButton { "Audio" };
 	juce::TextButton settingsButton { "Settings" };
+	juce::TextButton keysButton { "KEYS" };
+	OnScreenKeyboard keyboard;
 	juce::TextButton motionButton { "MOTION" };
 	juce::TextButton workspacesButton { juce::String::fromUTF8 ("\xe2\x96\xbe") };
 	WorkspacePanel workspacePanel;

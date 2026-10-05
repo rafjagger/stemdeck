@@ -66,6 +66,8 @@ target_sources(StemDeck PRIVATE
     Source/StemLibrary.cpp
     Source/SettingsPanel.cpp
     Source/Workspaces.cpp
+    Source/KeyboardPolicy.cpp
+    Source/OnScreenKeyboard.cpp
     Source/WorkspacePanel.cpp
     Source/JackOutput.cpp
     Source/ProLinkPackets.cpp

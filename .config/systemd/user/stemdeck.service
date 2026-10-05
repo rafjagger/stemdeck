@@ -1,19 +1,21 @@
 [Unit]
 Description=StemDeck, the stem player, always running on i3 workspace 2
 # The screen first (the same wait A3 Motion uses), and JACK: StemDeck never
-# starts a server itself, it takes the one that runs. Bound to it: after a
-# reboot with a late sound card StemDeck started without JACK and stayed
-# down when JACK came (2026-10-02). It now waits for JACK, goes with it, and
-# a3-jack's start pulls it up again (WantedBy below).
-After=graphical.target a3-jack.service
-BindsTo=a3-jack.service
+# starts a server itself, it takes the one that runs, and waits for it
+# (jack_wait). Nothing here names a unit of the Core: StemDeck may run on a
+# machine of its own, and a unit bound to a missing unit never starts
+# (2026-10-05). On a Core the a3-core package adds the binding to a3-jack as a
+# drop-in (after a late sound card, 2026-10-02: StemDeck goes and comes with
+# JACK), and a3-jack's start pulls it up again (WantedBy below).
+After=graphical.target
 PartOf=a3-main.service
 
 [Service]
 Environment=DISPLAY=:0
 # stems/ and recordings/ are found next to where StemDeck starts.
 WorkingDirectory=/home/aaa/a3-system/stemdeck
-ExecStartPre=/home/aaa/.local/bin/a3-wait-for-the-screen
+ExecStartPre=/home/aaa/a3-system/stemdeck/tools/a3-wait-for-the-screen
+ExecStartPre=/usr/bin/jack_wait -w
 # Its start takes the screen for a moment; put back what was showing.
 ExecStartPre=/home/aaa/a3-system/stemdeck/tools/rig-keep-the-screen.sh remember
 ExecStart=/home/aaa/a3-system/stemdeck/build-make/StemDeck_artefacts/Release/StemDeck

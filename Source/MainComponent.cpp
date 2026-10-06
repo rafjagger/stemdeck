@@ -1,4 +1,5 @@
 #include "MainComponent.h"
+#include "AudioPanel.h"
 #include "StemJob.h"
 #include "GridEdit.h"
 #include "OscTruthFile.h"
@@ -1152,12 +1153,8 @@ void MainComponent::updateDeviceStatus()
 
 void MainComponent::showAudioSettings()
 {
-	auto selector = std::make_unique<juce::AudioDeviceSelectorComponent> (
-		deviceManager, 0, 0, 2, outputs::channelCount(), false, false, true, false);
-	selector->setSize (520, 460);
-
 	juce::DialogWindow::LaunchOptions dialog;
-	dialog.content.setOwned (selector.release());
+	dialog.content.setOwned (new AudioPanel (deviceManager, outputs::channelCount()));
 	dialog.dialogTitle = "Audio";
 	dialog.dialogBackgroundColour = Theme::panel;
 	dialog.useNativeTitleBar = true;

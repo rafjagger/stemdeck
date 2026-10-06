@@ -2,17 +2,21 @@
 
 KeyboardPolicy::KeyboardPolicy (bool onboardAvailable) : available (onboardAvailable) {}
 
-KeyboardPolicy::Command KeyboardPolicy::focusChanged (bool textFieldHasFocus)
+KeyboardPolicy::Command KeyboardPolicy::focusChanged (const void* textField)
 {
 	if (! available)
 		return Command::none;
 
-	const auto hadTextFocus = textFocus;
-	textFocus = textFieldHasFocus;
+	const auto hadTextFocus = focused != nullptr;
+	focused = textField;
 
-	if (textFieldHasFocus)
+	if (textField != nullptr)
 	{
 		hidePending = false;
+		if (textField == dismissed)
+			return Command::none;
+		dismissed = nullptr;
+		shown = true;
 		return Command::show;
 	}
 
@@ -27,17 +31,23 @@ KeyboardPolicy::Command KeyboardPolicy::focusChanged (bool textFieldHasFocus)
 
 KeyboardPolicy::Command KeyboardPolicy::hideDue()
 {
-	const auto due = available && hidePending && ! textFocus;
+	const auto due = available && hidePending && focused == nullptr;
 	hidePending = false;
-	return due ? Command::hide : Command::none;
+	if (! due)
+		return Command::none;
+	// Really left: coming back to the field shows the keyboard again.
+	shown = false;
+	dismissed = nullptr;
+	return Command::hide;
 }
 
 KeyboardPolicy::Command KeyboardPolicy::keysPressed()
 {
 	if (! available)
 		return Command::hint;
-
 	hidePending = false;
+	shown = ! shown;
+	dismissed = shown ? nullptr : focused;
 	return Command::toggle;
 }
 

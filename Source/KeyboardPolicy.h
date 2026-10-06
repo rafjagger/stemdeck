@@ -20,7 +20,9 @@ public:
 
 	explicit KeyboardPolicy (bool onboardAvailable);
 
-	Command focusChanged (bool textFieldHasFocus);
+	// `textField`: the text field that has focus now, or nullptr. Compared
+	// only, never dereferenced.
+	Command focusChanged (const void* textField);
 	Command hideDue();
 	Command keysPressed();
 
@@ -29,6 +31,10 @@ public:
 
 private:
 	bool available;
-	bool textFocus = false;
+	const void* focused = nullptr;
+	// The field focused when KEYS closed the keyboard: its focus coming back
+	// (onboard hands the window back) does not open it again.
+	const void* dismissed = nullptr;
+	bool shown = false;
 	bool hidePending = false;
 };

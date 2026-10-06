@@ -4,17 +4,22 @@
 
 using Command = KeyboardPolicy::Command;
 
+// Stand-ins for two text fields; the policy only compares them.
+static int searchField, nameField;
+static const void* const search = &searchField;
+static const void* const name = &nameField;
+
 TEST (KeyboardPolicy, ATextFieldTakingFocusShowsTheKeyboard)
 {
 	KeyboardPolicy policy { true };
-	EXPECT_EQ (policy.focusChanged (true), Command::show);
+	EXPECT_EQ (policy.focusChanged (search), Command::show);
 }
 
 TEST (KeyboardPolicy, FocusLeavingTheTextFieldsHidesOnlyAfterAPause)
 {
 	KeyboardPolicy policy { true };
-	policy.focusChanged (true);
-	EXPECT_EQ (policy.focusChanged (false), Command::hideSoon);
+	policy.focusChanged (search);
+	EXPECT_EQ (policy.focusChanged (nullptr), Command::hideSoon);
 	EXPECT_EQ (policy.hideDue(), Command::hide);
 }
 
@@ -22,17 +27,17 @@ TEST (KeyboardPolicy, FocusLeavingTheTextFieldsHidesOnlyAfterAPause)
 TEST (KeyboardPolicy, AHopBetweenTextFieldsKeepsTheKeyboard)
 {
 	KeyboardPolicy policy { true };
-	policy.focusChanged (true);
-	policy.focusChanged (false);
-	EXPECT_EQ (policy.focusChanged (true), Command::show);
+	policy.focusChanged (search);
+	policy.focusChanged (nullptr);
+	EXPECT_EQ (policy.focusChanged (name), Command::show);
 	EXPECT_EQ (policy.hideDue(), Command::none);
 }
 
 TEST (KeyboardPolicy, AHideIsDueOnlyOnce)
 {
 	KeyboardPolicy policy { true };
-	policy.focusChanged (true);
-	policy.focusChanged (false);
+	policy.focusChanged (search);
+	policy.focusChanged (nullptr);
 	policy.hideDue();
 	EXPECT_EQ (policy.hideDue(), Command::none);
 }
@@ -42,7 +47,7 @@ TEST (KeyboardPolicy, AHideIsDueOnlyOnce)
 TEST (KeyboardPolicy, FocusMovingOutsideTextFieldsLeavesTheKeyboardAlone)
 {
 	KeyboardPolicy policy { true };
-	EXPECT_EQ (policy.focusChanged (false), Command::none);
+	EXPECT_EQ (policy.focusChanged (nullptr), Command::none);
 	EXPECT_EQ (policy.hideDue(), Command::none);
 }
 
@@ -58,8 +63,8 @@ TEST (KeyboardPolicy, KeysToggles)
 TEST (KeyboardPolicy, KeysCancelsAPendingHide)
 {
 	KeyboardPolicy policy { true };
-	policy.focusChanged (true);
-	policy.focusChanged (false);
+	policy.focusChanged (search);
+	policy.focusChanged (nullptr);
 	EXPECT_EQ (policy.keysPressed(), Command::toggle);
 	EXPECT_EQ (policy.hideDue(), Command::none);
 }
@@ -68,18 +73,58 @@ TEST (KeyboardPolicy, WithoutOnboardKeysOnlyGivesAHint)
 {
 	KeyboardPolicy policy { false };
 	EXPECT_EQ (policy.keysPressed(), Command::hint);
-	EXPECT_EQ (policy.focusChanged (true), Command::none);
-	EXPECT_EQ (policy.focusChanged (false), Command::none);
+	EXPECT_EQ (policy.focusChanged (search), Command::none);
+	EXPECT_EQ (policy.focusChanged (nullptr), Command::none);
 	EXPECT_EQ (policy.hideDue(), Command::none);
 }
 
 TEST (KeyboardPolicy, OnboardFailingToStartMakesItUnavailable)
 {
 	KeyboardPolicy policy { true };
-	policy.focusChanged (true);
-	policy.focusChanged (false);
+	policy.focusChanged (search);
+	policy.focusChanged (nullptr);
 	policy.setAvailable (false);
 	EXPECT_FALSE (policy.isAvailable());
 	EXPECT_EQ (policy.hideDue(), Command::none);
 	EXPECT_EQ (policy.keysPressed(), Command::hint);
+}
+
+// KEYS closing the keyboard over a focused text field (2026-10-06): onboard
+// disappearing hands the window back, the same field gets the focus again --
+// that used to show the keyboard at once, so KEYS never closed it.
+TEST (KeyboardPolicy, KeysClosingOverAFieldKeepsItClosedWhenTheFieldComesBack)
+{
+	KeyboardPolicy policy { true };
+	EXPECT_EQ (policy.focusChanged (search), Command::show);
+	EXPECT_EQ (policy.keysPressed(), Command::toggle);   // closes
+	EXPECT_EQ (policy.focusChanged (nullptr), Command::hideSoon);
+	EXPECT_EQ (policy.focusChanged (search), Command::none);
+	EXPECT_EQ (policy.focusChanged (search), Command::none);
+}
+
+TEST (KeyboardPolicy, AfterKeysClosedItAnotherFieldShowsItAgain)
+{
+	KeyboardPolicy policy { true };
+	policy.focusChanged (search);
+	policy.keysPressed();
+	EXPECT_EQ (policy.focusChanged (name), Command::show);
+}
+
+TEST (KeyboardPolicy, AfterKeysClosedItReallyLeavingAndComingBackShowsItAgain)
+{
+	KeyboardPolicy policy { true };
+	policy.focusChanged (search);
+	policy.keysPressed();
+	policy.focusChanged (nullptr);
+	policy.hideDue();                                     // the pause ran out
+	EXPECT_EQ (policy.focusChanged (search), Command::show);
+}
+
+TEST (KeyboardPolicy, KeysOpeningItAgainOverTheFieldKeepsTheFieldsKeyboard)
+{
+	KeyboardPolicy policy { true };
+	policy.focusChanged (search);
+	policy.keysPressed();                                 // closes
+	policy.keysPressed();                                 // opens again
+	EXPECT_EQ (policy.focusChanged (search), Command::show);
 }

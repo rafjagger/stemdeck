@@ -2,6 +2,7 @@
 
 #include "Remote.h"
 
+#include <array>
 #include <cmath>
 #include <optional>
 #include <string>
@@ -147,4 +148,46 @@ TEST (Remote, ATapGathersBlocksUntilItIsEmptied)
 	const auto after = tap.pop();
 	EXPECT_FLOAT_EQ (after.peak, 0.0f);
 	EXPECT_FLOAT_EQ (after.rms, 0.0f);
+}
+
+// One tick's meters go to the desk as one bundle (rafjagger/stemdeck#6): the
+// desk pays per datagram, and ten a tick from each StemDeck flooded it.
+namespace
+{
+	std::array<remote::Level, remote::stemMeters> stemLevels()
+	{
+		std::array<remote::Level, remote::stemMeters> levels {};
+		for (size_t i = 0; i < levels.size(); ++i)
+			levels[i] = { 0.1f * (float) (i + 1), 0.01f * (float) (i + 1) };
+		return levels;
+	}
+}
+
+TEST (Remote, ATicksBundleHoldsEveryStemThenTheAuxPair)
+{
+	auto withMeters = words;
+	withMeters.meters = theTruthsMeters();
+	const auto bundle = remote::levelBundle (withMeters, stemLevels(), { remote::Level { 0.7f, 0.3f }, remote::Level { 0.6f, 0.2f } });
+
+	ASSERT_EQ (bundle.size(), 10u);
+	for (int n = 0; n < remote::stemMeters; ++n)
+	{
+		EXPECT_EQ (bundle[(size_t) n].address, "/vu/" + std::to_string (41 + n));
+		EXPECT_FLOAT_EQ (bundle[(size_t) n].level.peak, 0.1f * (float) (n + 1));
+		EXPECT_FLOAT_EQ (bundle[(size_t) n].level.rms, 0.01f * (float) (n + 1));
+	}
+	EXPECT_EQ (bundle[8].address, "/vu/49");
+	EXPECT_FLOAT_EQ (bundle[8].level.peak, 0.7f);
+	EXPECT_FLOAT_EQ (bundle[8].level.rms, 0.3f);
+	EXPECT_EQ (bundle[9].address, "/vu/50");
+	EXPECT_FLOAT_EQ (bundle[9].level.peak, 0.6f);
+	EXPECT_FLOAT_EQ (bundle[9].level.rms, 0.2f);
+}
+
+TEST (Remote, AnOlderTruthsBundleHasNoAuxPair)
+{
+	const auto bundle = remote::levelBundle (words, stemLevels(), {});
+	ASSERT_EQ (bundle.size(), 8u);
+	EXPECT_EQ (bundle.front().address, "/vu/41");
+	EXPECT_EQ (bundle.back().address, "/vu/48");
 }

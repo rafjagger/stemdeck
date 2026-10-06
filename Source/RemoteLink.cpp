@@ -23,7 +23,6 @@ void RemoteLink::start (const std::string& path, const juce::String& hash)
 	const auto listeners = osctruth::readListeners (path, error);
 	const auto hosts = error.empty() ? osctruth::readHosts (path, error) : std::map<std::string, std::string>();
 	words = error.empty() ? osctruth::readRemoteWords (path, error) : remote::Words();
-	auxAddresses = { remote::vuAddressNamed (words, "stem_aux_L"), remote::vuAddressNamed (words, "stem_aux_R") };
 	const auto endpoints = osctruth::endpointsFrom (listeners, hosts);
 	truthHash = hash;
 
@@ -98,23 +97,21 @@ void RemoteLink::sayHello()
 	toCore.send (juce::OSCMessage (juce::String (words.hello), juce::String ("stemdeck"), truthHash));
 }
 
+static_assert (2 * StemSet::numStems == remote::stemMeters);
+
 void RemoteLink::sendLevels()
 {
+	std::array<remote::Level, remote::stemMeters> stems;
 	for (int deck = 0; deck < 2; ++deck)
 		for (int stem = 0; stem < StemSet::numStems; ++stem)
 		{
 			const auto level = players[(size_t) deck]->popDeskLevel (stem);
-			toDesk.send (juce::OSCMessage (juce::String (remote::vuAddress (words, deck, stem)), level.peak, level.rms));
+			stems[(size_t) (deck * StemSet::numStems + stem)] = { level.peak, level.rms };
 		}
-	sendAuxLevels();
-}
+	const std::array<remote::Level, 2> aux { auxLevels[0].pop(), auxLevels[1].pop() };
 
-void RemoteLink::sendAuxLevels()
-{
-	for (size_t side = 0; side < auxLevels.size(); ++side)
-	{
-		const auto level = auxLevels[side].pop();
-		if (auxAddresses[side])
-			toDesk.send (juce::OSCMessage (juce::String (*auxAddresses[side]), level.peak, level.rms));
-	}
+	juce::OSCBundle bundle;
+	for (const auto& meter : remote::levelBundle (words, stems, aux))
+		bundle.addElement (juce::OSCMessage (juce::String (meter.address), meter.level.peak, meter.level.rms));
+	toDesk.send (bundle);
 }

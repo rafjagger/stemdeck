@@ -65,6 +65,8 @@ target_sources(StemDeck PRIVATE
     Source/MixerPanel.cpp
     Source/StemLibrary.cpp
     Source/SettingsPanel.cpp
+    Source/FolderChoice.cpp
+    Source/AudioPanel.cpp
     Source/Workspaces.cpp
     Source/KeyboardPolicy.cpp
     Source/OnScreenKeyboard.cpp

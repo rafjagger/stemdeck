@@ -1,0 +1,44 @@
+<!DOCTYPE patchbay>
+<patchbay name="stemdeck-without-core" version="1.0.6">
+ <output-sockets>
+  <socket client="StemDeck" exclusive="off" name="stemdeck_to_core" type="jack-audio">
+   <plug>deck1_L</plug>
+   <plug>deck1_R</plug>
+   <plug>deck2_L</plug>
+   <plug>deck2_R</plug>
+   <plug>deck3_L</plug>
+   <plug>deck3_R</plug>
+   <plug>deck4_L</plug>
+   <plug>deck4_R</plug>
+   <plug>aux_L</plug>
+   <plug>aux_R</plug>
+  </socket>
+  <socket client="zita\-n2j" exclusive="off" name="zita_from_core" type="jack-audio">
+   <plug>out_1</plug>
+   <plug>out_2</plug>
+  </socket>
+ </output-sockets>
+ <input-sockets>
+  <socket client="zita\-j2n" exclusive="off" name="zita_to_core" type="jack-audio">
+   <plug>in_1</plug>
+   <plug>in_2</plug>
+   <plug>in_3</plug>
+   <plug>in_4</plug>
+   <plug>in_5</plug>
+   <plug>in_6</plug>
+   <plug>in_7</plug>
+   <plug>in_8</plug>
+   <plug>in_9</plug>
+   <plug>in_10</plug>
+  </socket>
+  <socket client="StemDeck" exclusive="off" name="stemdeck_rec" type="jack-audio">
+   <plug>rec_L</plug>
+   <plug>rec_R</plug>
+  </socket>
+ </input-sockets>
+ <slots/>
+ <cables>
+  <cable input="zita_to_core" output="stemdeck_to_core" type="jack-audio"/>
+  <cable input="stemdeck_rec" output="zita_from_core" type="jack-audio"/>
+ </cables>
+</patchbay>

@@ -161,6 +161,23 @@ namespace remote
 		return block;
 	}
 
+	std::vector<Meter> levelBundle (const Words& words, const std::array<Level, stemMeters>& stems,
+									const std::array<Level, 2>& aux)
+	{
+		static_assert (stemMeters == decks * stemsPerDeck);
+		std::vector<Meter> bundle;
+		bundle.reserve (stems.size() + aux.size());
+		for (int deck = 0; deck < decks; ++deck)
+			for (int stem = 0; stem < stemsPerDeck; ++stem)
+				bundle.push_back ({ vuAddress (words, deck, stem), stems[(size_t) (deck * stemsPerDeck + stem)] });
+
+		const std::array<const char*, 2> auxNames { "stem_aux_L", "stem_aux_R" };
+		for (size_t side = 0; side < aux.size(); ++side)
+			if (const auto address = vuAddressNamed (words, auxNames[side]))
+				bundle.push_back ({ *address, aux[side] });
+		return bundle;
+	}
+
 	void LevelTap::add (const Block& block)
 	{
 		if (block.peak > peak.load())

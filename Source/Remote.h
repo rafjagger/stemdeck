@@ -58,6 +58,22 @@ namespace remote
 
 	Block measure (const float* samples, int count);
 
+	// The stem meters, deck by deck and stem by stem: /vu/41-48.
+	constexpr int stemMeters = 8;
+
+	struct Meter
+	{
+		std::string address;
+		Level level;
+	};
+
+	// One tick's meters for the desk, in the order they go into its one OSC
+	// bundle: the stems, then the AUX pair (stem_aux_L, stem_aux_R) where the
+	// truth names it. One bundle, not one datagram per meter: the desk pays
+	// per datagram (rafjagger/stemdeck#6).
+	std::vector<Meter> levelBundle (const Words& words, const std::array<Level, stemMeters>& stems,
+									const std::array<Level, 2>& aux);
+
 	// A meter gathered block by block on the audio thread and emptied by the
 	// sender. Lock-free and allocation-free; only one thread adds, so a pop in
 	// between loses at most one block -- the same terms as the stem meters.

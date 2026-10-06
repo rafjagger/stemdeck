@@ -16,7 +16,8 @@
 // or from a click here -- goes back as the stem's mask. A hello every 30 s
 // tells Core where StemDeck is; one level meter per stem and the AUX bus as a
 // stereo pair (stem_aux_L/R, decided 2026-10-04) go to the desk at 25 Hz,
-// as one OSC bundle per tick (rafjagger/stemdeck#6). Everything is read from the one truth; without it, or with words
+// as one OSC bundle per tick, and none while StemDeck is silent
+// (rafjagger/stemdeck#6). Everything is read from the one truth; without it, or with words
 // missing there, the link stays off and StemDeck plays on as before.
 class RemoteLink : private juce::OSCReceiver::Listener<juce::OSCReceiver::MessageLoopCallback>,
 				   private juce::Timer
@@ -46,6 +47,7 @@ private:
 	MixerPanel& mixer;
 	std::array<remote::LevelTap, 2>& auxLevels;
 	remote::Words words;
+	remote::MeterGate meterGate;
 	juce::String truthHash;
 	juce::OSCReceiver receiver;
 	juce::OSCSender toCore, toDesk;

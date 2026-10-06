@@ -71,6 +71,24 @@ namespace remote
 	// bundle: the stems, then the AUX pair (stem_aux_L, stem_aux_R) where the
 	// truth names it. One bundle, not one datagram per meter: the desk pays
 	// per datagram (rafjagger/stemdeck#6).
+	// Whether this tick's meters go to the desk. Two StemDecks write the same
+	// meters; a silent one sends nothing, so it never overwrites the playing
+	// one's levels with zeros -- except one zero bundle as it falls silent, so
+	// the desk's bars drop once (rafjagger/stemdeck#6). Silent: every peak
+	// below -90 dBFS.
+	class MeterGate
+	{
+	public:
+		enum Decision { send, sendZeros, skip };
+
+		static constexpr float silentBelow = 3.1622776e-5f; // -90 dBFS, linear
+
+		Decision next (const std::vector<Level>& levels);
+
+	private:
+		bool wasSounding = false;
+	};
+
 	std::vector<Meter> levelBundle (const Words& words, const std::array<Level, stemMeters>& stems,
 									const std::array<Level, 2>& aux);
 

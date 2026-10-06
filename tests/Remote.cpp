@@ -191,3 +191,60 @@ TEST (Remote, AnOlderTruthsBundleHasNoAuxPair)
 	EXPECT_EQ (bundle.front().address, "/vu/41");
 	EXPECT_EQ (bundle.back().address, "/vu/48");
 }
+
+// Two StemDecks write the same /vu/41-50 (rafjagger/stemdeck#6): a silent one
+// sends nothing, so it does not overwrite the playing one's levels with zeros
+// -- except one zero bundle as it falls silent, so the desk's bars drop once.
+namespace
+{
+	std::vector<remote::Level> quiet() { return std::vector<remote::Level> (10); }
+
+	std::vector<remote::Level> playing()
+	{
+		auto levels = quiet();
+		levels[3] = { 0.5f, 0.2f };
+		return levels;
+	}
+}
+
+TEST (Remote, SilentFromTheStartSendsNothing)
+{
+	remote::MeterGate gate;
+	for (int tick = 0; tick < 5; ++tick)
+		EXPECT_EQ (gate.next (quiet()), remote::MeterGate::skip);
+}
+
+TEST (Remote, SoundIsSentEveryTick)
+{
+	remote::MeterGate gate;
+	for (int tick = 0; tick < 5; ++tick)
+		EXPECT_EQ (gate.next (playing()), remote::MeterGate::send);
+}
+
+TEST (Remote, FallingSilentSendsOneZeroBundleThenNothing)
+{
+	remote::MeterGate gate;
+	gate.next (playing());
+	EXPECT_EQ (gate.next (quiet()), remote::MeterGate::sendZeros);
+	EXPECT_EQ (gate.next (quiet()), remote::MeterGate::skip);
+	EXPECT_EQ (gate.next (quiet()), remote::MeterGate::skip);
+}
+
+TEST (Remote, SoundAfterSilenceIsSentAgain)
+{
+	remote::MeterGate gate;
+	gate.next (playing());
+	gate.next (quiet());
+	gate.next (quiet());
+	EXPECT_EQ (gate.next (playing()), remote::MeterGate::send);
+}
+
+TEST (Remote, BelowMinusNinetyDbIsSilence)
+{
+	auto hiss = quiet();
+	hiss[0] = { 1.0e-5f, 1.0e-5f };    // -100 dBFS
+	remote::MeterGate gate;
+	EXPECT_EQ (gate.next (hiss), remote::MeterGate::skip);
+	hiss[0] = { 1.0e-3f, 1.0e-4f };    // -60 dBFS peak
+	EXPECT_EQ (gate.next (hiss), remote::MeterGate::send);
+}

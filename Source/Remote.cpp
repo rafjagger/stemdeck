@@ -178,6 +178,17 @@ namespace remote
 		return bundle;
 	}
 
+	MeterGate::Decision MeterGate::next (const std::vector<Level>& levels)
+	{
+		const auto sounding = std::any_of (levels.begin(), levels.end(),
+										   [] (const Level& level) { return level.peak >= silentBelow; });
+		const auto fell = wasSounding && ! sounding;
+		wasSounding = sounding;
+		if (sounding)
+			return send;
+		return fell ? sendZeros : skip;
+	}
+
 	void LevelTap::add (const Block& block)
 	{
 		if (block.peak > peak.load())

@@ -110,8 +110,20 @@ void RemoteLink::sendLevels()
 		}
 	const std::array<remote::Level, 2> aux { auxLevels[0].pop(), auxLevels[1].pop() };
 
+	auto meters = remote::levelBundle (words, stems, aux);
+	std::vector<remote::Level> levels;
+	for (const auto& meter : meters)
+		levels.push_back (meter.level);
+
+	const auto decision = meterGate.next (levels);
+	if (decision == remote::MeterGate::skip)
+		return;
+
 	juce::OSCBundle bundle;
-	for (const auto& meter : remote::levelBundle (words, stems, aux))
-		bundle.addElement (juce::OSCMessage (juce::String (meter.address), meter.level.peak, meter.level.rms));
+	for (const auto& meter : meters)
+	{
+		const auto level = decision == remote::MeterGate::sendZeros ? remote::Level() : meter.level;
+		bundle.addElement (juce::OSCMessage (juce::String (meter.address), level.peak, level.rms));
+	}
 	toDesk.send (bundle);
 }

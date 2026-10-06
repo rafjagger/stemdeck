@@ -31,14 +31,14 @@
    <plug>in_9</plug>
    <plug>in_10</plug>
   </socket>
-  <socket client="system" exclusive="off" name="system_out" type="jack-audio">
-   <plug>playback_1</plug>
-   <plug>playback_2</plug>
+  <socket client="StemDeck" exclusive="off" name="stemdeck_rec" type="jack-audio">
+   <plug>rec_L</plug>
+   <plug>rec_R</plug>
   </socket>
  </input-sockets>
  <slots/>
  <cables>
   <cable input="zita_to_core" output="stemdeck_to_core" type="jack-audio"/>
-  <cable input="system_out" output="zita_from_core" type="jack-audio"/>
+  <cable input="stemdeck_rec" output="zita_from_core" type="jack-audio"/>
  </cables>
 </patchbay>

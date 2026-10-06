@@ -76,10 +76,13 @@ class ThePatchbayIsQjackCtls(unittest.TestCase):
 
 
 class TheCables(unittest.TestCase):
-    def test_exactly_stemdeck_to_zita_and_zita_back_to_the_speakers(self):
+    def test_exactly_stemdeck_to_zita_and_zita_back_to_the_recorder(self):
+        """The two channels back are REAPER's rec bus (out23/24 on the rig,
+        where its patchbay feeds them into StemDeck:rec_L/R): StemDeck
+        records the rig's mix here too (maintainer, 2026-10-06)."""
         expected = [("StemDeck", o, "zita-j2n", i) for o, i in STEMDECK_TO_ZITA]
-        expected += [("zita-n2j", "out_1", "system", "playback_1"),
-                     ("zita-n2j", "out_2", "system", "playback_2")]
+        expected += [("zita-n2j", "out_1", "StemDeck", "rec_L"),
+                     ("zita-n2j", "out_2", "StemDeck", "rec_R")]
         made = connections()
         self.assertEqual(len(expected), len(made), made)
         for (o_client, o, i_client, i), (o_pat, o_got, i_pat, i_got) in zip(expected, made):

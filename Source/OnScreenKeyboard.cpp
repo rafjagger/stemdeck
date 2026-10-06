@@ -241,7 +241,7 @@ void OnScreenKeyboard::keysPressed()
 
 void OnScreenKeyboard::globalFocusChanged (juce::Component* focusedComponent)
 {
-	run (policy.focusChanged (isTextField (focusedComponent)));
+	run (policy.focusChanged (isTextField (focusedComponent) ? focusedComponent : nullptr));
 }
 
 void OnScreenKeyboard::timerCallback()

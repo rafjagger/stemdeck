@@ -8,8 +8,8 @@ ExecStartPre=/usr/bin/sleep 2
 # Port from the one truth (a3-osc.json): see tools/zita-from-truth.py.
 ExecStart=/usr/bin/python3 %h/a3-system/stemdeck/tools/zita-from-truth.py n2j --chan 1-2 --buff 20 --info
 CPUAffinity=1 2 3
-CPUSchedulingPolicy=rr
-CPUSchedulingPriority=64
+# No real-time for the whole process: it put zita above JACK's own threads
+# and made JACK report late clients. JACK raises zita's process thread.
 # Fällt zita aus (es meldet dann trotzdem Status 0), kommt es nach 2 s
 # wieder -- ohne Obergrenze, auch wenn das Netz eine Weile weg ist.
 Restart=always

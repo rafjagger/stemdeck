@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iterator>
 
 namespace
 {
@@ -13,10 +14,12 @@ namespace
 		return gain > 0.0f ? std::max (PeakMeter::floorDb, 20.0f * std::log10 (gain)) : PeakMeter::floorDb;
 	}
 
-	float toGain (float db)
-	{
-		return db > PeakMeter::floorDb ? std::pow (10.0f, db / 20.0f) : 0.0f;
-	}
+	constexpr float ledThresholdsDb[] { -36.0f, -24.0f, -18.0f, -12.0f, -9.0f, -6.0f, -3.0f, 0.0f };
+	constexpr int numLeds = (int) std::size (ledThresholdsDb);
+	static_assert (meterScaleFloorDb == 2.0f * ledThresholdsDb[0] - ledThresholdsDb[1],
+				   "the floor continues the first LED step's slope, as on the desk");
+
+	constexpr int firstYellowLed = 4, firstRedLed = 6; // zero-based: -9 and -3
 }
 
 void PeakMeter::feed (float peak, float seconds)
@@ -26,14 +29,14 @@ void PeakMeter::feed (float peak, float seconds)
 
 	const auto holding = std::min (seconds, holdRemaining);
 	holdRemaining -= holding;
-	holdDb = std::max (floorDb, holdDb - parameters.releaseDbPerSecond * (seconds - holding));
+	heldDb = std::max (floorDb, heldDb - parameters.releaseDbPerSecond * (seconds - holding));
 
-	levelDb = peakDb > levelDb ? risenTowards (peakDb, seconds)
-							   : std::max ({ floorDb, levelDb - fall, peakDb });
+	shownDb = peakDb > shownDb ? risenTowards (peakDb, seconds)
+							   : std::max ({ floorDb, shownDb - fall, peakDb });
 
-	if (levelDb >= holdDb)
+	if (shownDb >= heldDb)
 	{
-		holdDb = levelDb;
+		heldDb = shownDb;
 		holdRemaining = parameters.peakHoldSeconds;
 	}
 }
@@ -44,16 +47,41 @@ float PeakMeter::risenTowards (float peakDb, float seconds) const
 		return peakDb;
 
 	const auto share = 1.0f - std::exp (-seconds * 1000.0f / parameters.attackMs);
-	return levelDb + (peakDb - levelDb) * share;
+	return shownDb + (peakDb - shownDb) * share;
 }
 
-float PeakMeter::level() const { return toGain (levelDb); }
-float PeakMeter::hold() const { return toGain (holdDb); }
-
-int segmentsLit (float gain, int segments)
+float barFraction (float db)
 {
-	const auto share = (toDb (gain) - PeakMeter::floorDb) / -PeakMeter::floorDb;
-	return std::clamp ((int) std::lround (share * (float) segments), 0, segments);
+	if (db <= meterScaleFloorDb)
+		return 0.0f;
+
+	auto lowerDb = meterScaleFloorDb;
+	for (int led = 0; led < numLeds; ++led)
+	{
+		const auto upperDb = ledThresholdsDb[led];
+		if (db <= upperDb)
+			return ((float) led + (db - lowerDb) / (upperDb - lowerDb)) / (float) numLeds;
+		lowerDb = upperDb;
+	}
+	return 1.0f;
+}
+
+int segmentsLit (float db, int segments)
+{
+	// The epsilon keeps a level exactly on a segment's top from rounding below it.
+	const auto lit = (int) std::floor (barFraction (db) * (float) segments + 1.0e-4f);
+	return std::clamp (lit, 0, segments);
+}
+
+MeterZone zoneOfSegment (int index, int segments)
+{
+	// The segment's top, (index + 1) / segments, against the LEDs' eighths.
+	const auto topTimesLeds = (index + 1) * numLeds;
+	if (topTimesLeds > firstRedLed * segments)
+		return MeterZone::red;
+	if (topTimesLeds > firstYellowLed * segments)
+		return MeterZone::yellow;
+	return MeterZone::green;
 }
 
 int meterSegments (float heightPixels)

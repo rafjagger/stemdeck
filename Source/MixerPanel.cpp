@@ -39,8 +39,8 @@ void LevelMeter::setLevel (float newPeak)
 
 	const auto numSegments = meterSegments ((float) getHeight());
 	const auto barSegments = showsClip ? numSegments - 1 : numSegments;
-	const auto nextLit = segmentsLit (ballistics.level(), barSegments);
-	const auto nextHeld = segmentsLit (ballistics.hold(), barSegments);
+	const auto nextLit = segmentsLit (ballistics.levelDb(), barSegments);
+	const auto nextHeld = segmentsLit (ballistics.holdDb(), barSegments);
 
 	if (nextLit != litSegments || nextHeld != heldSegment || nextClipping != clipping)
 	{
@@ -57,8 +57,9 @@ void LevelMeter::paint (juce::Graphics& g)
 	g.setColour (juce::Colours::black);
 	g.fillRoundedRectangle (bounds, 2.0f);
 
-	// Segmented LED bar, green -> yellow -> red; with a clip lamp, the top
-	// segment is the lamp and the bar ends at full scale one below it.
+	// Segmented LED bar on the desk's LED scale and in its LEDs' colours; with
+	// a clip lamp, the top segment is the lamp and the bar ends at full scale
+	// one below it.
 	const int numSegments = meterSegments (bounds.getHeight());
 	const int barSegments = showsClip ? numSegments - 1 : numSegments;
 	const auto segmentHeight = bounds.getHeight() / (float) numSegments;
@@ -70,9 +71,13 @@ void LevelMeter::paint (juce::Graphics& g)
 	};
 	const auto colourOf = [barSegments] (int i)
 	{
-		return i >= barSegments - 2 ? clipColour
-			 : i >= barSegments - 6 ? juce::Colour (0xffe8c33d)
-									: juce::Colour (0xff3ec46d);
+		switch (zoneOfSegment (i, barSegments))
+		{
+			case MeterZone::red:    return clipColour;
+			case MeterZone::yellow: return juce::Colour (0xffe8c33d);
+			case MeterZone::green:  return juce::Colour (0xff3ec46d);
+		}
+		return juce::Colour (0xff3ec46d);
 	};
 
 	for (int i = 0; i < barSegments; ++i)

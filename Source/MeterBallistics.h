@@ -23,22 +23,36 @@ public:
 
 	void feed (float peak, float seconds);
 
-	// Linear gain, 0 at or below the floor.
-	float level() const;
-	float hold() const;
+	// dBFS, floorDb when silent. Mapped onto a bar by barFraction.
+	float levelDb() const { return shownDb; }
+	float holdDb() const { return heldDb; }
 
 private:
 	float risenTowards (float peakDb, float seconds) const;
 
 	MeterParameters parameters;
-	float levelDb = floorDb;
-	float holdDb = floorDb;
+	float shownDb = floorDb;
+	float heldDb = floorDb;
 	float holdRemaining = 0.0f;
 };
 
-// How many of a bar's segments a level lights on the -60..0 dBFS scale; the
-// bar and its hold mark use the same count, so the mark sits where the bar was.
-int segmentsLit (float gain, int segments);
+// The desk's LED scale (a3-mixer a3_mixer_meters.py, decided 2026-10-07), so
+// a StemDeck bar stands where the desk's display bar and channel LEDs do: LED
+// threshold k (-36 -24 -18 -12 -9 -6 -3 0 dBFS) at k/8 of the bar, linear in
+// dB between them; below -36 on at the first step's slope to an empty bar at
+// meterScaleFloorDb; 0 dBFS and over full.
+inline constexpr float meterScaleFloorDb = -48.0f;
+float barFraction (float db);
+
+// How many of a bar's segments a level lights: a segment once the level
+// reaches its top, as an LED at its threshold. The bar and its hold mark use
+// the same count, so the mark sits where the bar was.
+int segmentsLit (float db, int segments);
+
+// A segment's colour, the desk's LEDs': green up to the -12 LED, yellow at
+// -9 and -6, red at -3 and 0 -- by which LED's eighth the segment's top is in.
+enum class MeterZone { green, yellow, red };
+MeterZone zoneOfSegment (int index, int segments);
 
 // How many LED segments a meter of this height draws: 24 where there is room,
 // fewer where there is not -- each needs 3 px, a 2 px light and a 1 px gap.

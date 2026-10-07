@@ -61,7 +61,7 @@ class TheControlFile(unittest.TestCase):
 
 class TheMaintainerScripts(unittest.TestCase):
     def test_they_are_executable(self):
-        for name in ("postinst", "postrm"):
+        for name in ("postinst", "prerm", "postrm"):
             with self.subTest(script=name):
                 self.assertTrue(os.access(DEBIAN / name, os.X_OK))
 
@@ -75,10 +75,40 @@ class TheMaintainerScripts(unittest.TestCase):
                 with self.subTest(line=line, forbidden=forbidden):
                     self.assertNotIn(forbidden, line)
 
-    def test_postrm_disables_on_purge_and_removes_nothing(self):
-        text = (DEBIAN / "postrm").read_text()
-        self.assertIn("purge", text)
+    def test_prerm_disables_on_remove_and_deconfigure_only(self):
+        text = (DEBIAN / "prerm").read_text()
         self.assertIn("systemctl --global disable stemdeck.service", text)
+        self.assertIn("remove", text)
+        self.assertIn("deconfigure", text)
+        for event in ("upgrade", "failed-upgrade"):
+            self.assertNotIn(event, "".join(code_lines(DEBIAN / "prerm")))
+
+    def test_prerm_does_nothing_on_upgrade(self):
+        """Run with a fake systemctl first on PATH: an upgrade must not call it."""
+        with tempfile.TemporaryDirectory() as tmp:
+            log = Path(tmp) / "calls"
+            fake = Path(tmp) / "systemctl"
+            fake.write_text(f'#!/bin/sh\necho "$@" >> {log}\n')
+            fake.chmod(0o755)
+            env = {**os.environ, "PATH": f"{tmp}:{os.environ['PATH']}"}
+            for event, called in (("upgrade", False), ("failed-upgrade", False),
+                                  ("remove", True), ("deconfigure", True)):
+                log.unlink(missing_ok=True)
+                subprocess.run([DEBIAN / "prerm", event], check=True, env=env)
+                with self.subTest(event=event):
+                    self.assertEqual(called, log.exists())
+
+    def test_prerm_writes_into_no_home_and_restarts_nothing(self):
+        for line in code_lines(DEBIAN / "prerm"):
+            for forbidden in ("restart", "/home", "$HOME", "sudo", "--user",
+                              "cp ", "mv ", "mkdir", "rm ", "chown"):
+                with self.subTest(line=line, forbidden=forbidden):
+                    self.assertNotIn(forbidden, line)
+
+    def test_postrm_no_longer_disables_and_removes_nothing(self):
+        """By postrm the unit file is gone; a disable there leaves dangling links."""
+        text = (DEBIAN / "postrm").read_text()
+        self.assertNotIn("systemctl", text)
         for line in code_lines(DEBIAN / "postrm"):
             self.assertNotIn("rm ", line)
 
@@ -133,6 +163,10 @@ class TheStagedTree(unittest.TestCase):
                 if word.startswith(("/usr/lib/stemdeck/", "/usr/bin/stemdeck")):
                     with self.subTest(program=word):
                         self.assertTrue((stage / word.lstrip("/")).is_file())
+
+    def test_an_unknown_extra_argument_is_refused(self):
+        done = subprocess.run([STAGE, "files", REPO, "b", "s", "extra"], capture_output=True)
+        self.assertNotEqual(0, done.returncode)
 
     def test_an_unknown_step_is_refused(self):
         done = subprocess.run([STAGE, "nonsense"], capture_output=True)

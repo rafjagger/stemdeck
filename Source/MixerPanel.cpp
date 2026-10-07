@@ -159,9 +159,10 @@ ChannelStrip::ChannelStrip (StemDeckPlayer& p, int index) : player (p), deckInde
 			button->setMouseClickGrabsKeyboardFocus (false);
 			button->onClick = [this, s, bus, button]
 			{
-				player.setStemOnBus (s, bus, button->getToggleState());
-				if (onBusesChanged)
-					onBusesChanged (s);
+				if (onBusSwitch)
+					onBusSwitch (s, bus, button->getToggleState());
+				else
+					showBuses (s);
 			};
 			button->setTooltip ("Stem to bus " + busName (bus) + " (post fader)");
 			addAndMakeVisible (button);
@@ -226,8 +227,9 @@ void ChannelStrip::restoreState (const DeckSession& state)
 		const auto& stem = state.stems[(size_t) s];
 		knobs[s]->setValue (stem.gainDb, juce::sendNotificationSync);
 		muteButtons[s]->setToggleState (stem.muted, juce::sendNotificationSync);
-		for (int bus = 0; bus < buses::count; ++bus)
-			busButtons[s * buses::count + bus]->setToggleState ((stem.buses >> bus) & 1u, juce::sendNotificationSync);
+		// As stored; the mixer brings both decks into the rule afterwards.
+		player.setStemBuses (s, stem.buses);
+		showBuses (s);
 	}
 	fader.setValue (state.faderDb, juce::sendNotificationSync);
 }
@@ -334,9 +336,18 @@ void ChannelStrip::resized()
 }
 
 //==============================================================================
+static_assert (StemSet::numStems == buses::stemsPerDeck);
+
 MixerPanel::MixerPanel (StemDeckPlayer& playerA, StemDeckPlayer& playerB)
-	: stripA (playerA, 0), stripB (playerB, 1)
+	: players { &playerA, &playerB }, stripA (playerA, 0), stripB (playerB, 1)
 {
+	for (int d = 0; d < buses::decks; ++d)
+		strip (d).onBusSwitch = [this, d] (int stem, int bus, bool on)
+		{
+			for (const auto index : switchBus (d, stem, bus, on))
+				if (onBusesChanged)
+					onBusesChanged (index / buses::stemsPerDeck, index % buses::stemsPerDeck);
+		};
 	addAndMakeVisible (stripA);
 	addAndMakeVisible (stripB);
 	addAndMakeVisible (outputMeters);   // last: over the strips' inner corners
@@ -346,6 +357,41 @@ void MixerPanel::refresh()
 {
 	stripA.refresh();
 	stripB.refresh();
+}
+
+buses::Masks MixerPanel::busMasks() const
+{
+	buses::Masks masks {};
+	for (int d = 0; d < buses::decks; ++d)
+		for (int s = 0; s < buses::stemsPerDeck; ++s)
+			masks[(size_t) buses::stemIndex (d, s)] = players[(size_t) d]->getStemBuses (s);
+	return masks;
+}
+
+void MixerPanel::setBusMasks (const buses::Masks& masks)
+{
+	for (int d = 0; d < buses::decks; ++d)
+		for (int s = 0; s < buses::stemsPerDeck; ++s)
+		{
+			players[(size_t) d]->setStemBuses (s, masks[(size_t) buses::stemIndex (d, s)]);
+			strip (d).showBuses (s);
+		}
+}
+
+std::vector<int> MixerPanel::switchBus (int deck, int stem, int bus, bool on)
+{
+	const auto before = busMasks();
+	const auto switched = buses::stemIndex (deck, stem);
+	const auto after = buses::applySwitch (before, switched, bus, on);
+	// Every strip re-shown, also when nothing changed: a refused click (AUX
+	// off) has already toggled its button and must toggle back.
+	setBusMasks (after);
+	return buses::toReport (before, after, switched);
+}
+
+void MixerPanel::normaliseBuses()
+{
+	setBusMasks (buses::normalise (busMasks()));
 }
 
 void MixerPanel::paint (juce::Graphics& g)

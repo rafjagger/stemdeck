@@ -79,10 +79,10 @@ void RemoteLink::oscMessageReceived (const juce::OSCMessage& message)
 	if (! command)
 		return;
 
-	// The same switch a click sets; the screen follows, then Core hears it.
-	players[(size_t) command->deck]->setStemOnBus (command->stem, command->bus, command->on);
-	mixer.strip (command->deck).showBuses (command->stem);
-	report (command->deck, command->stem);
+	// The same switch a click sets, under the one-stem-per-bus rule; the
+	// screen follows, then Core hears every stem it moved.
+	for (const auto index : mixer.switchBus (command->deck, command->stem, command->bus, command->on))
+		report (index / buses::stemsPerDeck, index % buses::stemsPerDeck);
 }
 
 void RemoteLink::timerCallback()

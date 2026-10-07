@@ -45,7 +45,8 @@ private:
 
 //==============================================================================
 // Channel strip of one deck: a knob per stem, with mute and one switch per
-// bus (1-4, AUX -- any number at once, Buses.h), above the channel fader.
+// bus (1-4, AUX -- one stem per bus, the rest on AUX, Buses.h), above the
+// channel fader.
 class ChannelStrip : public juce::Component
 {
 public:
@@ -58,10 +59,11 @@ public:
 	void refresh(); // meters, called by the main timer
 
 	// The bus switches as the player has them, after a change from elsewhere
-	// (Core, spec stemdeck-remote); nothing is sent back from here.
+	// (the rule, or Core, spec stemdeck-remote); nothing is sent back from here.
 	void showBuses (int stem);
-	// Called after a click on one of the stem's bus switches.
-	std::function<void (int stem)> onBusesChanged;
+	// A click on one of the stem's bus switches, asking for `on`. The mixer
+	// applies it under the rule; the strip does not touch the player itself.
+	std::function<void (int stem, int bus, bool on)> onBusSwitch;
 
 	// The channel fader, moved as by hand (the Auto-DJ's crossfade).
 	void setFaderDb (double db) { fader.setValue (db, juce::sendNotificationSync); }
@@ -114,12 +116,26 @@ public:
 		return strip (deckIndex).faderBounds() + strip (deckIndex).getPosition();
 	}
 	void refresh();
+
+	// One bus switch under the one-stem-per-bus rule (Buses.h), across both
+	// decks: the players and the screen follow. Returns the stems Core must
+	// hear (buses::stemIndex), the switched one always among them.
+	std::vector<int> switchBus (int deck, int stem, int bus, bool on);
+	// After a session load: brings both decks' switches into the rule.
+	void normaliseBuses();
+	// Called for every stem a click moved, the clicked one included.
+	std::function<void (int deck, int stem)> onBusesChanged;
+
 	void setOutputLevel (int channel, float peak) { outputMeters.setLevel (channel, peak); }
 
 	void paint (juce::Graphics& g) override;
 	void resized() override;
 
 private:
+	buses::Masks busMasks() const;
+	void setBusMasks (const buses::Masks& masks);
+
+	std::array<StemDeckPlayer*, buses::decks> players;
 	ChannelStrip stripA, stripB;
 	OutputMeters outputMeters;
 

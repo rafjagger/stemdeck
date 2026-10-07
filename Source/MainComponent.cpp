@@ -182,8 +182,7 @@ MainComponent::MainComponent()
 
 	// After the session is restored: a click reports, a restore before the
 	// link runs reports nothing, and Core asks for everything on our hello.
-	for (int d = 0; d < numDecks; ++d)
-		mixer.strip (d).onBusesChanged = [this, d] (int stem) { remote.report (d, stem); };
+	mixer.onBusesChanged = [this] (int deck, int stem) { remote.report (deck, stem); };
 	remote.start (truthPath, truthHash);
 
 	// Following Core's truth: with $A3_OSC_TRUTH set, that file wins at every
@@ -941,6 +940,9 @@ void MainComponent::restoreSession()
 			player.setLoop (deck.loop.getStart(), deck.loop.getEnd());
 		player.setPosition (deck.position);
 	}
+	// Both decks restored as stored: an older session may break the
+	// one-stem-per-bus rule, which spans the two decks.
+	mixer.normaliseBuses();
 
 	for (int d = 0; d < numDecks; ++d)
 		if (session->decks[(size_t) d].sync && players[(size_t) d]->isLoaded())

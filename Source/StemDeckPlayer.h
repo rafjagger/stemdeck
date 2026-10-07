@@ -69,13 +69,9 @@ public:
 	bool isStemMuted (int stem) const { return stemMuted[(size_t) stem].load(); }
 
 	// Routing only, applied by the mixer (Buses.h): which buses a stem is on,
-	// any number of them.
-	void setStemOnBus (int stem, int bus, bool on)
-	{
-		const auto bit = 1u << bus;
-		if (on) stemBuses[(size_t) stem] |= bit;
-		else    stemBuses[(size_t) stem] &= ~bit;
-	}
+	// as a mask. The mixer keeps it in the one-stem-per-bus rule.
+	void setStemBuses (int stem, unsigned mask) { stemBuses[(size_t) stem] = mask; }
+	unsigned getStemBuses (int stem) const { return stemBuses[(size_t) stem].load(); }
 	bool isStemOnBus (int stem, int bus) const { return (stemBuses[(size_t) stem].load() >> bus) & 1u; }
 
 	// Channel fader. Not applied here: the mixer puts it on every bus. The

@@ -11,9 +11,6 @@ StemDeckPlayer::StemDeckPlayer (juce::AudioFormatManager& fm) : formatManager (f
 		stemMuted[(size_t) i] = false;
 		stemBuses[(size_t) i] = buses::defaultMask (i);
 		stemPeak[(size_t) i] = 0.0f;
-		deskPeak[(size_t) i] = 0.0f;
-		deskSquares[(size_t) i] = 0.0;
-		deskSamples[(size_t) i] = 0;
 	}
 
 	diskThread.addTimeSliceClient (this);
@@ -186,13 +183,9 @@ float StemDeckPlayer::popStemPeak (int stem)
 	return stemPeak[(size_t) stem].exchange (0.0f);
 }
 
-StemDeckPlayer::Level StemDeckPlayer::popDeskLevel (int stem)
+remote::Level StemDeckPlayer::popDeskLevel (int stem)
 {
-	const auto i = (size_t) stem;
-	const auto peak = deskPeak[i].exchange (0.0f);
-	const auto squares = deskSquares[i].exchange (0.0);
-	const auto samples = deskSamples[i].exchange (0);
-	return { peak, remote::rmsOf (squares, samples) };
+	return deskLevels[(size_t) stem].pop();
 }
 
 void StemDeckPlayer::updateResamplingRatio()
@@ -301,12 +294,9 @@ void StemDeckPlayer::getNextAudioBlock (const juce::AudioSourceChannelInfo& info
 			squares += rms * rms * info.numSamples;
 		}
 
-		// The desk's meter, before the fader. Only this thread adds; a pop in
-		// between loses at most one block of one meter.
-		if (peak > deskPeak[(size_t) s].load())
-			deskPeak[(size_t) s] = peak;
-		deskSquares[(size_t) s] = deskSquares[(size_t) s].load() + squares;
-		deskSamples[(size_t) s] = deskSamples[(size_t) s].load() + 2 * info.numSamples;
+		// The desk's meter, as the stem leaves on its bus: scaled rather than
+		// measured on the bus, which sums every stem switched to it.
+		deskLevels[(size_t) s].add (remote::sentToBus ({ peak, squares, 2 * info.numSamples }, deckGain.load()));
 
 		peak *= deckGain.load();   // the meter shows what the fader lets through
 		if (peak > stemPeak[(size_t) s].load())

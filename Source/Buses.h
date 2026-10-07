@@ -38,6 +38,10 @@ namespace buses
 	// peaks still land on 1.0 and not 0.02 dB over it.
 	constexpr float trim = 0.5f;
 
+	// What a stem's samples are multiplied by on their way out of a bus it is
+	// on: the fader, then the trim. The same on every bus.
+	constexpr float sendGain (float fader) { return gain (true, fader) * trim; }
+
 	// "1" .. "4", "AUX": button labels and meter captions.
 	inline std::string name (int bus)
 	{

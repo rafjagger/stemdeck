@@ -60,6 +60,10 @@ namespace remote
 
 	Block measure (const float* samples, int count);
 
+	// A stem's block, measured after knob and mute, as it reaches a bus: the
+	// deck fader and the bus trim on it (Buses.h). The meters /vu 41-48.
+	Block sentToBus (const Block& afterKnob, float fader);
+
 	// The stem meters, deck by deck and stem by stem: /vu/41-48.
 	constexpr int stemMeters = 8;
 

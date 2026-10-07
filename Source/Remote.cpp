@@ -163,6 +163,14 @@ namespace remote
 		return block;
 	}
 
+	// Both are linear gains, so scaling the measurement is exact for the stem
+	// alone: peak by the gain, the squares by its square.
+	Block sentToBus (const Block& afterKnob, float fader)
+	{
+		const auto gain = buses::sendGain (fader);
+		return { afterKnob.peak * gain, afterKnob.squares * gain * gain, afterKnob.samples };
+	}
+
 	std::vector<Meter> levelBundle (const Words& words, const std::array<Level, stemMeters>& stems,
 									const std::array<Level, 2>& aux)
 	{

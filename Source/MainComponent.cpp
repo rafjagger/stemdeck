@@ -29,6 +29,16 @@ MainComponent::MainComponent()
 			std::cerr << "StemDeck: " << truthError << std::endl;
 	}
 
+	// How every meter on screen moves: Core's numbers, one set for the
+	// system (decided 2026-10-07). A new truth restarts StemDeck, so once is enough.
+	{
+		std::string truthError;
+		const auto meterParameters = osctruth::readMeterParameters (truthPath, truthError);
+		mixer.setMeterParameters (meterParameters);
+		recMeterL.setParameters (meterParameters);
+		recMeterR.setParameters (meterParameters);
+	}
+
 	juce::PropertiesFile::Options options;
 	options.applicationName = "StemDeck";
    #if JUCE_LINUX

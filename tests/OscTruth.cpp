@@ -73,3 +73,47 @@ TEST (OscTruth, AMissingListenerLeavesTheEndpointsIncomplete)
 	const std::map<std::string, std::string> hosts { { "core", "192.168.8.10" } };
 	EXPECT_FALSE (osctruth::endpointsFrom (listeners, hosts).complete());
 }
+
+// The meter ballistics are Core's, one set for every display (decided
+// 2026-10-07): the truth's "meters" block, read into a map of its numbers by
+// the JUCE layer. A truth without it -- or without one of them -- keeps the
+// system's defaults.
+TEST (OscTruth, TheMeterBallisticsAreTheTruths)
+{
+	const auto meters = osctruth::meterParametersFrom (
+		{ { "attack_ms", 5.0 }, { "release_db_per_second", 30.0 }, { "peak_hold_seconds", 2.0 } });
+	EXPECT_FLOAT_EQ (meters.attackMs, 5.0f);
+	EXPECT_FLOAT_EQ (meters.releaseDbPerSecond, 30.0f);
+	EXPECT_FLOAT_EQ (meters.peakHoldSeconds, 2.0f);
+}
+
+TEST (OscTruth, NoMetersBlockKeepsTheDefaults)
+{
+	const auto meters = osctruth::meterParametersFrom ({});
+	EXPECT_FLOAT_EQ (meters.attackMs, 0.0f);
+	EXPECT_FLOAT_EQ (meters.releaseDbPerSecond, 20.0f);
+	EXPECT_FLOAT_EQ (meters.peakHoldSeconds, 1.5f);
+}
+
+TEST (OscTruth, AMissingMeterNumberKeepsItsDefault)
+{
+	const auto meters = osctruth::meterParametersFrom ({ { "release_db_per_second", 40.0 } });
+	EXPECT_FLOAT_EQ (meters.attackMs, 0.0f);
+	EXPECT_FLOAT_EQ (meters.releaseDbPerSecond, 40.0f);
+	EXPECT_FLOAT_EQ (meters.peakHoldSeconds, 1.5f);
+}
+
+// A meter that never falls, or a negative time, is a typo, not a setting.
+TEST (OscTruth, AnUnusableMeterNumberKeepsItsDefault)
+{
+	const auto meters = osctruth::meterParametersFrom (
+		{ { "attack_ms", -1.0 }, { "release_db_per_second", 0.0 }, { "peak_hold_seconds", -0.5 } });
+	EXPECT_FLOAT_EQ (meters.attackMs, 0.0f);
+	EXPECT_FLOAT_EQ (meters.releaseDbPerSecond, 20.0f);
+	EXPECT_FLOAT_EQ (meters.peakHoldSeconds, 1.5f);
+}
+
+TEST (OscTruth, AZeroHoldIsASetting)
+{
+	EXPECT_FLOAT_EQ (osctruth::meterParametersFrom ({ { "peak_hold_seconds", 0.0 } }).peakHoldSeconds, 0.0f);
+}

@@ -52,4 +52,21 @@ namespace osctruth
 		const auto* overridden = std::getenv ("A3_OSC_TRUTH");
 		return overridden != nullptr && *overridden != '\0' ? overridden : "/usr/share/a3/a3-osc.json";
 	}
+
+	MeterParameters meterParametersFrom (const std::map<std::string, double>& meters)
+	{
+		MeterParameters parameters;
+		const auto take = [&meters] (const char* key, float& value, bool zeroAllowed)
+		{
+			const auto found = meters.find (key);
+			if (found == meters.end())
+				return;
+			if (found->second > 0.0 || (zeroAllowed && found->second == 0.0))
+				value = (float) found->second;
+		};
+		take ("attack_ms", parameters.attackMs, true);
+		take ("release_db_per_second", parameters.releaseDbPerSecond, false);
+		take ("peak_hold_seconds", parameters.peakHoldSeconds, true);
+		return parameters;
+	}
 }

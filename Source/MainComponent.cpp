@@ -1269,7 +1269,7 @@ void MainComponent::prepareToPlay (int samplesPerBlockExpected, double sampleRat
 			{
 				auto& route = routeGains[(size_t) d][(size_t) s][(size_t) bus];
 				route.reset (sampleRate, 0.01);
-				route.setCurrentAndTargetValue (buses::gain (bus, player.isStemOnBus (s, bus), player.isDeckPhones(), player.getDeckGain()));
+				route.setCurrentAndTargetValue (buses::gain (player.isStemOnBus (s, bus), player.getDeckGain()));
 			}
 	}
 }
@@ -1308,15 +1308,14 @@ void MainComponent::getNextAudioBlock (const juce::AudioSourceChannelInfo& buffe
 
 		player.getNextAudioBlock (juce::AudioSourceChannelInfo (&deckBuffer, 0, numSamples));
 
-		// Each stem onto every bus it is switched to: post fader on 1-4 and
-		// AUX, pre fader on PHONES; ramped over 10 ms on any change.
+		// Each stem onto every bus it is switched to, post fader; ramped over
+		// 10 ms on any change.
 		const auto fader = player.getDeckGain();
-		const auto phones = player.isDeckPhones();
 		for (int s = 0; s < StemSet::numStems; ++s)
 			for (int bus = 0; bus < buses::count; ++bus)
 			{
 				auto& route = routeGains[(size_t) d][(size_t) s][(size_t) bus];
-				route.setTargetValue (buses::gain (bus, player.isStemOnBus (s, bus), phones, fader));
+				route.setTargetValue (buses::gain (player.isStemOnBus (s, bus), fader));
 				const auto from = route.getCurrentValue();
 				route.skip (numSamples);
 				const auto to = route.getCurrentValue();
@@ -1328,17 +1327,16 @@ void MainComponent::getNextAudioBlock (const juce::AudioSourceChannelInfo& buffe
 			}
 	}
 
-	// The fixed trim on each bus (6 dB on the channels and AUX), before the
-	// meters, so they show what leaves StemDeck.
-	for (int bus = 0; bus < buses::count; ++bus)
-		for (int c = 0; c < 2; ++c)
-			busBuffer.applyGain (bus * 2 + c, 0, numSamples, buses::trimFor (bus));
+	// The fixed 6 dB trim on every bus, before the meters, so they show what
+	// leaves StemDeck.
+	for (int ch = 0; ch < numBusChannels; ++ch)
+		busBuffer.applyGain (ch, 0, numSamples, buses::trim);
 
 	// The desk's SA meter: the AUX bus as it goes to the return, side by side.
 	for (int side = 0; side < 2; ++side)
 		auxLevels[(size_t) side].add (remote::measure (busBuffer.getReadPointer (buses::aux * 2 + side), numSamples));
 
-	// The meters show the six buses.
+	// The meters show the five buses.
 	for (int ch = 0; ch < numOutputChannels; ++ch)
 	{
 		const auto peak = busBuffer.getMagnitude (ch, 0, numSamples);

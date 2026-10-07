@@ -114,6 +114,14 @@ class TheNamesAreTheProgramsOwn(unittest.TestCase):
         self.assertIn('(channel % 2 == 0 ? "_L" : "_R")', outputs)
         self.assertIn('jack.open ("StemDeck"', main)
 
+    def test_stemdeck_registers_exactly_what_zita_carries(self):
+        """Five stereo buses, ten ports, the ten zita-j2n carries: no phones
+        ports since 2026-10-07 (the cue is the desk channel, in REAPER)."""
+        buses = (REPO / "Source/Buses.h").read_text()
+        self.assertIn("constexpr int count = 5;", buses)
+        self.assertNotIn("phones", buses)
+        self.assertEqual(len(STEMDECK_TO_ZITA), 2 * 5)
+
     def test_zita_carries_as_many_channels_as_are_cabled(self):
         """zita-j2n --chan 10 registers in_1..in_10; zita-n2j --chan 1-2
         registers out_1, out_2."""

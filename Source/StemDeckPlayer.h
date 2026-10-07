@@ -69,7 +69,7 @@ public:
 	bool isStemMuted (int stem) const { return stemMuted[(size_t) stem].load(); }
 
 	// Routing only, applied by the mixer (Buses.h): which buses a stem is on,
-	// any number of them, and whether the whole deck goes to PHONES.
+	// any number of them.
 	void setStemOnBus (int stem, int bus, bool on)
 	{
 		const auto bit = 1u << bus;
@@ -77,11 +77,9 @@ public:
 		else    stemBuses[(size_t) stem] &= ~bit;
 	}
 	bool isStemOnBus (int stem, int bus) const { return (stemBuses[(size_t) stem].load() >> bus) & 1u; }
-	void setDeckPhones (bool on) { deckPhones = on; }
-	bool isDeckPhones() const { return deckPhones.load(); }
 
-	// Channel fader. Not applied here: the mixer puts it on the program buses
-	// and leaves PHONES pre fader. The stem output is after knob and mute.
+	// Channel fader. Not applied here: the mixer puts it on every bus. The
+	// stem output is after knob and mute.
 	void setDeckGain (float gain) { deckGain = gain; }
 	float getDeckGain() const { return deckGain.load(); }
 
@@ -159,7 +157,6 @@ private:
 	std::array<std::atomic<float>, numStems> stemGain;
 	std::array<std::atomic<bool>, numStems> stemMuted;
 	std::array<std::atomic<unsigned>, numStems> stemBuses;
-	std::atomic<bool> deckPhones { false };
 	std::array<std::atomic<float>, numStems> stemPeak;
 	// The desk's meters: written by the audio thread, emptied by popDeskLevel.
 	std::array<std::atomic<float>, numStems> deskPeak;

@@ -34,11 +34,11 @@
 // Two stem decks and a mixer, laid out like Mixxx: scrolling waveforms on top,
 // deck A | mixer | deck B in the middle, library at the bottom.
 //
-// Output is 12 channels, six stereo buses (Buses.h): 1-4 and AUX post fader,
-// PHONES pre fader. Each stem of each deck is on any of them by its bus
-// switches (a new set: stem N on bus N). With a JACK server running these
-// are 12 ports (deck1_L ... deck4_R, aux_L/R, phones_L/R), otherwise a
-// regular audio device is used.
+// Output is 10 channels, five stereo buses (Buses.h): 1-4 and AUX, post
+// fader. Each stem of each deck is on any of them by its bus switches. With a
+// JACK server running these are 10 ports (deck1_L ... deck4_R, aux_L/R),
+// otherwise a regular audio device is used. No cue or phones of its own: the
+// cue is the desk channel, in REAPER (2026-10-07).
 class MainComponent  : public juce::Component,
 					   public juce::AudioSource,
 					   public juce::DragAndDropContainer,

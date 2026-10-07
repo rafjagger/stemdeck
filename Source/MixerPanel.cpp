@@ -9,10 +9,10 @@ namespace
 
 	juce::String busName (int bus) { return juce::String (buses::name (bus)); }
 
-	// A lit bus switch: the stem's own colour on 1-4, AUX and PHONES their own.
+	// A lit bus switch: the stem's own colour on 1-4, AUX its own.
 	juce::Colour busColour (int bus, int stem)
 	{
-		return bus == buses::aux ? Theme::aux : bus == buses::phones ? Theme::cue : Theme::stem (stem);
+		return bus == buses::aux ? Theme::aux : Theme::stem (stem);
 	}
 
 	juce::String dbText (double db)
@@ -105,7 +105,8 @@ void OutputMeters::paint (juce::Graphics& g)
 
 void OutputMeters::resized()
 {
-	// Bars top-aligned with the faders; captions where the PHONES buttons are.
+	// Bars top-aligned with the faders; captions below them, level with the
+	// strips' empty bottom line.
 	auto area = getLocalBounds().withTrimmedLeft (4).withTrimmedRight (4);
 	labelArea = area.removeFromBottom (28);
 
@@ -150,7 +151,7 @@ ChannelStrip::ChannelStrip (StemDeckPlayer& p, int index) : player (p), deckInde
 
 		for (int bus = 0; bus < buses::count; ++bus)
 		{
-			const auto label = bus == buses::aux ? juce::String ("A") : bus == buses::phones ? juce::String ("C") : juce::String (bus + 1);
+			const auto label = bus == buses::aux ? juce::String ("A") : juce::String (bus + 1);
 			auto* button = busButtons.add (new juce::TextButton (label));
 			button->setClickingTogglesState (true);
 			button->setToggleState (player.isStemOnBus (s, bus), juce::dontSendNotification);
@@ -162,8 +163,7 @@ ChannelStrip::ChannelStrip (StemDeckPlayer& p, int index) : player (p), deckInde
 				if (onBusesChanged)
 					onBusesChanged (s);
 			};
-			button->setTooltip (bus == buses::phones ? juce::String ("Stem to CUE (pre fader)")
-													 : "Stem to bus " + busName (bus) + " (post fader)");
+			button->setTooltip ("Stem to bus " + busName (bus) + " (post fader)");
 			addAndMakeVisible (button);
 		}
 
@@ -189,13 +189,6 @@ ChannelStrip::ChannelStrip (StemDeckPlayer& p, int index) : player (p), deckInde
 	};
 	addAndMakeVisible (fader);
 	addAndMakeVisible (meter);
-
-	phonesButton.setClickingTogglesState (true);
-	phonesButton.setColour (juce::TextButton::buttonOnColourId, busColour (buses::phones, 0));
-	phonesButton.setMouseClickGrabsKeyboardFocus (false);
-	phonesButton.onClick = [this] { player.setDeckPhones (phonesButton.getToggleState()); };
-	phonesButton.setTooltip ("Whole deck to CUE (pre fader)");
-	addAndMakeVisible (phonesButton);
 }
 
 void ChannelStrip::setStemNames (const std::array<juce::String, StemSet::numStems>& names)
@@ -223,7 +216,6 @@ void ChannelStrip::saveState (DeckSession& state) const
 				stem.buses |= 1u << bus;
 	}
 	state.faderDb = fader.getValue();
-	state.phones = phonesButton.getToggleState();
 }
 
 void ChannelStrip::restoreState (const DeckSession& state)
@@ -238,7 +230,6 @@ void ChannelStrip::restoreState (const DeckSession& state)
 			busButtons[s * buses::count + bus]->setToggleState ((stem.buses >> bus) & 1u, juce::sendNotificationSync);
 	}
 	fader.setValue (state.faderDb, juce::sendNotificationSync);
-	phonesButton.setToggleState (state.phones, juce::sendNotificationSync);
 }
 
 void ChannelStrip::showBuses (int stem)
@@ -290,11 +281,11 @@ void ChannelStrip::resized()
 	auto area = getLocalBounds().reduced (8);
 	area.removeFromTop (24);
 
-	// Four stem rows, each in a frame: [knob][name / mute][bus switches 1 2 3 / 4 5 6, right-aligned]
+	// Four stem rows, each in a frame: [knob][name / mute][bus switches 1 2 3 / 4 A, right-aligned]
 	const auto rowHeight = 52;
 	const auto rowGap = 6;
 	const auto columns = 3;
-	const auto rows = buses::count / columns;
+	const auto rows = (buses::count + columns - 1) / columns;
 	const auto switchSize = rowHeight / rows;   // square, as big as the row allows
 
 	for (int s = 0; s < StemSet::numStems; ++s)
@@ -321,12 +312,13 @@ void ChannelStrip::resized()
 		muteButtons[s]->setBounds (row.removeFromLeft (28).reduced (0, 2));
 	}
 
-	// Below: fader, deck meter and PHONES; the output meters take the side
-	// towards the middle (deck A: right, deck B: left).
+	// Below: fader and deck meter; the output meters take the side towards
+	// the middle (deck A: right, deck B: left). The bottom line stays free,
+	// where the output meters have their captions, so the fader ends where
+	// the meter bars do.
 	area.removeFromTop (8);
 	meterZone = deckIndex == 0 ? area.removeFromRight (meterReserve) : area.removeFromLeft (meterReserve);
-	phonesButton.setBounds (area.removeFromBottom (24).reduced (0, 1));
-	area.removeFromBottom (4);
+	area.removeFromBottom (28);
 	// Deck meter on the outer side, mirrored: A left of its fader, B right.
 	if (deckIndex == 0)
 	{

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Buses.h"
+
 #include <array>
 #include <atomic>
 #include <optional>
@@ -21,7 +23,7 @@ namespace remote
 		std::vector<std::string> meters;
 	};
 
-	// One switch, 0-based inside StemDeck: deck 0-1, stem 0-3, bus 0-5.
+	// One switch, 0-based inside StemDeck: deck 0-1, stem 0-3, bus 0-4 (1-4, AUX).
 	struct Switch
 	{
 		int deck = 0, stem = 0, bus = 0;
@@ -32,7 +34,7 @@ namespace remote
 	std::string reportAddress (const Words& words, int deck, int stem);
 	bool isRecall (const Words& words, const std::string& address);
 	std::string vuAddress (const Words& words, int deck, int stem);
-	unsigned maskOf (const std::array<bool, 6>& on);
+	unsigned maskOf (const std::array<bool, buses::count>& on);
 
 	// The rms of `samples` values whose squares sum to `sumOfSquares`; 0 for none.
 	float rmsOf (double sumOfSquares, long long samples);

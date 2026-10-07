@@ -1,5 +1,7 @@
 #include "Remote.h"
 
+#include "Buses.h"
+
 #include <algorithm>
 #include <cmath>
 #include <map>
@@ -9,7 +11,7 @@ namespace remote
 {
 	namespace
 	{
-		constexpr int decks = 2, stemsPerDeck = 4, busCount = 6;
+		constexpr int decks = 2, stemsPerDeck = 4;
 		constexpr int firstStemMeter = 41;
 
 		std::vector<std::string> segments (const std::string& path)
@@ -99,7 +101,7 @@ namespace remote
 		if (! fields || (value != 0 && value != 1))
 			return std::nullopt;
 		const auto deck = fields->at ("deck"), stem = fields->at ("stem"), bus = fields->at ("bus");
-		if (! within (deck, 1, decks) || ! within (stem, 1, stemsPerDeck) || ! within (bus, 1, busCount))
+		if (! within (deck, 1, decks) || ! within (stem, 1, stemsPerDeck) || ! within (bus, 1, buses::count))
 			return std::nullopt;
 		return Switch { deck - 1, stem - 1, bus - 1, value == 1 };
 	}
@@ -119,7 +121,7 @@ namespace remote
 		return fill (words.vu, { { "n", firstStemMeter + deck * stemsPerDeck + stem } });
 	}
 
-	unsigned maskOf (const std::array<bool, 6>& on)
+	unsigned maskOf (const std::array<bool, buses::count>& on)
 	{
 		unsigned mask = 0;
 		for (size_t bus = 0; bus < on.size(); ++bus)

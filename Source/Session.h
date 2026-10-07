@@ -35,7 +35,6 @@ struct DeckSession
 
 	std::array<StemMixState, StemSet::numStems> stems;
 	double faderDb = 0.0;
-	bool phones = false;
 };
 
 struct LibrarySession

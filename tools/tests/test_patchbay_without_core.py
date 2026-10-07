@@ -21,8 +21,8 @@ REPO = Path(__file__).resolve().parents[2]
 PATCHBAY = REPO / ".config/rncbc.org/stemdeck-without-core.xml"
 UNIT = REPO / ".config/systemd/user/qjackctl-stemdeck.service"
 UNITS = REPO / ".config/systemd/user"
-INSTALLED_REPO = "/home/aaa/a3-system/stemdeck"
-INSTALLED_PATCHBAY = f"{INSTALLED_REPO}/.config/rncbc.org/stemdeck-without-core.xml"
+PACKAGED_TOOLS = "/usr/lib/stemdeck"
+INSTALLED_PATCHBAY = "/usr/share/stemdeck/stemdeck-without-core.xml"
 
 # StemDeck's buses toward the Core, in Buses.h's order: 1-4, then AUX.
 TO_THE_CORE = ["deck1", "deck2", "deck3", "deck4", "aux"]
@@ -158,7 +158,7 @@ class ItsUnit(unittest.TestCase):
             self.assertNotIn("--start", line)
 
     def test_it_waits_for_the_screen_and_for_jack(self):
-        self.assertEqual([f"{INSTALLED_REPO}/tools/a3-wait-for-the-screen",
+        self.assertEqual([f"{PACKAGED_TOOLS}/a3-wait-for-the-screen",
                           "/usr/bin/jack_wait -w"], exec_lines("ExecStartPre"))
         self.assertEqual("DISPLAY=:0", section("Service").get("Environment"))
 
@@ -176,9 +176,8 @@ class ItsUnit(unittest.TestCase):
         for key in ("BindsTo", "Requires", "Requisite"):
             self.assertNotIn("a3-", section("Unit").get(key, ""), key)
 
-    def test_its_patchbay_is_the_one_in_this_repository(self):
-        self.assertEqual(INSTALLED_PATCHBAY,
-                         f"{INSTALLED_REPO}/{PATCHBAY.relative_to(REPO)}")
+    def test_its_patchbay_is_the_packaged_copy_of_this_repository_s(self):
+        self.assertEqual(PATCHBAY.name, Path(INSTALLED_PATCHBAY).name)
         self.assertTrue(PATCHBAY.is_file())
 
 

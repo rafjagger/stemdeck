@@ -8,7 +8,7 @@ StartLimitIntervalSec=0
 Type=simple
 ExecStartPre=/usr/bin/sleep 2
 # Address and port from the one truth (a3-osc.json): see tools/zita-from-truth.py.
-ExecStart=/usr/bin/python3 %h/a3-system/stemdeck/tools/zita-from-truth.py j2n --chan 10 --24bit
+ExecStart=/usr/bin/python3 /usr/lib/stemdeck/zita-from-truth.py j2n --chan 10 --24bit
 CPUAffinity=1 2 3
 # No real-time for the whole process: it put zita above JACK's own threads
 # and made JACK report late clients. JACK raises zita's process thread.

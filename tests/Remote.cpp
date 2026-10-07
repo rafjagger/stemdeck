@@ -258,3 +258,28 @@ TEST (Remote, BelowMinusNinetyDbIsSilence)
 	hiss[0] = { 1.0e-3f, 1.0e-4f };    // -60 dBFS peak
 	EXPECT_EQ (gate.next (hiss), remote::MeterGate::send);
 }
+
+// A switch from Core obeys the one-stem-per-bus rule, and what goes back to
+// Core is the state after the rule: the stem that lost the bus reports AUX.
+TEST (Remote, ARemoteSwitchObeysTheRuleAndTheReportShowsIt)
+{
+	buses::Masks masks;
+	masks.fill (1u << buses::aux);
+	masks[(size_t) buses::stemIndex (0, 1)] = 1u << 0;   // A2 on bus 1
+
+	const auto command = remote::parseSwitch (words, "/stemdeck/2/4/bus/1", 1);   // B4 onto bus 1
+	ASSERT_TRUE (command.has_value());
+	const auto stem = buses::stemIndex (command->deck, command->stem);
+	const auto after = buses::applySwitch (masks, stem, command->bus, command->on);
+
+	std::vector<std::pair<std::string, unsigned>> reports;
+	for (const auto index : buses::toReport (masks, after, stem))
+		reports.emplace_back (remote::reportAddress (words, index / buses::stemsPerDeck, index % buses::stemsPerDeck),
+							  after[(size_t) index]);
+
+	const std::vector<std::pair<std::string, unsigned>> expected {
+		{ "/stemdeck/1/2/buses", 1u << buses::aux },
+		{ "/stemdeck/2/4/buses", 1u << 0 },
+	};
+	EXPECT_EQ (reports, expected);
+}

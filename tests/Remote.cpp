@@ -146,6 +146,8 @@ TEST (Remote, TheSidesOfAStereoBlockAreMeasuredApart)
 	EXPECT_FLOAT_EQ (r.rms, 0.0f);
 }
 
+// The desk gets raw peaks, one per tick: no fall and no hold here -- the desk
+// applies the system's meter ballistics itself (decided 2026-10-07).
 TEST (Remote, ATapGathersBlocksUntilItIsEmptied)
 {
 	const float loud[] { 0.5f, 0.5f }, quiet[] { 0.0f, 0.0f };

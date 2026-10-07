@@ -4,48 +4,49 @@
 
 // The output buses and who reaches them. Pure: no JUCE, testable.
 //
-// Six stereo buses: 1-4 and AUX feed A³ Core, PHONES is for the headphones.
-// Every stem has one switch per bus and may be on several at once. Buses 1-4
-// are the desk's channels, switched by remote control (spec stemdeck-remote),
-// and a stem there silences that channel's analog input -- so a fresh
-// StemDeck starts with every stem on AUX and on no channel. The program buses (1-4, AUX) are post fader;
-// PHONES is pre fader and also takes the whole deck when its PHONES button
-// is on. Stem knob and mute act on every bus.
+// Five stereo buses, 1-4 and AUX, all feeding A³ Core. Every stem has one
+// switch per bus and may be on several at once. Buses 1-4 are the desk's
+// channels, switched by remote control (spec stemdeck-remote), and a stem
+// there silences that channel's analog input -- so a fresh StemDeck starts
+// with every stem on AUX and on no channel. Every bus is post fader; stem
+// knob and mute act on every bus.
+//
+// No CUE bus and no PHONES outputs since 2026-10-07: the cue is the desk
+// channel after its whole chain, in REAPER, whatever its input is.
 namespace buses
 {
-	constexpr int count = 6;
+	constexpr int count = 5;
 	constexpr int aux = 4;
-	constexpr int phones = 5;
+
+	constexpr unsigned allMask = (1u << count) - 1;
 
 	// Which buses a stem starts on: the aux return only.
 	constexpr unsigned defaultMask (int) { return 1u << aux; }
 
-	// The gain from a stem into `bus`: `onBus` is the stem's switch for it,
-	// `deckPhones` the deck's PHONES button, `fader` the channel fader.
-	constexpr float gain (int bus, bool onBus, bool deckPhones, float fader)
-	{
-		if (bus == phones)
-			return onBus || deckPhones ? 1.0f : 0.0f;
-		return onBus ? fader : 0.0f;
-	}
+	// A mask as a session stored it: an older one may carry the CUE bus
+	// (bit 5), which is dropped; every other switch is kept.
+	constexpr unsigned fromStored (unsigned mask) { return mask & allMask; }
 
-	// The fixed trim on a bus, linear: AUX is 6 dB down, so both decks on the
-	// return (two full tracks, up to +5.9 dBFS) stay below full scale, and the
-	// desk channels match it, so a stem is as loud on a channel as on the
-	// return; CUE is untouched. Exactly one half, -6.02 dB, so two in-phase
-	// full-scale peaks still land on 1.0 and not 0.02 dB over it.
-	constexpr float trimFor (int bus) { return bus == phones ? 1.0f : 0.5f; }
+	// The gain from a stem into a bus: `onBus` is the stem's switch for it,
+	// `fader` the channel fader.
+	constexpr float gain (bool onBus, float fader) { return onBus ? fader : 0.0f; }
 
-	// "1" .. "4", "AUX", "CUE": button labels and meter captions (PH until
-	// 2026-10-01, when PFL became cue across the A3 system).
+	// The fixed trim on every bus, linear: AUX is 6 dB down, so both decks on
+	// the return (two full tracks, up to +5.9 dBFS) stay below full scale,
+	// and the desk channels match it, so a stem is as loud on a channel as on
+	// the return. Exactly one half, -6.02 dB, so two in-phase full-scale
+	// peaks still land on 1.0 and not 0.02 dB over it.
+	constexpr float trim = 0.5f;
+
+	// "1" .. "4", "AUX": button labels and meter captions.
 	inline std::string name (int bus)
 	{
-		return bus == aux ? "AUX" : bus == phones ? "CUE" : std::to_string (bus + 1);
+		return bus == aux ? "AUX" : std::to_string (bus + 1);
 	}
 
-	// JACK port base names: deck1 .. deck4 (kept from the four-bus days), aux, phones.
+	// JACK port base names: deck1 .. deck4 (kept from the four-bus days), aux.
 	inline std::string portName (int bus)
 	{
-		return bus == aux ? "aux" : bus == phones ? "phones" : "deck" + std::to_string (bus + 1);
+		return bus == aux ? "aux" : "deck" + std::to_string (bus + 1);
 	}
 }

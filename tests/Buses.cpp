@@ -4,16 +4,27 @@
 
 #include <cmath>
 
-TEST (Buses, SixBusesPhonesLast)
+// No CUE bus since 2026-10-07: the cue is the desk channel after its whole
+// chain, in REAPER, whatever its input is.
+TEST (Buses, FiveBusesAuxLast)
 {
-	EXPECT_EQ (buses::count, 6);
+	EXPECT_EQ (buses::count, 5);
+	EXPECT_EQ (buses::aux, buses::count - 1);
 	EXPECT_EQ (buses::name (0), "1");
 	EXPECT_EQ (buses::name (3), "4");
 	EXPECT_EQ (buses::name (buses::aux), "AUX");
-	EXPECT_EQ (buses::name (buses::phones), "CUE");   // PH until 2026-10-01: PFL became cue everywhere
 	EXPECT_EQ (buses::portName (0), "deck1") << "the four-bus port names stay, so connections survive";
 	EXPECT_EQ (buses::portName (buses::aux), "aux");
-	EXPECT_EQ (buses::portName (buses::phones), "phones");
+}
+
+// A session saved before 2026-10-07 may have a stem on the old CUE bus
+// (bit 5); it loads with that bit dropped and every other switch kept.
+TEST (Buses, AStoredMaskLosesTheOldCueBit)
+{
+	EXPECT_EQ (buses::fromStored (0b110001u), 0b010001u);
+	EXPECT_EQ (buses::fromStored (0b100000u), 0u);
+	EXPECT_EQ (buses::fromStored (0b011111u), 0b011111u);
+	EXPECT_EQ (buses::fromStored (~0u), (1u << buses::count) - 1);
 }
 
 // Since the desk switches the channels by remote control (spec
@@ -26,32 +37,21 @@ TEST (Buses, StemsStartOnTheReturnAndOnNoChannel)
 		EXPECT_EQ (buses::defaultMask (stem), 1u << buses::aux);
 }
 
-TEST (Buses, ProgramBusesArePostFader)
+TEST (Buses, EveryBusIsPostFader)
 {
-	EXPECT_FLOAT_EQ (buses::gain (0, true, false, 0.5f), 0.5f);
-	EXPECT_FLOAT_EQ (buses::gain (buses::aux, true, false, 0.25f), 0.25f);
-	EXPECT_FLOAT_EQ (buses::gain (2, false, true, 1.0f), 0.0f) << "deck PHONES reaches only PHONES";
-}
-
-TEST (Buses, PhonesIsPreFaderFromTheStemOrTheDeck)
-{
-	EXPECT_FLOAT_EQ (buses::gain (buses::phones, true, false, 0.0f), 1.0f) << "fader down, still in the phones";
-	EXPECT_FLOAT_EQ (buses::gain (buses::phones, false, true, 0.0f), 1.0f);
-	EXPECT_FLOAT_EQ (buses::gain (buses::phones, true, true, 0.3f), 1.0f) << "both: once, not twice";
-	EXPECT_FLOAT_EQ (buses::gain (buses::phones, false, false, 1.0f), 0.0f);
+	EXPECT_FLOAT_EQ (buses::gain (true, 0.5f), 0.5f);
+	EXPECT_FLOAT_EQ (buses::gain (true, 0.25f), 0.25f);
+	EXPECT_FLOAT_EQ (buses::gain (false, 1.0f), 0.0f);
 }
 
 // The AUX bus can carry both decks at once (Core's STEM return), and the four
 // stems of a set already sum to the track's own peak: two full tracks reach
 // +5.9 dBFS. A fixed 6 dB trim on AUX keeps that below full scale (decided
 // 2026-10-04). The desk channels get the same trim, so a stem plays as loud
-// on a channel as on the return (decided the same evening); CUE stays as it is.
+// on a channel as on the return (decided the same evening).
 TEST (Buses, ChannelsAndAuxAreTrimmedBySixDecibels)
 {
-	EXPECT_NEAR (20.0f * std::log10 (buses::trimFor (buses::aux)), -6.0f, 0.05f);
-	for (int bus = 0; bus < buses::aux; ++bus)
-		EXPECT_FLOAT_EQ (buses::trimFor (bus), buses::trimFor (buses::aux)) << "desk channel " << bus + 1;
-	EXPECT_FLOAT_EQ (buses::trimFor (buses::phones), 1.0f) << "CUE";
+	EXPECT_NEAR (20.0f * std::log10 (buses::trim), -6.0f, 0.05f);
 }
 
 TEST (Buses, TwoFullScaleDecksOnAuxStayBelowFullScale)
@@ -61,8 +61,8 @@ TEST (Buses, TwoFullScaleDecksOnAuxStayBelowFullScale)
 	for (const auto source : twoSources)
 		aux += source;
 
-	EXPECT_LE (aux * buses::trimFor (buses::aux), 1.0f) << "two in-phase full-scale peaks";
+	EXPECT_LE (aux * buses::trim, 1.0f) << "two in-phase full-scale peaks";
 
 	const auto measuredTwoTracks = std::pow (10.0f, 5.9f / 20.0f);
-	EXPECT_LT (measuredTwoTracks * buses::trimFor (buses::aux), 1.0f) << "the +5.9 dBFS measured 2026-10-04";
+	EXPECT_LT (measuredTwoTracks * buses::trim, 1.0f) << "the +5.9 dBFS measured 2026-10-04";
 }

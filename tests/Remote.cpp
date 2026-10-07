@@ -64,8 +64,18 @@ TEST (Remote, OneMeterPerStemFromFortyOne)
 
 TEST (Remote, AMaskHasOneBitPerBus)
 {
-	EXPECT_EQ (remote::maskOf ({ true, false, false, false, true, false }), 0b010001u);
+	EXPECT_EQ (remote::maskOf ({ true, false, false, false, true }), 0b10001u);
 	EXPECT_EQ (remote::maskOf ({}), 0u);
+}
+
+// StemDeck has no cue of its own since 2026-10-07: the cue is the desk
+// channel after its whole chain, in REAPER. Bus 6 was StemDeck's CUE; a Core
+// that still sends it (an older truth) switches nothing.
+TEST (Remote, TheOldCueBusIsNoLongerASwitch)
+{
+	EXPECT_FALSE (remote::parseSwitch (words, "/stemdeck/1/1/bus/6", 1).has_value());
+	EXPECT_FALSE (remote::parseSwitch (words, "/stemdeck/2/4/bus/6", 0).has_value());
+	EXPECT_TRUE (remote::parseSwitch (words, "/stemdeck/2/4/bus/5", 1).has_value()) << "AUX stays";
 }
 
 // One meter per stem to the desk: rms over both channels of the stem,

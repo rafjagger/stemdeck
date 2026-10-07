@@ -23,7 +23,7 @@ private:
 };
 
 //==============================================================================
-// Meters for all output channels: buses 1-4, AUX and PHONES, each L/R.
+// Meters for all output channels: buses 1-4 and AUX, each L/R.
 class OutputMeters : public juce::Component
 {
 public:
@@ -45,8 +45,7 @@ private:
 
 //==============================================================================
 // Channel strip of one deck: a knob per stem, with mute and one switch per
-// bus (1-4, AUX, PH -- any number at once, Buses.h), above the channel fader
-// and the deck's PHONES button (the whole deck to PHONES, pre fader).
+// bus (1-4, AUX -- any number at once, Buses.h), above the channel fader.
 class ChannelStrip : public juce::Component
 {
 public:
@@ -72,7 +71,7 @@ public:
 	double getFaderTravel() { return fader.valueToProportionOfLength (fader.getValue()); }
 	bool isMuted (int stem) const { return muteButtons[stem]->getToggleState(); }
 
-	// Knobs, mutes, bus switches, fader and PHONES, for the session.
+	// Knobs, mutes, bus switches and fader, for the session.
 	void saveState (DeckSession& state) const;
 	void restoreState (const DeckSession& state);
 
@@ -90,7 +89,6 @@ private:
 
 	juce::OwnedArray<juce::Slider> knobs;
 	juce::OwnedArray<juce::TextButton> muteButtons, busButtons;   // busButtons: stem * buses::count + bus
-	juce::TextButton phonesButton { "CUE" };
 	juce::OwnedArray<juce::Label> stemLabels;
 	juce::Slider fader { juce::Slider::LinearVertical, juce::Slider::NoTextBox };
 	LevelMeter meter;

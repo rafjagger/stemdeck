@@ -51,7 +51,7 @@ void RemoteLink::report (int deck, int stem)
 {
 	if (! running)
 		return;
-	std::array<bool, 6> on {};
+	std::array<bool, buses::count> on {};
 	for (int bus = 0; bus < buses::count; ++bus)
 		on[(size_t) bus] = players[(size_t) deck]->isStemOnBus (stem, bus);
 	toCore.send (juce::OSCMessage (juce::String (remote::reportAddress (words, deck, stem)),

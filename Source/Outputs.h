@@ -4,7 +4,7 @@
 
 #include <string>
 
-// What StemDeck puts on its outputs: the six stereo buses (Buses.h), mixed
+// What StemDeck puts on its outputs: the five stereo buses (Buses.h), mixed
 // inside StemDeck and switched by remote control from the desk (spec
 // stemdeck-remote, 2026-10-01; the 8x stereo mode is gone). Pure: no JUCE.
 namespace outputs

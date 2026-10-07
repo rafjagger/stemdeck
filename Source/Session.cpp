@@ -25,7 +25,6 @@ std::unique_ptr<juce::XmlElement> Session::toXml() const
 		e->setAttribute ("vinyl", deck.vinyl);
 		e->setAttribute ("sync", deck.sync);
 		e->setAttribute ("fader", deck.faderDb);
-		e->setAttribute ("phones", deck.phones);
 
 		for (size_t s = 0; s < deck.stems.size(); ++s)
 		{
@@ -79,7 +78,6 @@ Session Session::fromXml (const juce::XmlElement& xml)
 		deck.vinyl = e->getBoolAttribute ("vinyl", true);
 		deck.sync = e->getBoolAttribute ("sync");
 		deck.faderDb = e->getDoubleAttribute ("fader");
-		deck.phones = e->getBoolAttribute ("phones");
 
 		size_t s = 0;
 		for (auto* stem : e->getChildWithTagNameIterator ("Stem"))
@@ -88,7 +86,8 @@ Session Session::fromXml (const juce::XmlElement& xml)
 				break;
 			deck.stems[s].gainDb = stem->getDoubleAttribute ("gain");
 			deck.stems[s].muted = stem->getBoolAttribute ("muted");
-			deck.stems[s].buses = (unsigned) stem->getIntAttribute ("buses", (int) buses::defaultMask ((int) s));
+			// An older session's "phones" and CUE bus bit are not read back.
+			deck.stems[s].buses = buses::fromStored ((unsigned) stem->getIntAttribute ("buses", (int) buses::defaultMask ((int) s)));
 			++s;
 		}
 	}

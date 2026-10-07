@@ -1,21 +1,59 @@
 #include "MeterBallistics.h"
 
 #include <algorithm>
+#include <cmath>
 
 namespace
 {
-	constexpr float releasePerTick = 0.85f;
-	constexpr float silence = 0.001f; // -60 dB, the bottom of the meter scale
 	constexpr float fullScale = 1.0f;
 	constexpr float clipHoldSeconds = 1.0f;
+
+	float toDb (float gain)
+	{
+		return gain > 0.0f ? std::max (PeakMeter::floorDb, 20.0f * std::log10 (gain)) : PeakMeter::floorDb;
+	}
+
+	float toGain (float db)
+	{
+		return db > PeakMeter::floorDb ? std::pow (10.0f, db / 20.0f) : 0.0f;
+	}
 }
 
-float nextMeterLevel (float shownLevel, float newPeak)
+void PeakMeter::feed (float peak, float seconds)
 {
-	const auto next = std::max (newPeak, shownLevel * releasePerTick);
+	const auto peakDb = toDb (peak);
+	const auto fall = parameters.releaseDbPerSecond * seconds;
 
-	// The release is geometric and never reaches zero on its own.
-	return next < silence ? 0.0f : next;
+	const auto holding = std::min (seconds, holdRemaining);
+	holdRemaining -= holding;
+	holdDb = std::max (floorDb, holdDb - parameters.releaseDbPerSecond * (seconds - holding));
+
+	levelDb = peakDb > levelDb ? risenTowards (peakDb, seconds)
+							   : std::max ({ floorDb, levelDb - fall, peakDb });
+
+	if (levelDb >= holdDb)
+	{
+		holdDb = levelDb;
+		holdRemaining = parameters.peakHoldSeconds;
+	}
+}
+
+float PeakMeter::risenTowards (float peakDb, float seconds) const
+{
+	if (parameters.attackMs <= 0.0f)
+		return peakDb;
+
+	const auto share = 1.0f - std::exp (-seconds * 1000.0f / parameters.attackMs);
+	return levelDb + (peakDb - levelDb) * share;
+}
+
+float PeakMeter::level() const { return toGain (levelDb); }
+float PeakMeter::hold() const { return toGain (holdDb); }
+
+int segmentsLit (float gain, int segments)
+{
+	const auto share = (toDb (gain) - PeakMeter::floorDb) / -PeakMeter::floorDb;
+	return std::clamp ((int) std::lround (share * (float) segments), 0, segments);
 }
 
 int meterSegments (float heightPixels)

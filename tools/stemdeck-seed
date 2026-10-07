@@ -152,7 +152,11 @@ def seed(home, environ, log=print, free_bytes=free_space):
         done = marker.read_text(errors="replace").splitlines() if marker.exists() else []
         for old in OLD_RECORDINGS:
             source = Path(home) / old
-            if str(source) in done or not source.is_dir():
+            if str(source) in done:
+                continue
+            if not source.is_dir():
+                if not marker.exists():
+                    log(f"stemdeck-seed: no old recordings at {source}")
                 continue
             if copy_recordings(source, target, log, free_bytes):
                 _record(marker, source)

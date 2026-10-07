@@ -136,6 +136,20 @@ class TheOldRecordings(SeedCase):
         self.run_seed()
         self.assertFalse((self.new.parent / seed.MARKER).exists())
 
+    def test_a_missing_checkout_is_said_once_per_start_and_the_start_goes_on(self):
+        code, log = self.run_seed()
+        self.assertEqual(0, code)
+        self.assertEqual([f"stemdeck-seed: no old recordings at {self.old}"], log)
+
+    def test_once_a_marker_exists_a_missing_checkout_is_not_mentioned(self):
+        self.take("a.flac", b"one")
+        self.run_seed()
+        for path in self.old.iterdir():
+            path.unlink()
+        self.old.rmdir()
+        _, log = self.run_seed()
+        self.assertEqual([], log)
+
 
 class TheHardCases(SeedCase):
     def test_a_dangling_symlink_is_skipped_and_the_good_takes_are_copied(self):

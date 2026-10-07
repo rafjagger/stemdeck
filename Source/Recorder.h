@@ -2,6 +2,8 @@
 
 #include <JuceHeader.h>
 #include "JackOutput.h"
+#include <cstdlib>
+#include "DataPaths.h"
 
 // Records StemDeck's two JACK inputs (rec_L, rec_R) to a 24-bit FLAC file.
 // The audio thread only hands blocks to a FIFO; a background thread writes
@@ -13,11 +15,14 @@ public:
 	Recorder();
 	~Recorder() override;
 
-	// recordings/ in the program's folder (where start.sh runs it from, like
-	// stems/): moves with the checkout.
+	// ~/.local/share/stemdeck/recordings ($XDG_DATA_HOME honoured), wherever
+	// StemDeck was started from: the package starts it in its data folder, a
+	// dev build runs from a checkout, and both record to the same place
+	// (2026-10-07; before, recordings/ grew inside the checkout).
 	static juce::File defaultFolder()
 	{
-		return juce::File::getCurrentWorkingDirectory().getChildFile ("recordings");
+		const auto home = juce::File::getSpecialLocation (juce::File::userHomeDirectory).getFullPathName().toStdString();
+		return juce::File (juce::String::fromUTF8 (recordingsFolder (home, std::getenv ("XDG_DATA_HOME")).c_str()));
 	}
 
 	// Starts a new file in `folder`, named by the time. Returns an error, or

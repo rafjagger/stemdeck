@@ -137,5 +137,83 @@ class TheOldRecordings(SeedCase):
         self.assertFalse((self.new.parent / seed.MARKER).exists())
 
 
+class TheHardCases(SeedCase):
+    def test_a_dangling_symlink_is_skipped_and_the_good_takes_are_copied(self):
+        self.take("a.flac", b"one")
+        (self.old / "gone.flac").symlink_to(self.home / "nowhere")
+        code, log = self.run_seed()
+        self.assertEqual(0, code)
+        self.assertEqual(b"one", (self.new / "a.flac").read_bytes())
+        self.assertFalse((self.new / "gone.flac").exists())
+        self.assertTrue(any("skipped" in line and "gone.flac" in line for line in log), log)
+        self.assertTrue((self.new.parent / seed.MARKER).exists(), "skips do not block the marker")
+
+    def test_a_symlinked_folder_is_logged_and_not_followed(self):
+        self.take("a.flac", b"one")
+        outside = self.home / "outside"
+        outside.mkdir()
+        (outside / "x.flac").write_bytes(b"x")
+        (self.old / "link").symlink_to(outside)
+        _, log = self.run_seed()
+        self.assertFalse((self.new / "link").exists())
+        self.assertTrue(any("skipped" in line and "link" in line for line in log), log)
+
+    def test_files_in_subfolders_keep_their_relative_path(self):
+        self.take("a.flac", b"one")
+        (self.old / "sub/deeper").mkdir(parents=True)
+        (self.old / "sub/deeper/b.flac").write_bytes(b"two")
+        self.run_seed()
+        self.assertEqual(b"two", (self.new / "sub/deeper/b.flac").read_bytes())
+
+    def test_a_corrupt_marker_does_not_stop_the_start(self):
+        self.take("a.flac", b"one")
+        self.new.mkdir(parents=True)
+        (self.new.parent / seed.MARKER).write_bytes(b"\xff\xfe\x80")
+        code, _ = self.run_seed()
+        self.assertEqual(0, code)
+        self.assertEqual(b"one", (self.new / "a.flac").read_bytes())
+
+    def test_an_error_that_is_not_an_oserror_still_exits_0(self):
+        self.take("a.flac", b"one")
+        def broken(_path):
+            raise RuntimeError("boom")
+        code, log = self.run_seed(free=broken)
+        self.assertEqual(0, code)
+        self.assertTrue(any("boom" in line for line in log), log)
+
+    def test_main_exits_0_when_there_is_no_home(self):
+        from unittest import mock
+        with mock.patch.object(seed.Path, "home", side_effect=RuntimeError("no home")):
+            self.assertEqual(0, seed.main())
+
+    def test_undecodable_file_names_do_not_break_a_strict_log(self):
+        self.old.mkdir(parents=True)
+        (self.old / os.fsdecode(b"\xff.flac")).write_bytes(b"one")
+        (self.old / os.fsdecode(b"\xfe.flac")).symlink_to(self.home / "nowhere")
+        log = []
+        code = seed.seed(self.home, {}, lambda line: log.append(line.encode("utf-8")), PLENTY)
+        self.assertEqual(0, code)
+        self.assertEqual(b"one", (self.new / os.fsdecode(b"\xff.flac")).read_bytes())
+        self.assertTrue((self.new.parent / seed.MARKER).exists())
+
+    def test_copies_and_the_marker_are_synced_to_disk(self):
+        from unittest import mock
+        self.take("a.flac", b"one")
+        with mock.patch.object(seed.os, "fsync") as fsync:
+            self.run_seed()
+        self.assertGreaterEqual(fsync.call_count, 2)
+
+    def test_names_that_collide_overwrite_nothing(self):
+        self.take("a.flac", b"from the checkout")
+        self.take("a (checkout).flac", b"checkout sibling")
+        self.new.mkdir(parents=True)
+        (self.new / "a.flac").write_bytes(b"newer take")
+        self.run_seed()
+        found = {p.read_bytes() for p in self.new.iterdir() if not p.name.startswith(".")}
+        self.assertEqual({b"newer take", b"from the checkout", b"checkout sibling"}, found)
+        self.assertEqual(b"newer take", (self.new / "a.flac").read_bytes())
+        self.assertEqual(3, len([p for p in self.new.iterdir() if p.suffix == ".flac"]))
+
+
 if __name__ == "__main__":
     unittest.main()

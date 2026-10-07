@@ -1,5 +1,7 @@
 #pragma once
 
+#include "MeterBallistics.h"
+
 #include <map>
 #include <string>
 #include <vector>
@@ -40,6 +42,11 @@ namespace osctruth
 	};
 
 	Endpoints endpointsFrom (const std::vector<Listener>& listeners, const std::map<std::string, std::string>& hosts);
+
+	// The meter ballistics from the truth's "meters" block, given as its
+	// numbers by name (attack_ms, release_db_per_second, peak_hold_seconds).
+	// A missing or unusable number keeps its default (MeterParameters).
+	MeterParameters meterParametersFrom (const std::map<std::string, double>& meters);
 
 	// $A3_OSC_TRUTH if set, else the installed file.
 	std::string truthPath();

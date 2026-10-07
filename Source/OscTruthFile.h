@@ -16,6 +16,10 @@ namespace osctruth
 	// A missing one stays empty, with `error` naming it.
 	remote::Words readRemoteWords (const std::string& path, std::string& error);
 
+	// The meter ballistics of the truth's "meters" block; the defaults when
+	// the file or the block is missing (`error` set only for the file).
+	MeterParameters readMeterParameters (const std::string& path, std::string& error);
+
 	// The truth StemDeck reads (spec truth-from-core, step 3): $A3_OSC_TRUTH,
 	// else what Core last served (~/.cache/a3/a3-osc.json) if it reads as a
 	// truth, else the package's file.

@@ -78,7 +78,11 @@ DeckPanel::DeckPanel (StemDeckPlayer& p, StemThumbnails& thumbnails, int index)
 	vinylButton.setTooltip ("Vinyl mode: the controller's jog platter scratches");
 	vinylButton.onClick = [this] { jog.setVinylMode (vinylButton.getToggleState()); };
 
-	for (auto* b : { &cueButton, &playButton, &loopOffButton, &repeatButton, &syncButton, &masterButton, &rangeButton, &vinylButton, &gridButton })
+	previousButton.onClick = [this] { if (onStep) onStep (-1); };
+	nextButton.onClick = [this] { if (onStep) onStep (1); };
+	setStepsAvailable (false, false, {}, {});
+
+	for (auto* b : { &previousButton, &nextButton, &cueButton, &playButton, &loopOffButton, &repeatButton, &syncButton, &masterButton, &rangeButton, &vinylButton, &gridButton })
 	{
 		b->setMouseClickGrabsKeyboardFocus (false); // keyboard shortcuts stay with the main window
 		addAndMakeVisible (b);
@@ -157,6 +161,14 @@ void DeckPanel::setTempoFromSync (double rate)
 
 	const juce::ScopedValueSetter<bool> svs (settingTempoFromSync, true);
 	tempo.setValue (rate, juce::sendNotificationSync);
+}
+
+void DeckPanel::setStepsAvailable (bool previous, bool next, const juce::String& previousTip, const juce::String& nextTip)
+{
+	previousButton.setEnabled (previous);
+	nextButton.setEnabled (next);
+	previousButton.setTooltip (previousTip);
+	nextButton.setTooltip (nextTip);
 }
 
 void DeckPanel::setGridMode (bool on)
@@ -335,7 +347,14 @@ void DeckPanel::resized()
 	remainingLabel.setBounds (times);
 	area.removeFromTop (4);
 
+	// Track search either side of CUE | PLAY, as on a CDJ: an eighth of the
+	// row each, so the keys played in time keep most of it.
 	auto transport = area.removeFromBottom (44);
+	const auto stepWidth = transport.getWidth() / 8;
+	previousButton.setBounds (transport.removeFromLeft (stepWidth));
+	nextButton.setBounds (transport.removeFromRight (stepWidth));
+	transport.removeFromLeft (gap);
+	transport.removeFromRight (gap);
 	cueButton.setBounds (transport.removeFromLeft ((transport.getWidth() - gap) / 2));
 	transport.removeFromLeft (gap);
 	playButton.setBounds (transport);

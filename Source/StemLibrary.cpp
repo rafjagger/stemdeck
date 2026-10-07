@@ -2,6 +2,7 @@
 #include "Theme.h"
 #include "Waveforms.h"
 #include "StemJob.h"
+#include "FolderStep.h"
 
 StemLibrary::StemLibrary (juce::AudioFormatManager& fm) : formatManager (fm)
 {
@@ -78,44 +79,73 @@ const StemSet* StemLibrary::findSet (const juce::String& setId) const
 	return nullptr;
 }
 
+// One sort for all sets, in the table's order; the table shows those the
+// search matches, and a deck's Next / Prev walks them all (FolderStep.h).
 void StemLibrary::applyFilter()
 {
+	orderedSets.clear();
+	for (const auto& set : allSets)
+		orderedSets.push_back (&set);
+	std::stable_sort (orderedSets.begin(), orderedSets.end(), [this] (const StemSet* a, const StemSet* b) { return listsBefore (*a, *b); });
+
 	const auto words = juce::StringArray::fromTokens (searchBox.getText(), true);
 	visibleSets.clear();
 
-	for (const auto& set : allSets)
-		if (std::all_of (words.begin(), words.end(), [&set] (const juce::String& w)
+	for (const auto* set : orderedSets)
+		if (std::all_of (words.begin(), words.end(), [set] (const juce::String& w)
 			{
-				return set.name.containsIgnoreCase (w) || set.artist.containsIgnoreCase (w) || set.album.containsIgnoreCase (w);
+				return set->name.containsIgnoreCase (w) || set->artist.containsIgnoreCase (w) || set->album.containsIgnoreCase (w);
 			}))
-			visibleSets.push_back (&set);
-
-	std::stable_sort (visibleSets.begin(), visibleSets.end(), [this] (const StemSet* a, const StemSet* b)
-	{
-		int order = 0;
-
-		// Artist and album sort down through the levels below them, so an
-		// artist's albums and an album's sets stay together and in order.
-		switch (sortColumn)
-		{
-			case lengthColumn: order = a->lengthSeconds < b->lengthSeconds ? -1 : (a->lengthSeconds > b->lengthSeconds ? 1 : 0); break;
-			case bpmColumn:    order = bpmOf (*a) < bpmOf (*b) ? -1 : (bpmOf (*a) > bpmOf (*b) ? 1 : 0); break;
-			case artistColumn: order = a->artist.compareNatural (b->artist);
-							   if (order == 0) order = a->album.compareNatural (b->album);
-							   if (order == 0) order = a->name.compareNatural (b->name);
-							   break;
-			case albumColumn:  order = a->album.compareNatural (b->album);
-							   if (order == 0) order = a->name.compareNatural (b->name);
-							   break;
-			default:           order = a->name.compareNatural (b->name); break;
-		}
-
-		return sortForwards ? order < 0 : order > 0;
-	});
+			visibleSets.push_back (set);
 
 	table.updateContent();
 	table.selectRow (0);
 	table.repaint();
+
+	if (onOrderChanged)
+		onOrderChanged();
+}
+
+bool StemLibrary::listsBefore (const StemSet& a, const StemSet& b) const
+{
+	int order = 0;
+
+	// Artist and album sort down through the levels below them, so an
+	// artist's albums and an album's sets stay together and in order.
+	switch (sortColumn)
+	{
+		case lengthColumn: order = a.lengthSeconds < b.lengthSeconds ? -1 : (a.lengthSeconds > b.lengthSeconds ? 1 : 0); break;
+		case bpmColumn:    order = bpmOf (a) < bpmOf (b) ? -1 : (bpmOf (a) > bpmOf (b) ? 1 : 0); break;
+		case artistColumn: order = a.artist.compareNatural (b.artist);
+						   if (order == 0) order = a.album.compareNatural (b.album);
+						   if (order == 0) order = a.name.compareNatural (b.name);
+						   break;
+		case albumColumn:  order = a.album.compareNatural (b.album);
+						   if (order == 0) order = a.name.compareNatural (b.name);
+						   break;
+		default:           order = a.name.compareNatural (b.name); break;
+	}
+
+	return sortForwards ? order < 0 : order > 0;
+}
+
+const StemSet* StemLibrary::neighbourInFolder (const juce::String& setId, int direction) const
+{
+	std::vector<std::string> folders;
+	folders.reserve (orderedSets.size());
+	std::optional<size_t> current;
+
+	for (const auto* set : orderedSets)
+	{
+		if (idFor (*set) == setId)
+			current = folders.size();
+		folders.push_back (set->files[0].getParentDirectory().getFullPathName().toStdString());
+	}
+
+	if (! current)
+		return nullptr;
+	const auto found = folderstep::neighbour (folders, *current, direction);
+	return found ? orderedSets[*found] : nullptr;
 }
 
 double StemLibrary::bpmOf (const StemSet& set) const

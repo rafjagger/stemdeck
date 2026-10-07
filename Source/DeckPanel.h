@@ -44,6 +44,11 @@ public:
 
 	std::function<void (bool enabled)> onSyncToggled;
 
+	// Previous / next track in the loaded track's folder (MainComponent says
+	// which way there is one, and what a press does under Auto DJ).
+	std::function<void (int direction)> onStep;
+	void setStepsAvailable (bool previous, bool next, const juce::String& previousTip, const juce::String& nextTip);
+
 	// MASTER, like a CDJ's: this deck's beat goes out to the Pioneer network.
 	std::function<void()> onMasterPressed;
 	void setMaster (bool isMaster) { masterButton.setToggleState (isMaster, juce::dontSendNotification); }
@@ -82,6 +87,7 @@ private:
 	OverviewWaveform overview;
 	JogWheel jog;
 
+	juce::TextButton previousButton { juce::String::fromUTF8 ("|\xe2\x97\x80") }, nextButton { juce::String::fromUTF8 ("\xe2\x96\xb6|") };
 	juce::TextButton cueButton { "CUE" }, playButton { "PLAY" }, loopOffButton { "LOOP OFF" }, repeatButton { "REPEAT" };
 	juce::TextButton syncButton { "SYNC" }, masterButton { "MASTER" }, rangeButton, vinylButton { "VINYL" };
 	juce::TextButton gridButton { "GRID" };

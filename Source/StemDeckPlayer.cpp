@@ -294,13 +294,13 @@ void StemDeckPlayer::getNextAudioBlock (const juce::AudioSourceChannelInfo& info
 			squares += rms * rms * info.numSamples;
 		}
 
-		// The desk's meter, as the stem leaves on its bus: scaled rather than
-		// measured on the bus, which sums every stem switched to it.
-		deskLevels[(size_t) s].add (remote::sentToBus ({ peak, squares, 2 * info.numSamples }, deckGain.load()));
-
-		peak *= deckGain.load();   // the meter shows what the fader lets through
-		if (peak > stemPeak[(size_t) s].load())
-			stemPeak[(size_t) s] = peak;
+		// Both meters, the desk's and the strip's, as the stem leaves on its
+		// bus: scaled rather than measured on the bus, which sums every stem
+		// switched to it.
+		const auto sent = remote::sentToBus ({ peak, squares, 2 * info.numSamples }, deckGain.load());
+		deskLevels[(size_t) s].add (sent);
+		if (sent.peak > stemPeak[(size_t) s].load())
+			stemPeak[(size_t) s] = sent.peak;
 	}
 }
 

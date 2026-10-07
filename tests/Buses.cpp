@@ -66,3 +66,14 @@ TEST (Buses, TwoFullScaleDecksOnAuxStayBelowFullScale)
 	const auto measuredTwoTracks = std::pow (10.0f, 5.9f / 20.0f);
 	EXPECT_LT (measuredTwoTracks * buses::trim, 1.0f) << "the +5.9 dBFS measured 2026-10-04";
 }
+
+// What a stem is multiplied by on its way out of any bus: fader, then trim.
+// Both StemDeck's own strip meters and the desk's stem meters (/vu 41-48)
+// show the stem through it, so the screen and the desk read alike
+// (decided 2026-10-07).
+TEST (Buses, AStemLeavesThroughFaderAndTrim)
+{
+	EXPECT_FLOAT_EQ (buses::sendGain (1.0f), 0.5f) << "top of the fader: the trim alone";
+	EXPECT_NEAR (20.0f * std::log10 (buses::sendGain (std::pow (10.0f, -10.0f / 20.0f))), -16.02f, 0.01f);
+	EXPECT_FLOAT_EQ (buses::sendGain (0.0f), 0.0f) << "fader closed";
+}

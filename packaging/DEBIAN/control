@@ -1,0 +1,16 @@
+Package: stemdeck
+Version: 0
+Architecture: amd64
+Maintainer: Rafjagger
+Section: sound
+Priority: optional
+Depends: ${shlibs:Depends}, jack-example-tools, xdotool, x11-xserver-utils, x11-utils, python3, onboard
+Recommends: i3
+Description: StemDeck, the stem player of the A3 system
+ Four decks of stems over JACK, a FLAC recorder on the JACK inputs
+ rec_L/rec_R, and the A3 beat clock. Runs as the systemd user unit
+ stemdeck.service on i3 workspace 2.
+ .
+ User data stays when the package is removed or purged: the settings in
+ ~/.config/StemDeck, the recordings in ~/.local/share/stemdeck, and the
+ stem library wherever stemFolder names it.

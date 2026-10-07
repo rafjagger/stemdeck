@@ -1,0 +1,10 @@
+#!/bin/sh
+# purge: the unit disabled for every user, nothing else. User data stays
+# (settings, recordings, the library): it is the user's, not the package's.
+set -e
+
+if [ "$1" = "purge" ] && command -v systemctl >/dev/null 2>&1; then
+	systemctl --global disable stemdeck.service || true
+fi
+
+exit 0

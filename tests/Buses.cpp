@@ -234,3 +234,27 @@ TEST (Buses, EveryMovedStemIsReported)
 	EXPECT_EQ (buses::toReport (before, after, 6), (std::vector<int> { 0, 6 }));
 	EXPECT_EQ (buses::toReport (before, before, 2), (std::vector<int> { 2 }));
 }
+
+// Core's own sequence when the desk moves stem S from channel 2 to channel 1,
+// where stem X was: S bus 1 on, S AUX off, X bus 1 off, then S bus 2 off.
+// S moves at the first switch and is never on AUX or on two buses on the way;
+// the late offs change nothing.
+TEST (Buses, CoresMoveFromChannelTwoToOneNeverPassesAux)
+{
+	const int s = buses::stemIndex (0, 2), x = buses::stemIndex (1, 1);
+	auto masks = buses::applySwitch (allOnAux(), s, 1, true);
+	masks = buses::applySwitch (masks, x, 0, true);
+
+	masks = buses::applySwitch (masks, s, 0, true);
+	EXPECT_EQ (masks[(size_t) s], onBus (0));
+	EXPECT_EQ (masks[(size_t) x], onAux);
+	expectTheRule (masks);
+
+	const auto settled = masks;
+	masks = buses::applySwitch (masks, s, buses::aux, false);
+	EXPECT_EQ (masks, settled);
+	masks = buses::applySwitch (masks, x, 0, false);
+	EXPECT_EQ (masks, settled) << "X already left bus 1";
+	masks = buses::applySwitch (masks, s, 1, false);
+	EXPECT_EQ (masks, settled) << "S is on bus 1, not bus 2: the off does not send it to AUX";
+}

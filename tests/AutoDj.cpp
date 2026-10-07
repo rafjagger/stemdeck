@@ -14,6 +14,7 @@ namespace
 		std::array<double, 2> faders { 0.0, 0.0 };
 		std::array<bool, 2> synced {};
 		int loads = 0;
+		AutoDj::Pick lastPick = AutoDj::Pick::random;
 		double trackLength = 240.0, bpm = 120.0;   // 16 bars at 120 = 32 s
 
 		AutoDj::Commands tick (double dt = 0.05)
@@ -30,6 +31,7 @@ namespace
 			if (c.load >= 0)
 			{
 				++loads;
+				lastPick = c.loadPick;
 				decks[(size_t) c.load] = { true, false, 0.0, trackLength, bpm, 0.5, 1.0 };
 			}
 			if (c.start >= 0)
@@ -142,7 +144,7 @@ TEST (AutoDj, WithoutAGridItCrossfadesUnsynced)
 	while (! rig.decks[1].playing && rig.decks[0].playing)
 		rig.tick();
 	EXPECT_FALSE (rig.synced[1]);
-	EXPECT_LE (rig.decks[0].length - rig.decks[0].position, AutoDj::noGridMixSeconds + 0.1);
+	EXPECT_LE (rig.decks[0].length - rig.decks[0].position, AutoDj::defaultNoGridMixSeconds + 0.1);
 }
 
 TEST (AutoDj, NothingIsLoadedOverALoop)
@@ -181,4 +183,175 @@ TEST (AutoDj, TheFadeIsEqualPower)
 	EXPECT_NEAR (AutoDj::fadeInDb (0.5), -3.0103, 1e-3);
 	EXPECT_NEAR (AutoDj::fadeOutDb (0.5), -3.0103, 1e-3);
 	EXPECT_DOUBLE_EQ (AutoDj::fadeOutDb (1.0), AutoDj::silentDb);
+}
+
+namespace
+{
+	// Plays from the start until the next track waits loaded on deck B.
+	void playUntilMidTrack (Rig& rig, double seconds = 60.0)
+	{
+		rig.dj.setEnabled (true);
+		rig.runFor (0.2);
+		rig.runFor (seconds);
+	}
+
+	void tickUntilBPlays (Rig& rig)
+	{
+		while (! rig.decks[1].playing && rig.decks[0].playing)
+			rig.tick();
+	}
+}
+
+TEST (AutoDj, TheMixLengthIsASetting)
+{
+	Rig rig;
+	rig.dj.setMixLength ({ 4, 10.0 });   // 4 bars at 120 = 8 s
+	rig.dj.setEnabled (true);
+	rig.runFor (0.2);
+	while (! rig.decks[1].playing && rig.decks[0].playing)
+		rig.tick();
+	ASSERT_TRUE (rig.decks[1].playing);
+	EXPECT_LE (rig.decks[0].length - rig.decks[0].position, 8.0 + 0.1) << "4 bars before the end";
+	EXPECT_GT (rig.decks[0].length - rig.decks[0].position, 8.0 - 2.1) << "not later than one bar";
+}
+
+TEST (AutoDj, TheNoGridMixLengthIsASetting)
+{
+	Rig rig;
+	rig.bpm = 0.0;
+	rig.dj.setMixLength ({ 16, 20.0 });
+	rig.dj.setEnabled (true);
+	rig.runFor (0.2);
+	while (! rig.decks[1].playing && rig.decks[0].playing)
+		rig.tick();
+	ASSERT_TRUE (rig.decks[1].playing);
+	EXPECT_NEAR (rig.decks[0].length - rig.decks[0].position, 20.0, 0.1);
+}
+
+TEST (AutoDj, ANewMixLengthAppliesToTheNextMixNotTheRunningOne)
+{
+	Rig rig;
+	rig.dj.setEnabled (true);
+	rig.runFor (0.2);
+	tickUntilBPlays (rig);
+	ASSERT_EQ (rig.dj.phase(), AutoDj::Phase::mixing);
+	rig.dj.setMixLength ({ 4, 10.0 });
+	rig.runFor (16.0);
+	EXPECT_EQ (rig.dj.phase(), AutoDj::Phase::mixing) << "the running mix keeps its 16 bars";
+	EXPECT_NEAR (rig.dj.mixProgress(), 0.5, 0.02);
+}
+
+TEST (AutoDj, AMixLengthOutOfRangeIsHeldToASaneOne)
+{
+	AutoDj dj;
+	dj.setMixLength ({ 0, -3.0 });
+	EXPECT_GE (dj.mixLength().bars, 1);
+	EXPECT_GT (dj.mixLength().noGridSeconds, 0.0);
+}
+
+TEST (AutoDj, NextDuringPlayLoadsTheNextTrackAndMixesOnTheNextDownbeat)
+{
+	Rig rig;
+	rig.dj.setMixLength ({ 8, 10.0 });   // 8 bars at 120 = 16 s
+	playUntilMidTrack (rig);
+	ASSERT_TRUE (rig.dj.canMixNow());
+	const auto loads = rig.loads;
+
+	EXPECT_TRUE (rig.dj.requestMixNow (AutoDj::Pick::next));
+	rig.tick();
+	EXPECT_EQ (rig.loads, loads + 1);
+	EXPECT_EQ (rig.lastPick, AutoDj::Pick::next) << "the next track, not a random one";
+	EXPECT_DOUBLE_EQ (rig.faders[1], AutoDj::silentDb);
+
+	const auto pressedAt = rig.decks[0].position;
+	tickUntilBPlays (rig);
+	ASSERT_TRUE (rig.decks[1].playing);
+	EXPECT_EQ (rig.dj.phase(), AutoDj::Phase::mixing);
+	EXPECT_TRUE (rig.synced[1]) << "beat-matched as its own mix";
+	EXPECT_LE (rig.decks[0].position - pressedAt, 2.0 + 0.1) << "within one bar of the press";
+	EXPECT_LT (std::fmod (rig.decks[0].position - 0.5, 2.0), 0.1) << "on the 1 of a bar";
+	EXPECT_NEAR (rig.decks[1].position, 0.5, 0.06);
+
+	rig.runFor (8.0);
+	EXPECT_NEAR (rig.dj.mixProgress(), 0.5, 0.02) << "over the configured 8 bars";
+	rig.runFor (8.2);
+	EXPECT_FALSE (rig.decks[0].playing);
+	EXPECT_EQ (rig.dj.playingDeck(), 1);
+	EXPECT_EQ (rig.dj.phase(), AutoDj::Phase::playing);
+}
+
+TEST (AutoDj, PreviousDuringPlayAsksForThePreviousTrack)
+{
+	Rig rig;
+	playUntilMidTrack (rig);
+	EXPECT_TRUE (rig.dj.requestMixNow (AutoDj::Pick::previous));
+	rig.tick();
+	EXPECT_EQ (rig.lastPick, AutoDj::Pick::previous);
+}
+
+TEST (AutoDj, NextReplacesATrackAlreadyWaiting)
+{
+	Rig rig;
+	rig.dj.setEnabled (true);
+	rig.runFor (0.2);
+	rig.runFor (240.0 - 40.0);   // the random next one is loaded on B
+	ASSERT_EQ (rig.dj.phase(), AutoDj::Phase::ready);
+	const auto loads = rig.loads;
+	EXPECT_TRUE (rig.dj.requestMixNow (AutoDj::Pick::next));
+	rig.tick();
+	EXPECT_EQ (rig.loads, loads + 1);
+	EXPECT_EQ (rig.lastPick, AutoDj::Pick::next);
+}
+
+TEST (AutoDj, NextWithoutAGridMixesNowOverTheSeconds)
+{
+	Rig rig;
+	rig.bpm = 0.0;
+	rig.dj.setMixLength ({ 16, 6.0 });
+	playUntilMidTrack (rig);
+	const auto pressedAt = rig.decks[0].position;
+	ASSERT_TRUE (rig.dj.requestMixNow (AutoDj::Pick::next));
+	tickUntilBPlays (rig);
+	ASSERT_TRUE (rig.decks[1].playing);
+	EXPECT_LE (rig.decks[0].position - pressedAt, 0.3) << "no downbeat to wait for";
+	EXPECT_FALSE (rig.synced[1]);
+	rig.runFor (3.0);
+	EXPECT_NEAR (rig.dj.mixProgress(), 0.5, 0.03);
+	rig.runFor (3.2);
+	EXPECT_EQ (rig.dj.playingDeck(), 1);
+}
+
+TEST (AutoDj, APressDuringAMixIsIgnored)
+{
+	Rig rig;
+	rig.dj.setEnabled (true);
+	rig.runFor (0.2);
+	tickUntilBPlays (rig);
+	ASSERT_EQ (rig.dj.phase(), AutoDj::Phase::mixing);
+	EXPECT_FALSE (rig.dj.canMixNow());
+	const auto loads = rig.loads;
+	EXPECT_FALSE (rig.dj.requestMixNow (AutoDj::Pick::next));
+	rig.runFor (1.0);
+	EXPECT_EQ (rig.loads, loads);
+	EXPECT_EQ (rig.dj.phase(), AutoDj::Phase::mixing);
+}
+
+TEST (AutoDj, NoMixNowWhileOff)
+{
+	AutoDj dj;
+	EXPECT_FALSE (dj.canMixNow());
+	EXPECT_FALSE (dj.requestMixNow (AutoDj::Pick::next));
+}
+
+TEST (AutoDj, AMixNowStillWaitsForTheDjsLoop)
+{
+	Rig rig;
+	playUntilMidTrack (rig);
+	rig.decks[0].looping = true;
+	ASSERT_TRUE (rig.dj.requestMixNow (AutoDj::Pick::next));
+	rig.runFor (5.0);
+	EXPECT_FALSE (rig.decks[1].playing) << "no mix while A loops";
+	rig.decks[0].looping = false;
+	rig.runFor (2.2);
+	EXPECT_TRUE (rig.decks[1].playing) << "loop off: the mix starts at the next downbeat";
 }

@@ -27,13 +27,54 @@ void AutoDj::setEnabled (bool on)
 	state = on ? Phase::starting : Phase::off;
 	lastBarPosition = -1.0;
 	progress = 0.0;
+	request.reset();
+	mixNow = false;
 }
 
-double AutoDj::mixLength (const DeckView& deck) const
+void AutoDj::setMixLength (MixLength length)
+{
+	setting.bars = std::max (1, length.bars);
+	setting.noGridSeconds = length.noGridSeconds > 0.0 ? length.noGridSeconds : defaultNoGridMixSeconds;
+}
+
+double AutoDj::mixSeconds (const DeckView& deck, MixLength length)
 {
 	if (deck.gridBpm <= 0.0)
-		return noGridMixSeconds * deck.rate;
-	return mixBars * 4 * 60.0 / deck.gridBpm;   // track seconds: the grid's own beats
+		return length.noGridSeconds * deck.rate;
+	return length.bars * 4 * 60.0 / deck.gridBpm;   // track seconds: the grid's own beats
+}
+
+bool AutoDj::canMixNow() const
+{
+	if (! enabled || otherLoops)
+		return false;
+	return state == Phase::playing || state == Phase::preparing || (state == Phase::ready && progress >= 0.0);
+}
+
+bool AutoDj::requestMixNow (Pick target)
+{
+	if (! canMixNow())
+		return false;
+	request = target;
+	return true;
+}
+
+// A Next / Prev pressed since the last tick: that track onto the other deck,
+// over whatever waited there, and the mix at the next downbeat.
+bool AutoDj::takeRequest (Commands& out)
+{
+	const auto target = request;
+	request.reset();
+	if (! target || ! canMixNow())
+		return false;
+
+	const auto other = 1 - current;
+	out.load = other;
+	out.loadPick = *target;
+	out.faderDb[(size_t) other] = silentDb;
+	state = Phase::preparing;
+	mixNow = true;
+	return true;
 }
 
 AutoDj::Commands AutoDj::update (const std::array<DeckView, 2>& decks)
@@ -43,6 +84,9 @@ AutoDj::Commands AutoDj::update (const std::array<DeckView, 2>& decks)
 		return out;
 
 	const auto other = 1 - current;
+	otherLoops = decks[(size_t) other].looping;
+	if (takeRequest (out))
+		return out;
 
 	switch (state)
 	{
@@ -94,9 +138,10 @@ AutoDj::Commands AutoDj::update (const std::array<DeckView, 2>& decks)
 				break;
 			}
 
-			const auto length = mixLength (playing);
-			if (playing.looping || playing.length - playing.position > length)
-				break;   // not yet -- or the DJ loops: the mix waits for the loop to end
+			if (playing.looping)
+				break;   // the DJ loops: the mix waits for the loop to end
+			if (! mixNow && playing.length - playing.position > mixSeconds (playing, setting))
+				break;   // not yet
 
 			bool onDownbeat = playing.gridBpm <= 0.0;
 			if (! onDownbeat)
@@ -114,6 +159,7 @@ AutoDj::Commands AutoDj::update (const std::array<DeckView, 2>& decks)
 				out.syncOn = other;
 			out.faderDb[(size_t) other] = silentDb;
 			mixStart = playing.position;
+			running = setting;
 			progress = 0.0;
 			state = Phase::mixing;
 			break;
@@ -126,7 +172,7 @@ AutoDj::Commands AutoDj::update (const std::array<DeckView, 2>& decks)
 				break;
 			if (decks[(size_t) other].looping)
 				break;   // a loop there is the DJ's: not loaded over
-			if (remaining (playing) <= mixLength (playing) / std::max (0.01, playing.rate) + loadAheadSeconds || ! playing.playing)
+			if (remaining (playing) <= mixSeconds (playing, setting) / std::max (0.01, playing.rate) + loadAheadSeconds || ! playing.playing)
 			{
 				out.load = other;
 				out.faderDb[(size_t) other] = silentDb;
@@ -146,7 +192,7 @@ AutoDj::Commands AutoDj::update (const std::array<DeckView, 2>& decks)
 		case Phase::mixing:
 		{
 			const auto& outgoing = decks[(size_t) current];
-			progress = outgoing.playing ? (outgoing.position - mixStart) / mixLength (outgoing) : 1.0;
+			progress = outgoing.playing ? (outgoing.position - mixStart) / mixSeconds (outgoing, running) : 1.0;
 
 			if (progress < 1.0)
 			{
@@ -160,6 +206,7 @@ AutoDj::Commands AutoDj::update (const std::array<DeckView, 2>& decks)
 			out.syncOff = other;
 			current = other;
 			progress = 0.0;
+			mixNow = false;
 			state = Phase::playing;
 			break;
 		}

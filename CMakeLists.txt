@@ -77,6 +77,7 @@ target_sources(StemDeck PRIVATE
     Source/FollowLeader.cpp
     Source/ProLinkReceiver.cpp
     Source/MasterDeck.cpp
+    Source/SyncLabels.cpp
     Source/ProLinkSender.cpp
     Source/BeatScheduler.cpp
     Source/LibraryPath.cpp

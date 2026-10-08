@@ -3,6 +3,7 @@
 #include "StemJob.h"
 #include "GridEdit.h"
 #include "OscTruthFile.h"
+#include "SyncLabels.h"
 
 #include <cstdlib>
 #include <iostream>
@@ -152,7 +153,7 @@ MainComponent::MainComponent()
 	pioStatus.setColour (juce::Label::textColourId, Theme::textDim);
 	addAndMakeVisible (pioStatus);
 	for (int player = 1; player <= 4; ++player)
-		pioPlayer.addItem ("CDJ " + juce::String (player), player);
+		pioPlayer.addItem (syncLabels::player (player), player);
 	pioPlayer.setTooltip ("No master info: the player to follow");
 	pioPlayer.onChange = [this]
 	{
@@ -408,7 +409,7 @@ void MainComponent::setSyncSource (bool pio)
 	pioSynced = {};
 
 	pioSource = pio;
-	syncSourceButton.setButtonText (pio ? "SYNC: PIO" : "SYNC: DECK");
+	syncSourceButton.setButtonText (syncLabels::sourceButton (pio));
 	appProperties.getUserSettings()->setValue ("syncSource", pio ? "pio" : "deck");
 
 	updateNetwork();
@@ -463,14 +464,14 @@ void MainComponent::updatePioneerStatus()
 	}
 
 	const auto sending = masterDeck >= 0 && pioSender.isRunning();
-	const auto masterText = sending ? juce::String ("PIO master: ") + (masterDeck == 0 ? "A" : "B") : juce::String();
+	const auto masterText = sending ? juce::String (syncLabels::sendingMaster (masterDeck)) : juce::String();
 
 	pioStatus.setVisible (pioSource || masterDeck >= 0);
 	if (! pioSource)
 	{
 		pioPlayer.setVisible (false);
 		const auto error = proLink.error();
-		pioStatus.setText (! error.empty() ? "PIO: " + juce::String (error) : masterText, juce::dontSendNotification);
+		pioStatus.setText (! error.empty() ? juce::String (syncLabels::error (error)) : masterText, juce::dontSendNotification);
 		return;
 	}
 
@@ -482,15 +483,16 @@ void MainComponent::updatePioneerStatus()
 		pioPlayer.setSelectedId (pioClock.chosenPlayer(), juce::dontSendNotification);
 
 	juce::String text;
+	std::string status;
 	if (! error.empty())
-		text = "PIO: " + juce::String (error);
+		status = syncLabels::error (error);
 	else if (pioClock.bpm() <= 0.0)
-		text = juce::String::fromUTF8 ("PIO \xe2\x80\x93");
+		status = syncLabels::nothingHeard();
 	else if (noMasterInfo)
-		text = juce::String::fromUTF8 ("PIO: no master \xc2\xb7 follow");
+		status = syncLabels::noMaster();
 	else
-		text = "PIO " + juce::String (pioClock.bpm(), 1) + juce::String::fromUTF8 (" \xc2\xb7 ")
-			 + (pioClock.isLive (now) ? "CDJ " + juce::String (pioClock.leader (now)) : juce::String ("held"));
+		status = syncLabels::following (pioClock.bpm(), pioClock.isLive (now) ? pioClock.leader (now) : 0);
+	text = juce::String::fromUTF8 (status.c_str());
 
 	if (sending)
 		text = masterText + juce::String::fromUTF8 (" \xc2\xb7 ") + text;

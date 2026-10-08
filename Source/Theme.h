@@ -60,6 +60,9 @@ public:
 	// Smaller where a label would not fit its button: on the rig's 768 px
 	// screen a deck's keys stand two to a row and MASTER came out "MAST...".
 	juce::Font getTextButtonFont (juce::TextButton&, int buttonHeight) override;
+	// JUCE's own text indents leave a narrow key (a mixer's M, a deck's track
+	// search) no room and draw "..."; ours are a share of the key.
+	void drawButtonText (juce::Graphics&, juce::TextButton&, bool isHighlighted, bool isDown) override;
 
 	// A vertical fader's cap and slot, as shares of the fader: the cap's height
 	// of its height, the slot's width of the cap's. JUCE keeps half a cap free

@@ -222,7 +222,9 @@ namespace surface
 		area.removeFromTop (2 * gap);
 		strip.meterZone = deckIndex == 0 ? area.removeFromRight (meterReserve) : area.removeFromLeft (meterReserve);
 		area.removeFromBottom (meterCaptionHeight (strip.meterZone.h));
-		strip.fader = area;
+		// Half the strip wide, against the meters: the cap stays next to them.
+		const auto faderWidth = std::min (area.w, local.w / 2);
+		strip.fader = deckIndex == 0 ? area.removeFromRight (faderWidth) : area.removeFromLeft (faderWidth);
 		return strip;
 	}
 

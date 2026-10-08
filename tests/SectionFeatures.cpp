@@ -1,0 +1,93 @@
+#include <gtest/gtest.h>
+
+#include "Sections.h"
+#include "SyntheticStems.h"
+
+TEST (SectionFeatures, AttacksAreCounted)
+{
+	const auto features = synthetic::featuresOf (synthetic::fromScript ("qqqqssss"));
+	const auto bars = sections::barLevels (features, synthetic::bpm, synthetic::firstBeat, {});
+	ASSERT_EQ (bars.size(), 8u);
+	EXPECT_NEAR (bars[1].drumOnsetsPerBeat, 1.0f, 0.25f) << "a snare on every beat";
+	EXPECT_NEAR (bars[6].drumOnsetsPerBeat, 4.0f, 0.5f) << "a snare on every sixteenth";
+}
+
+TEST (SectionFeatures, TheSameAnswerWhateverTheBlockSize)
+{
+	const auto stems = synthetic::fromScript ("FFFFqqss");
+	const auto a = synthetic::featuresOf (stems, 4096);
+	const auto b = synthetic::featuresOf (stems, 37);
+	ASSERT_EQ (a.frames.size(), b.frames.size());
+	for (size_t f = 0; f < a.frames.size(); ++f)
+		EXPECT_EQ (a.frames[f].onsets, b.frames[f].onsets) << "frame " << f;
+}
+
+TEST (SectionFeatures, BarsCountFromTheDownbeat)
+{
+	// Nine frames of a beat; the downbeat on frame 1: frame 0 is a pickup.
+	sections::Features features;
+	features.hopSeconds = 0.5;
+	for (int f = 0; f < 9; ++f)
+	{
+		sections::Frame frame;
+		frame.rms[0] = (float) f;
+		features.frames.push_back (frame);
+	}
+
+	const auto bars = sections::barLevels (features, 120.0, 0.5, {});
+	ASSERT_EQ (bars.size(), 2u);
+	EXPECT_FLOAT_EQ (bars[0].drums, 2.5f) << "frames 1-4";
+	EXPECT_FLOAT_EQ (bars[1].drums, 6.5f) << "frames 5-8";
+
+	const auto oneLater = sections::barLevels (features, 120.0, 1.0, {});
+	EXPECT_FLOAT_EQ (oneLater[0].drums, 3.5f) << "the one a beat later (1>): frames 2-5";
+}
+
+TEST (SectionFeatures, NoGridNoBars)
+{
+	EXPECT_TRUE (sections::barLevels (synthetic::featuresOf (synthetic::fromScript ("FF")), 0.0, 0.0, {}).empty());
+}
+
+TEST (SectionFeatures, TheCacheTextComesBack)
+{
+	const auto features = synthetic::featuresOf (synthetic::fromScript ("Fq"));
+	const auto back = sections::decode (sections::encode (features));
+	ASSERT_TRUE (back.has_value());
+	EXPECT_DOUBLE_EQ (back->startSeconds, features.startSeconds);
+	EXPECT_DOUBLE_EQ (back->hopSeconds, features.hopSeconds);
+	ASSERT_EQ (back->frames.size(), features.frames.size());
+	for (size_t f = 0; f < features.frames.size(); ++f)
+	{
+		for (size_t s = 0; s < 4; ++s)
+			EXPECT_NEAR (back->frames[f].rms[s], features.frames[f].rms[s], 1e-6f);
+		EXPECT_EQ (back->frames[f].onsets, features.frames[f].onsets);
+	}
+}
+
+TEST (SectionFeatures, ACacheFileThatIsNotOneIsNothing)
+{
+	EXPECT_FALSE (sections::decode ("").has_value());
+	EXPECT_FALSE (sections::decode ("a3-sections 2 0 0.5 0\n").has_value()) << "another version";
+	EXPECT_FALSE (sections::decode ("a3-sections 1 0 0.5 3\n1 2 3\n").has_value()) << "cut short";
+	EXPECT_FALSE (sections::decode ("<ANALYSIS/>").has_value());
+}
+
+// Review Focus 3: sets whose stems are not in the stem creator's order.
+TEST (SectionFeatures, TheStemsByNameElseByOrder)
+{
+	const auto demucs = sections::rolesFor ({ "drums", "bass", "other", "vocals" });
+	EXPECT_EQ (demucs.drums, 0);
+	EXPECT_EQ (demucs.bass, 1);
+
+	const auto numbered = sections::rolesFor ({ "001", "002", "003", "004" });
+	EXPECT_EQ (numbered.drums, 0);
+	EXPECT_EQ (numbered.bass, 1);
+
+	const auto named = sections::rolesFor ({ "DUB", "KICK", "PADS", "PERC" });
+	EXPECT_EQ (named.drums, 1) << "KICK";
+	EXPECT_EQ (named.bass, 0) << "the order's bass is taken: the next free stem";
+
+	const auto shuffled = sections::rolesFor ({ "Vocals", "Bass", "Drums", "Other" });
+	EXPECT_EQ (shuffled.drums, 2);
+	EXPECT_EQ (shuffled.bass, 1);
+}

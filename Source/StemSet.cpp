@@ -55,7 +55,8 @@ std::vector<StemSet> StemSet::scanFolder (const juce::File& folder, juce::AudioF
 		// Straight in the library folder JUCE's relative path is ".", not "".
 		const auto setFolder = set.files[0].getParentDirectory();
 		const auto relative = setFolder == folder ? juce::String() : setFolder.getRelativePathFrom (folder);
-		const auto place = libraryPlaceOf (relative.replaceCharacter ('\\', '/').toStdString());
+		set.folder = relative.replaceCharacter ('\\', '/');
+		const auto place = libraryPlaceOf (set.folder.toStdString());
 		set.artist = juce::String (place.artist);
 		set.album = juce::String (place.album);
 

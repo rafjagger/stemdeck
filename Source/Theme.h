@@ -64,6 +64,10 @@ public:
 	// search) no room and draw "..."; ours are a share of the key.
 	void drawButtonText (juce::Graphics&, juce::TextButton&, bool isHighlighted, bool isDown) override;
 
+	// The library's header: the column it is sorted by lit, with a clear arrow.
+	void drawTableHeaderColumn (juce::Graphics&, juce::TableHeaderComponent&, const juce::String& columnName, int columnId,
+								int width, int height, bool isMouseOver, bool isMouseDown, int columnFlags) override;
+
 	// A vertical fader's cap and slot, as shares of the fader: the cap's height
 	// of its height, the slot's width of the cap's. JUCE keeps half a cap free
 	// at each end of the travel (getSliderThumbRadius), so the cap reaches both.

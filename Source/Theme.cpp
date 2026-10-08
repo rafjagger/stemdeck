@@ -141,3 +141,31 @@ void DJLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& button,
 					 .withMultipliedAlpha (button.isEnabled() ? 1.0f : 0.5f));
 	g.drawFittedText (button.getButtonText(), button.getLocalBounds().reduced (textIndent (button)), juce::Justification::centred, 2);
 }
+
+void DJLookAndFeel::drawTableHeaderColumn (juce::Graphics& g, juce::TableHeaderComponent&, const juce::String& columnName, int,
+										   int width, int height, bool, bool isMouseDown, int columnFlags)
+{
+	const auto forwards = (columnFlags & juce::TableHeaderComponent::sortedForwards) != 0;
+	const auto sorted = forwards || (columnFlags & juce::TableHeaderComponent::sortedBackwards) != 0;
+	auto area = juce::Rectangle<int> (width, height);
+
+	if (sorted || isMouseDown)
+	{
+		g.setColour (Theme::loop.withAlpha (isMouseDown ? 0.45f : 0.25f));
+		g.fillRect (area.reduced (1));
+	}
+
+	area.reduce (juce::jmax (2, height / 8), 0);
+
+	if (sorted)
+	{
+		juce::Path arrow;
+		arrow.addTriangle (0.0f, 0.0f, 0.5f, forwards ? -0.8f : 0.8f, 1.0f, 0.0f);
+		g.setColour (Theme::loop);
+		g.fillPath (arrow, arrow.getTransformToScaleToFit (area.removeFromRight (height / 2).reduced (height / 8).toFloat(), true));
+	}
+
+	g.setColour (sorted ? Theme::text : Theme::textDim);
+	g.setFont (juce::FontOptions ((float) height * 0.4f, juce::Font::bold));
+	g.drawFittedText (columnName, area, juce::Justification::centredLeft, 1);
+}

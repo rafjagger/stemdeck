@@ -94,7 +94,8 @@ target_sources(StemDeck PRIVATE
     Source/DataPaths.cpp
     Source/Scs3d.cpp
     Source/Scs3dDevice.cpp
-    Source/SurfaceLayout.cpp)
+    Source/SurfaceLayout.cpp
+    Source/LibraryFolders.cpp)
 
 target_compile_definitions(StemDeck PRIVATE
     JUCE_WEB_BROWSER=0

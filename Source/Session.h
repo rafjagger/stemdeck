@@ -43,6 +43,8 @@ struct LibrarySession
 	bool sortForwards = true;
 	juce::String search;
 	juce::String selectedSetId;
+	juce::String folder;        // the chosen folder, relative to the library; "" all
+	bool showFolders = true;    // the folder tree beside the table
 };
 
 struct QueuedStemJob

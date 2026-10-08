@@ -4,18 +4,21 @@
 #include "StemSet.h"
 #include "TempoAnalysis.h"
 #include "Session.h"
+#include "TapFilter.h"
 
 #include <set>
 
 // Table of the complete stem sets found in a folder. Sets are loaded with the
 // deck buttons, by double-click (first deck that is not playing) or by
-// dragging a row onto a deck.
+// dragging a row onto a deck. Beside it, the library's folders as a tree: a
+// chosen folder shows its sets and those below it (LibraryFolders.h).
 class StemLibrary : public juce::Component,
 					public juce::FileDragAndDropTarget,
 					private juce::TableListBoxModel
 {
 public:
 	explicit StemLibrary (juce::AudioFormatManager& formatManager);
+	~StemLibrary() override;
 
 	void setFolder (const juce::File& folder);
 	const juce::File& getFolder() const { return folder; }
@@ -47,7 +50,7 @@ public:
 	// `played`; when every one was, from all of them again. Null: none shown.
 	const StemSet* randomVisibleSet (const std::set<juce::String>& played) const;
 
-	// Sort order, search and selection, for the session.
+	// Sort order, search, selection and the chosen folder, for the session.
 	void saveState (LibrarySession& state) const;
 	void restoreState (const LibrarySession& state);
 
@@ -71,6 +74,9 @@ public:
 private:
 	enum Columns { nameColumn = 1, bpmColumn, stemsColumn, lengthColumn, artistColumn, albumColumn };
 
+	class TapHeader;
+	class FolderItem;
+
 	double bpmOf (const StemSet& set) const;
 	bool listsBefore (const StemSet& a, const StemSet& b) const;   // the table's sort
 
@@ -84,6 +90,11 @@ private:
 
 	static juce::String idFor (const StemSet& set) { return set.files[0].getFullPathName(); }
 	void applyFilter();
+	void rebuildFolderTree();
+	void folderTapped (FolderItem& item);
+	void chooseFolder (const juce::String& relativeFolder);
+	void showFolders (bool show);
+	void updateFolderLabel();
 	void loadSelected (int deckIndex);
 	void chooseFilesForStems();
 	void setDropHighlight (bool on);
@@ -94,7 +105,8 @@ private:
 	juce::File folder;
 	std::vector<StemSet> allSets;
 	std::vector<const StemSet*> orderedSets;   // all of them, sorted
-	std::vector<const StemSet*> visibleSets;   // those the search matches
+	std::vector<const StemSet*> visibleSets;   // those in the chosen folder the search matches
+	juce::String chosenFolder;                 // relative to `folder`; "" all
 	int sortColumn = artistColumn;
 	bool sortForwards = true;
 
@@ -105,6 +117,10 @@ private:
 	bool dropHighlight = false;
 	juce::TextEditor searchBox;
 	juce::TableListBox table { "Sets", this };
+	juce::TextButton foldersButton { "FOLDERS" };
+	juce::TreeView folderTree;
+	std::unique_ptr<juce::TreeViewItem> rootFolderItem;
+	TapFilter folderTaps;
 	std::unique_ptr<juce::FileChooser> chooser;
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (StemLibrary)

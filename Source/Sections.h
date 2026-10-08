@@ -6,7 +6,7 @@
 #include <vector>
 
 // What a set does bar by bar -- groove, build, drop, breakdown -- read from
-// its stems (spec fpv-pilots, phase A). Pure: no JUCE, testable.
+// its stems. Pure: no JUCE, testable.
 //
 // Two steps, because they change at different times. The features are
 // measured once per set from the audio and cached: per beat of the analysed
@@ -66,7 +66,10 @@ namespace sections
 		std::vector<std::array<float, numStems>> frameOnsets;
 	};
 
-	// The cache file's text, and back. Nothing for text that is not one.
+	// The cache file's text, and back. Nothing for text that is not one, or
+	// that claims more frames than its body holds or than maxCachedFrames.
+	// A frame a beat: six hours at 500 BPM -- no set is longer.
+	constexpr size_t maxCachedFrames = 180000;
 	std::string encode (const Features& features);
 	std::optional<Features> decode (const std::string& text);
 

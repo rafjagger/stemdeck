@@ -9,7 +9,7 @@
 #include <utility>
 #include <vector>
 
-// The preview StemDeck sends A3 Motion (spec fpv-pilots, phase A): where the
+// The preview StemDeck sends A3 Motion: where the
 // audible deck is in its set's sections, and what comes next. Pure: no JUCE.
 namespace preview
 {

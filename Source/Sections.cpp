@@ -155,6 +155,13 @@ namespace sections
 			|| ! std::isfinite (features.hopSeconds) || ! std::isfinite (features.startSeconds))
 			return std::nullopt;
 
+		// Before allocating: every value takes at least a separator and a digit.
+		constexpr size_t minCharsPerFrame = 2 * 2 * numStems;
+		const auto bodyStart = in.tellg();   // -1 when the header ended the text
+		const auto bodyChars = bodyStart < 0 ? size_t { 0 } : text.size() - (size_t) bodyStart;
+		if (count > maxCachedFrames || bodyChars < count * minCharsPerFrame)
+			return std::nullopt;
+
 		features.frames.resize (count);
 
 		for (auto& frame : features.frames)

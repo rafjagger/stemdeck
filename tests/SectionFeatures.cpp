@@ -74,6 +74,30 @@ TEST (SectionFeatures, ACacheFileThatIsNotOneIsNothing)
 	EXPECT_FALSE (sections::decode ("<ANALYSIS/>").has_value());
 }
 
+// A corrupt cache file must not make the message thread allocate what it claims.
+TEST (SectionFeatures, ACountTheBodyCannotHoldIsNothing)
+{
+	std::optional<sections::Features> decoded;
+	EXPECT_NO_THROW (decoded = sections::decode ("a3-sections 1 0 0.5 1000000000000000\n1 2 3 4 5 6 7 8\n"));
+	EXPECT_FALSE (decoded.has_value());
+}
+
+TEST (SectionFeatures, AnEmptySetWithoutANewlineComesBack)
+{
+	const auto decoded = sections::decode ("a3-sections 1 0 0.5 0");
+	ASSERT_TRUE (decoded.has_value());
+	EXPECT_TRUE (decoded->frames.empty());
+}
+
+TEST (SectionFeatures, MoreFramesThanAnySetIsNothing)
+{
+	const auto frames = sections::maxCachedFrames + 1;
+	std::string text = "a3-sections 1 0 0.5 " + std::to_string (frames) + "\n";
+	for (size_t i = 0; i < frames; ++i)
+		text += "0 0 0 0 0 0 0 0\n";
+	EXPECT_FALSE (sections::decode (text).has_value());
+}
+
 // Sets whose stems are not in the stem creator's order must still find drums and bass.
 TEST (SectionFeatures, TheStemsByNameElseByOrder)
 {

@@ -202,6 +202,7 @@ TEST (SurfaceLayout, TheBandRunsPitchOverviewFaderMeters)
 		EXPECT_EQ (deck.bpm.y, deck.range.y);
 		EXPECT_EQ (deck.bpmInfo.bottom(), deck.range.bottom()) << "the original under the BPM";
 		EXPECT_GE (deck.bpm.w, 90) << "room for 129.00, big";
+		EXPECT_EQ (deck.bpmInfo.bottom(), b.faderFrame[d].bottom()) << "flush with the fader's frame at the foot";
 		EXPECT_GE (deck.overview.h, 120);
 		EXPECT_GE (deck.range.h, 30);
 		EXPECT_TRUE (b.faderFrame[d].contains (b.fader[d]));
@@ -210,6 +211,10 @@ TEST (SurfaceLayout, TheBandRunsPitchOverviewFaderMeters)
 		EXPECT_FALSE (b.faderFrame[d].intersects (deck.bpmInfo));
 		EXPECT_EQ (b.faderFrame[d].h, s.band.h);
 	}
+	EXPECT_EQ (b.deck[0].bpm.right(), b.faderFrame[0].x) << "A's BPM against its fader";
+	EXPECT_EQ (b.deck[0].bpmInfo.right(), b.faderFrame[0].x);
+	EXPECT_EQ (b.deck[1].bpm.x, b.faderFrame[1].right()) << "B's BPM against its fader";
+	EXPECT_EQ (b.deck[1].bpmInfo.x, b.faderFrame[1].right());
 	EXPECT_EQ (b.deck[0].pitchValue.x, b.deck[0].pitch.x) << "the value under the pitch fader";
 	EXPECT_EQ (b.deck[1].pitchValue.right(), b.deck[1].pitch.right());
 	EXPECT_LT (b.deck[0].pitch.right(), b.deck[0].overview.x);
@@ -240,8 +245,8 @@ TEST (SurfaceLayout, DeckKeysStayPutWithGrid)
 								{ off.sync, on.sync }, { off.master, on.master }, { off.vinyl, on.vinyl }, { off.grid, on.grid } })
 		EXPECT_EQ (a, b);
 
-	EXPECT_LT (on.remaining.bottom(), on.gridNudge[0].y + 1) << "Grid Adjust between the times and the transport";
-	EXPECT_LT (on.gridEdit[0].bottom(), on.cue.y + 1);
+	EXPECT_LT (on.remaining.bottom(), on.gridNudge[0].y + 1) << "Grid Adjust under the times";
+	EXPECT_LT (on.gridEdit[0].bottom(), on.loopOff.y + 1) << "the keys under Grid Adjust";
 	EXPECT_EQ (off.loopOff.x, off.elapsed.x) << "the keys span the whole column";
 
 	// With GRID off the times take the Grid Adjust rows' room: nothing empty.
@@ -250,15 +255,46 @@ TEST (SurfaceLayout, DeckKeysStayPutWithGrid)
 	EXPECT_GT (off.elapsed.h, on.elapsed.h) << "bigger when they have the room";
 }
 
+// PLAY, CUE, NEXT and PREV: the biggest keys, at the bottom, within reach --
+// a 2 x 2 block, CUE | PLAY at the foot, |< | >| over them.
+TEST (SurfaceLayout, TheTransportIsTheBiggestAndLowest)
+{
+	const auto s = surface::sections (rigWidth, rigHeight);
+	for (const auto gridOn : { false, true })
+	{
+		const auto c = surface::deckColumn (Rect { 0, 0, s.deck[0].w, s.deck[0].h }, gridOn);
+		std::vector<Rect> others { c.loopOff, c.repeat, c.sync, c.master, c.vinyl, c.grid };
+		others.insert (others.end(), c.gridNudge.begin(), c.gridNudge.end());
+		others.insert (others.end(), c.gridEdit.begin(), c.gridEdit.end());
+
+		for (const auto& key : { c.previous, c.next, c.cue, c.play })
+			for (const auto& other : others)
+			{
+				EXPECT_GT (key.h, other.h);
+				EXPECT_GT (key.w * key.h, other.w * other.h) << "a larger target";
+				EXPECT_GT (key.y, other.y) << "below every other key";
+			}
+
+		EXPECT_EQ (c.cue.y, c.play.y);
+		EXPECT_EQ (c.previous.y, c.next.y);
+		EXPECT_LT (c.previous.bottom(), c.cue.y + 1) << "track search over CUE | PLAY";
+		EXPECT_EQ (c.cue.x, c.previous.x);
+		EXPECT_EQ (c.play.right(), c.next.right());
+		EXPECT_GE (c.cue.bottom(), s.deck[0].h - s.deck[0].h / 20) << "at the column's foot";
+	}
+}
+
 TEST (SurfaceLayout, DeckKeysAreAtLeastFingerHighOnTheRig)
 {
 	const auto s = surface::sections (rigWidth, rigHeight);
 	const auto c = surface::deckColumn (Rect { 0, 0, s.deck[0].w, s.deck[0].h }, true);
 
-	for (const auto& key : { c.cue, c.play, c.loopOff, c.sync, c.vinyl, c.grid })
-		EXPECT_GE (key.h, 34);
+	for (const auto& key : { c.cue, c.play, c.previous, c.next })
+		EXPECT_GE (key.h, 40);
+	for (const auto& key : { c.loopOff, c.sync, c.vinyl, c.grid })
+		EXPECT_GE (key.h, 30);
 	for (const auto& key : c.gridNudge)
-		EXPECT_GE (key.h, 28);
+		EXPECT_GE (key.h, 24);
 	EXPECT_GE (surface::band (s.band).deck[0].range.h, 30);
 }
 

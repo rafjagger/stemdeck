@@ -85,9 +85,10 @@ namespace surface
 	namespace
 	{
 		// A deck column in thousandths of a key: the rows and the gaps between them.
-		constexpr int timesUnits = 550, gridUnits = 830, transportUnits = 1100, keyUnits = 1000, gapUnits = 120;
-		constexpr int deckUnits = timesUnits + 2 * gridUnits + transportUnits + 3 * keyUnits
-								+ 8 * gapUnits;   // 6 between rows, 2 margins
+		// The transport's two rows are the tallest keys (PLAY, CUE, NEXT, PREV).
+		constexpr int timesUnits = 550, gridUnits = 830, keyUnits = 1000, transportUnits = 1400, gapUnits = 120;
+		constexpr int deckUnits = timesUnits + 2 * gridUnits + 3 * keyUnits + 2 * transportUnits
+								+ 9 * gapUnits;   // 7 between rows, 2 margins
 	}
 
 	int deckColumnHeight (int keyHeight)
@@ -121,7 +122,7 @@ namespace surface
 		// Deck A | mixer | deck B, as tall as a deck's keys need; the band
 		// takes the rest. The mixer keeps 400 px at the least, so a deck
 		// column keeps ~180 px on the rig's 768 px screen.
-		auto upper = area.removeFromTop (deckColumnHeight (share (height, 36)));
+		auto upper = area.removeFromTop (deckColumnHeight (share (height, 32)));
 		area.removeFromTop (margin);
 		s.band = area;
 
@@ -142,7 +143,10 @@ namespace surface
 			BandDeck d;
 			const auto outer = [mirrored] (Rect& r, int w) { return mirrored ? r.removeFromRight (w) : r.removeFromLeft (w); };
 
+			// The bottom line reaches the fader's frame: the BPM and the fader
+			// read as one block, flush at the side and at the foot.
 			auto foot = side.removeFromBottom (line);
+			foot = mirrored ? Rect { foot.x - gap, foot.y, foot.w + gap, foot.h } : Rect { foot.x, foot.y, foot.w + gap, foot.h };
 			side.removeFromBottom (gap);
 			d.pitch = outer (side, pitchWidth);
 			outer (side, gap);
@@ -226,7 +230,16 @@ namespace surface
 		const auto gap = units (gapUnits);
 		auto area = local.reduced (std::max (3, local.w / 30), gap);
 
-		// From the foot up: the keys, which stay where they are whatever GRID does.
+		// At the foot, within the DJ's reach and the biggest keys on the deck:
+		// CUE | PLAY, and the track search over them, as large -- a 2 x 2
+		// block gives each key half the column's width, where a row of four
+		// would give a quarter.
+		splitPair (area.removeFromBottom (units (transportUnits)), gap, c.cue, c.play);
+		area.removeFromBottom (gap);
+		splitPair (area.removeFromBottom (units (transportUnits)), gap, c.previous, c.next);
+		area.removeFromBottom (gap);
+
+		// Above: the keys, which stay where they are whatever GRID does.
 		splitPair (area.removeFromBottom (units (keyUnits)), gap, c.vinyl, c.grid);
 		area.removeFromBottom (gap);
 		splitPair (area.removeFromBottom (units (keyUnits)), gap, c.sync, c.master);
@@ -234,18 +247,7 @@ namespace surface
 		splitPair (area.removeFromBottom (units (keyUnits)), gap, c.loopOff, c.repeat);
 		area.removeFromBottom (gap);
 
-		// Track search either side of CUE | PLAY, as on a CDJ: a sixth of the
-		// row each, so the keys played in time keep most of it.
-		auto transport = area.removeFromBottom (units (transportUnits));
-		const auto stepWidth = transport.w / 6;
-		c.previous = transport.removeFromLeft (stepWidth);
-		c.next = transport.removeFromRight (stepWidth);
-		transport.removeFromLeft (gap);
-		transport.removeFromRight (gap);
-		splitPair (transport, gap, c.cue, c.play);
-		area.removeFromBottom (gap);
-
-		// Grid Adjust above the transport; with GRID off its room is the times'.
+		// Grid Adjust above the keys; with GRID off its room is the times'.
 		auto times = area;
 		splitRow (area.removeFromBottom (units (gridUnits)), c.gridEdit);
 		area.removeFromBottom (gap);

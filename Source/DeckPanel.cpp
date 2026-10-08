@@ -364,4 +364,8 @@ void DeckPanel::setBandBounds (const surface::BandDeck& parts)
 	place (stemsLabel, parts.stems, 0.8f, false);
 	place (bpmLabel, parts.bpm, 0.85f, true);
 	place (bpmInfoLabel, parts.bpmInfo, 0.85f, false);
+	// Against the volume fader beside them, so BPM and fader read as one block.
+	const auto towardsFader = deckIndex == 0 ? juce::Justification::centredRight : juce::Justification::centredLeft;
+	bpmLabel.setJustificationType (towardsFader);
+	bpmInfoLabel.setJustificationType (towardsFader);
 }

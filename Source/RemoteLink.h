@@ -5,6 +5,7 @@
 #include "MixerPanel.h"
 #include "OscTruth.h"
 #include "Remote.h"
+#include "Preview.h"
 #include "StemDeckPlayer.h"
 
 #include <array>
@@ -32,6 +33,9 @@ public:
 	void start (const std::string& path, const juce::String& hash);
 	// A stem's switches to Core, after any change. Ignored while off.
 	void report (int deck, int stem);
+	// The preview of the music to Core, which passes it on to Motion. Ignored
+	// while off or when the truth has no word for it.
+	void sendAhead (const preview::Ahead& ahead);
 
 private:
 	void oscMessageReceived (const juce::OSCMessage& message) override;

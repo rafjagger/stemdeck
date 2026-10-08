@@ -72,8 +72,11 @@ namespace osctruth
 		if (const auto* names = truth["vu_meters"].getArray())
 			for (const auto& name : *names)
 				meters.push_back (name.toString().toStdString());
+		// The preview's word not through patternOf: a truth without it must
+		// keep the remote control.
+		const auto ahead = truth["addresses"]["stemdeck.ahead"]["pattern"].toString().toStdString();
 		return { patternOf ("stemdeck.bus"), patternOf ("stemdeck.buses"), patternOf ("stemdeck.recall"),
-				 patternOf ("vu"), patternOf ("device.hello"), meters };
+				 patternOf ("vu"), patternOf ("device.hello"), meters, ahead };
 	}
 
 	MeterParameters readMeterParameters (const std::string& path, std::string& error)

@@ -2,6 +2,7 @@
 
 #include <JuceHeader.h>
 #include "StemSet.h"
+#include "Sections.h"
 #include <optional>
 
 // Constant-tempo beat grid: beats at firstBeat + n * 60 / bpm (seconds).
@@ -51,8 +52,15 @@ public:
 	// Corrections are many small steps (the jog): kept in memory, written here.
 	void flush();
 
+	// The set's section features (Sections.h), in a text file of their own
+	// beside this one (sections/<key>.txt): a few hundred lines a set would
+	// make this XML slow to write on every grid correction.
+	std::optional<sections::Features> findFeatures (const StemSet& set) const;
+	void storeFeatures (const StemSet& set, const sections::Features& features);
+
 private:
 	static juce::String keyFor (const StemSet& set);
+	juce::File featuresFileFor (const StemSet& set) const;
 
 	juce::File file;
 	std::unique_ptr<juce::XmlElement> xml;

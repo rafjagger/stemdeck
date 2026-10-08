@@ -3,6 +3,7 @@
 #include "Sections.h"
 
 #include <array>
+#include <functional>
 #include <optional>
 #include <string>
 #include <utility>
@@ -17,7 +18,7 @@ namespace preview
 	constexpr const char* noneWord = "none";
 	constexpr const char* endWord = "end";
 
-	// /stemdeck/ahead s:section s:next i:barsUntilNext f:energy
+	// The `stemdeck.ahead` word: s:section s:next i:barsUntilNext f:energy
 	struct Ahead
 	{
 		std::string section = noneWord, next = noneWord;
@@ -26,8 +27,9 @@ namespace preview
 
 		bool operator== (const Ahead& other) const
 		{
+			// Exact on purpose: any change in what is said is news to the gate.
 			return section == other.section && next == other.next && barsUntilNext == other.barsUntilNext
-				&& energy == other.energy;
+				&& std::equal_to<float>() (energy, other.energy);
 		}
 		bool operator!= (const Ahead& other) const { return ! (*this == other); }
 	};

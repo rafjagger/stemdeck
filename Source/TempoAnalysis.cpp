@@ -377,3 +377,25 @@ void AnalysisCache::store (const StemSet& set, const BeatGrid& grid)
 	file.getParentDirectory().createDirectory();
 	xml->writeTo (file);
 }
+
+juce::File AnalysisCache::featuresFileFor (const StemSet& set) const
+{
+	return file.getSiblingFile ("sections").getChildFile (keyFor (set) + ".txt");
+}
+
+std::optional<sections::Features> AnalysisCache::findFeatures (const StemSet& set) const
+{
+	const auto featuresFile = featuresFileFor (set);
+
+	if (! featuresFile.existsAsFile())
+		return std::nullopt;
+
+	return sections::decode (featuresFile.loadFileAsString().toStdString());
+}
+
+void AnalysisCache::storeFeatures (const StemSet& set, const sections::Features& features)
+{
+	const auto featuresFile = featuresFileFor (set);
+	featuresFile.getParentDirectory().createDirectory();
+	featuresFile.replaceWithText (juce::String (sections::encode (features)));
+}

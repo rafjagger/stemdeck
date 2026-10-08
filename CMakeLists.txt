@@ -62,6 +62,9 @@ target_sources(StemDeck PRIVATE
     Source/DeckPanel.cpp
     Source/JogWheel.cpp
     Source/TempoAnalysis.cpp
+    Source/Sections.cpp
+    Source/Preview.cpp
+    Source/SectionAnalysis.cpp
     Source/MixerPanel.cpp
     Source/StemLibrary.cpp
     Source/SettingsPanel.cpp

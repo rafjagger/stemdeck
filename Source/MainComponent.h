@@ -22,6 +22,8 @@
 #include "JackOutput.h"
 #include "Theme.h"
 #include "TempoAnalysis.h"
+#include "Preview.h"
+#include "SectionAnalysis.h"
 #include "FollowLeader.h"
 #include "PioneerClock.h"
 #include "OscTruth.h"
@@ -170,6 +172,18 @@ private:
 	std::array<int, numDecks> loadGeneration {}; // drops results for a set no longer loaded
 	std::array<juce::String, numDecks> loadedSetIds; // StemLibrary's id: the first stem's path
 	std::array<std::optional<StemSet>, numDecks> loadedSets;
+
+	// The sets' sections (Sections.h): measured once per set in the analysis
+	// pool and cached beside the beat grid; grouped into bars of the deck's
+	// grid whenever it moves. The preview of the audible deck goes to Motion
+	// through Core on every downbeat and on any change (Preview.h decides;
+	// sendPreview only gathers).
+	std::array<std::optional<sections::Features>, numDecks> sectionFeatures;
+	std::array<std::vector<sections::Bar>, numDecks> sectionBars;
+	preview::Gate previewGate;
+	void startSectionAnalysis (const StemSet& set, int deckIndex, const BeatGrid& grid);
+	void rebuildSections (int deckIndex);
+	void sendPreview();
 
 	// As on a CDJ-3000: bending a synced deck with the jog ring stops it
 	// following the leader's beat -- the tempo still follows -- so it can be

@@ -58,6 +58,14 @@ void RemoteLink::report (int deck, int stem)
 								   (juce::int32) remote::maskOf (on)));
 }
 
+void RemoteLink::sendAhead (const preview::Ahead& ahead)
+{
+	if (! running || words.ahead.empty())
+		return;
+	toCore.send (juce::OSCMessage (juce::String (words.ahead), juce::String (ahead.section), juce::String (ahead.next),
+								   (juce::int32) ahead.barsUntilNext, ahead.energy));
+}
+
 void RemoteLink::reportAll()
 {
 	for (int deck = 0; deck < 2; ++deck)

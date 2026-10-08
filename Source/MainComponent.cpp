@@ -284,11 +284,20 @@ void MainComponent::loadSet (const StemSet& set, int deckIndex)
 	findSteps();
 
 	++loadGeneration[d];
+	sectionFeatures[d].reset();
+	sectionBars[d].clear();
 
 	if (const auto cached = analysisCache->find (set))
 	{
 		players[d]->setBeatGrid (*cached);
 		decks[d]->setAnalysing (false);
+
+		// A set analysed before the sections existed gets them now.
+		sectionFeatures[d] = analysisCache->findFeatures (set);
+		if (sectionFeatures[d])
+			rebuildSections (deckIndex);
+		else
+			startSectionAnalysis (set, deckIndex, *cached);
 	}
 	else
 	{
@@ -323,9 +332,82 @@ void MainComponent::startAnalysis (const StemSet& set, int deckIndex)
 			{
 				safeThis->players[(size_t) deckIndex]->setBeatGrid (grid);
 				safeThis->decks[(size_t) deckIndex]->setAnalysing (false);
+
+				if (grid.isValid())
+					safeThis->startSectionAnalysis (set, deckIndex, grid);
 			}
 		});
 	});
+}
+
+void MainComponent::startSectionAnalysis (const StemSet& set, int deckIndex, const BeatGrid& grid)
+{
+	const auto generation = loadGeneration[(size_t) deckIndex];
+	juce::Component::SafePointer<MainComponent> safeThis (this);
+
+	analysisPool.addJob ([this, safeThis, set, deckIndex, generation, grid]
+	{
+		auto* job = juce::ThreadPoolJob::getCurrentThreadPoolJob();
+		const auto features = SectionAnalysis::analyse (set, formatManager, grid,
+														[job] { return job != nullptr && job->shouldExit(); });
+
+		juce::MessageManager::callAsync ([safeThis, set, deckIndex, generation, features]
+		{
+			if (safeThis == nullptr || ! features)
+				return;
+
+			safeThis->analysisCache->storeFeatures (set, *features);
+
+			// Only apply them if the deck still has that set.
+			if (safeThis->loadGeneration[(size_t) deckIndex] != generation)
+				return;
+
+			safeThis->sectionFeatures[(size_t) deckIndex] = features;
+			safeThis->rebuildSections (deckIndex);
+		});
+	});
+}
+
+void MainComponent::rebuildSections (int deckIndex)
+{
+	const auto d = (size_t) deckIndex;
+	const auto grid = players[d]->getBeatGrid();
+
+	if (! sectionFeatures[d] || ! loadedSets[d] || ! grid.isValid())
+	{
+		sectionBars[d].clear();
+		return;
+	}
+
+	const auto& names = loadedSets[d]->stemNames;
+	const auto roles = sections::rolesFor ({ names[0].toStdString(), names[1].toStdString(),
+											 names[2].toStdString(), names[3].toStdString() });
+	sectionBars[d] = sections::classify (sections::barLevels (*sectionFeatures[d], grid.bpm, grid.firstBeat, roles));
+}
+
+void MainComponent::sendPreview()
+{
+	std::array<preview::DeckState, numDecks> states;
+
+	for (int d = 0; d < numDecks; ++d)
+	{
+		const auto& player = *players[(size_t) d];
+		const auto grid = player.getBeatGrid();
+		auto& state = states[(size_t) d];
+		state.view = { player.isPlaying(), player.getDeckGain() };
+		state.generation = loadGeneration[(size_t) d];
+		state.speed = player.getSpeed();
+		state.bpm = grid.bpm;
+		state.firstBeat = grid.firstBeat;
+		state.position = player.getPosition();
+		if (player.hasLoop())
+			state.loopSeconds = std::make_pair (player.getLoop().getStart(), player.getLoop().getEnd());
+		state.bars = sectionBars[(size_t) d];
+	}
+
+	const auto moment = preview::momentOf (states, masterDeck);
+	if (previewGate.shouldSend (moment, juce::Time::getMillisecondCounterHiRes() / 1000.0))
+		remote.sendAhead (moment.ahead);
 }
 
 //==============================================================================
@@ -609,7 +691,10 @@ void MainComponent::editGrid (int deckIndex, DeckPanel::GridAction action, doubl
 	{
 		analysisCache->clearCorrected (*set);
 		if (const auto analysed = analysisCache->findAnalysed (*set))
+		{
 			player.setBeatGrid (*analysed);
+			rebuildSections (deckIndex);
+		}
 		return;
 	}
 
@@ -661,6 +746,9 @@ void MainComponent::editGrid (int deckIndex, DeckPanel::GridAction action, doubl
 	const BeatGrid edited { grid.bpm, grid.firstBeat };
 	player.setBeatGrid (edited);
 	analysisCache->storeCorrected (*set, edited);
+
+	// The bars follow the downbeat at once: the next preview says so (Preview.h).
+	rebuildSections (deckIndex);
 
 	// SHIFT GRID ends a bend: the grid now says what the ear did, the beat follows again.
 	if (action == Action::shiftToLeader)
@@ -1326,6 +1414,7 @@ void MainComponent::timerCallback()
 
 	mixer.refresh();
 	updateSync();
+	sendPreview();
 
 	// With no master yet, the only playing deck becomes it (like a lone CDJ).
 	if (const auto chosen = chooseMaster (-1, decksPlaying(), masterDeck, ! pioSource && ! masterTurnedOff); chosen != masterDeck)

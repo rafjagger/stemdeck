@@ -48,6 +48,11 @@ add_executable(stemdeck-tests
     ${CMAKE_SOURCE_DIR}/Source/FolderStep.cpp
     DataPaths.cpp
     ${CMAKE_SOURCE_DIR}/Source/DataPaths.cpp
+    SectionFeatures.cpp
+    Sections.cpp
+    Preview.cpp
+    ${CMAKE_SOURCE_DIR}/Source/Preview.cpp
+    ${CMAKE_SOURCE_DIR}/Source/Sections.cpp
     SurfaceLayout.cpp
     ${CMAKE_SOURCE_DIR}/Source/SurfaceLayout.cpp
     LibraryFolders.cpp

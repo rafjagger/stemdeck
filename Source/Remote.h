@@ -21,6 +21,9 @@ namespace remote
 		std::string bus, buses, recall, vu, hello;
 		// The truth's vu_meters: meter n is meters[n - 1]. Empty in an older truth.
 		std::vector<std::string> meters;
+		// The preview of the music, the `stemdeck.ahead` word. Optional: empty
+		// in a truth from before it, and then StemDeck sends no preview.
+		std::string ahead;
 	};
 
 	// One switch, 0-based inside StemDeck: deck 0-1, stem 0-3, bus 0-4 (1-4, AUX).

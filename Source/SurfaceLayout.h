@@ -67,6 +67,19 @@ namespace surface
 	};
 	Band band (Rect area);
 
+	// The deck's colour line, in window coordinates, as one piece: the stripe
+	// at the deck column's inner edge (the column paints it, deckStripe), its
+	// drop into the gap above the band, the top along that gap to the volume
+	// fader's frame, and the frame's side towards the meters down to the
+	// band's foot. Nothing below or outside the fader: the meters stand
+	// between the two decks' lines.
+	struct DeckLine
+	{
+		Rect stripe, drop, top, side;
+	};
+	Rect deckStripe (Rect deck, int deckIndex);   // in `deck`'s coordinates (window or local)
+	DeckLine deckLine (const Sections& sections, const Band& band, int deckIndex);
+
 	// A deck column above the band, in its own coordinates: the times, the
 	// Grid Adjust rows, track search | CUE | PLAY | track search, the keys.
 	// No key moves when GRID toggles: with GRID off the times take the Grid

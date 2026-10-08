@@ -300,9 +300,10 @@ void DeckPanel::paint (juce::Graphics& g)
 	g.setColour (Theme::panel);
 	g.fillRoundedRectangle (bounds, 6.0f);
 
-	// Coloured stripe on the side facing the mixer
+	// The coloured stripe on the side facing the mixer: the start of the
+	// deck's line, which the window carries on around its volume fader.
 	g.setColour (Theme::deck (deckIndex));
-	g.fillRect (deckIndex == 0 ? bounds.removeFromRight (3.0f) : bounds.removeFromLeft (3.0f));
+	g.fillRect (surface::toJuce (surface::deckStripe (surface::fromJuce (getLocalBounds()), deckIndex)));
 }
 
 void DeckPanel::resized()

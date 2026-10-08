@@ -188,6 +188,36 @@ namespace surface
 		return b;
 	}
 
+	namespace
+	{
+		constexpr int lineWidth = 3;   // the deck column's stripe, since before the clean surface
+		constexpr int panelInset = 2;  // the column's panel stands this far inside its bounds
+	}
+
+	Rect deckStripe (Rect deck, int deckIndex)
+	{
+		const auto panel = deck.reduced (panelInset);
+		return { deckIndex == 0 ? panel.right() - lineWidth : panel.x, panel.y, lineWidth, panel.h };
+	}
+
+	DeckLine deckLine (const Sections& sections, const Band& band, int deckIndex)
+	{
+		DeckLine line;
+		const auto& frame = band.faderFrame[(size_t) deckIndex];
+		line.stripe = deckStripe (sections.deck[(size_t) deckIndex], deckIndex);
+
+		// The top runs in the middle of the gap between the column and the band.
+		const auto gapTop = sections.deck[(size_t) deckIndex].bottom();
+		const auto topY = gapTop + (sections.band.y - gapTop - lineWidth) / 2;
+		line.drop = { line.stripe.x, line.stripe.bottom(), lineWidth, topY - line.stripe.bottom() };
+
+		const auto sideX = deckIndex == 0 ? frame.right() - lineWidth : frame.x;
+		line.side = { sideX, topY, lineWidth, sections.band.bottom() - topY };
+		line.top = deckIndex == 0 ? Rect { line.stripe.x, topY, line.side.right() - line.stripe.x, lineWidth }
+								  : Rect { sideX, topY, line.stripe.right() - sideX, lineWidth };
+		return line;
+	}
+
 	DeckColumn deckColumn (Rect local, bool gridOn)
 	{
 		DeckColumn c;
@@ -240,7 +270,7 @@ namespace surface
 	{
 		Strip strip;
 		auto area = local.reduced (std::max (3, local.w / 40));
-		strip.header = area.removeFromTop (share (local.h, 70));
+		strip.header = area.removeFromTop (share (local.h, 90));
 		const auto gap = std::max (2, area.w / 56);
 		area.removeFromTop (gap);
 

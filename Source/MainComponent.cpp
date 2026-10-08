@@ -1460,12 +1460,14 @@ void MainComponent::paint (juce::Graphics& g)
 	g.setColour (Theme::panel);
 	g.fillRoundedRectangle (bandArea.toFloat(), 6.0f);
 
-	// Each volume fader with its stems' meters in its deck's colour frame,
-	// as thick as the deck column's stripe; the output meters between them.
+	// Each deck's line, from its column's stripe (the column paints that)
+	// down, along the gap and down beside its volume fader, the meters'
+	// side: the output meters stand between the two decks' lines.
 	for (size_t d = 0; d < (size_t) numDecks; ++d)
 	{
 		g.setColour (Theme::deck ((int) d));
-		g.drawRoundedRectangle (faderFrames[d].toFloat().reduced (1.5f), 6.0f, 3.0f);
+		for (const auto& piece : { deckLines[d].drop, deckLines[d].top, deckLines[d].side })
+			g.fillRect (surface::toJuce (piece));
 	}
 }
 
@@ -1516,7 +1518,7 @@ void MainComponent::resized()
 	for (size_t d = 0; d < (size_t) numDecks; ++d)
 	{
 		decks[d]->setBandBounds (band.deck[d]);
-		faderFrames[d] = surface::toJuce (band.faderFrame[d]);
+		deckLines[d] = surface::deckLine (layout, band, (int) d);
 	}
 	mixer.setBandBounds (surface::toJuce (band.fader[0]), surface::toJuce (band.fader[1]), surface::toJuce (band.meters));
 }

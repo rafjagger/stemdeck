@@ -297,6 +297,55 @@ TEST (SurfaceLayout, StemRowsFormAMatrix)
 	EXPECT_GE (strips[1].x - strips[0].right(), 6) << "deck A's and deck B's matrices apart";
 }
 
+// The deck's colour line, one piece: the stripe at the deck column's inner
+// edge, down into the gap above the band, along it to the volume fader's
+// frame, down the frame's side towards the meters to the band's foot. No
+// bottom, no outer side (the maintainer, for B; A is the mirror).
+TEST (SurfaceLayout, TheDeckLineRunsFromTheStripeAroundTheFader)
+{
+	const auto s = surface::sections (rigWidth, rigHeight);
+	const auto b = surface::band (s.band);
+
+	for (int d = 0; d < 2; ++d)
+	{
+		const auto line = surface::deckLine (s, b, d);
+		const auto& frame = b.faderFrame[(size_t) d];
+		const auto& deck = s.deck[(size_t) d];
+
+		EXPECT_TRUE (deck.contains (line.stripe)) << d;
+		EXPECT_EQ (line.stripe, surface::deckStripe (deck, d)) << "the column paints the same stripe";
+		EXPECT_EQ (line.drop.x, line.stripe.x);
+		EXPECT_EQ (line.drop.y, line.stripe.bottom()) << "continuous";
+		EXPECT_EQ (line.drop.bottom(), line.top.y);
+		EXPECT_EQ (line.side.y, line.top.y);
+		EXPECT_EQ (line.side.bottom(), s.band.bottom()) << "down to the band's foot";
+		EXPECT_EQ (line.side.h - line.top.h, s.band.bottom() - line.top.bottom());
+
+		// The top reaches from the stripe to the frame's side, in the gap
+		// above the band: it crosses neither the band nor the decks or mixer.
+		EXPECT_FALSE (line.top.intersects (s.band));
+		EXPECT_FALSE (line.top.intersects (s.mixer));
+		EXPECT_FALSE (line.top.intersects (deck));
+		EXPECT_FALSE (line.drop.intersects (s.band));
+
+		if (d == 0)
+		{
+			EXPECT_EQ (line.top.x, line.stripe.x);
+			EXPECT_EQ (line.top.right(), line.side.right());
+			EXPECT_EQ (line.side.right(), frame.right()) << "A: the frame's right side, towards the meters";
+		}
+		else
+		{
+			EXPECT_EQ (line.top.right(), line.stripe.right());
+			EXPECT_EQ (line.top.x, line.side.x);
+			EXPECT_EQ (line.side.x, frame.x) << "B: the frame's left side, towards the meters";
+		}
+		EXPECT_FALSE (line.side.intersects (b.fader[(size_t) d])) << "beside the fader, not over it";
+		EXPECT_FALSE (line.side.intersects (b.meters));
+		EXPECT_FALSE (line.side.intersects (b.deck[(size_t) d].overview));
+	}
+}
+
 TEST (SurfaceLayout, RectSlicing)
 {
 	Rect r { 10, 20, 100, 50 };

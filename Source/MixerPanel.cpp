@@ -270,12 +270,13 @@ void ChannelStrip::paint (juce::Graphics& g)
 	g.setColour (Theme::panelRaised);
 	g.fillRoundedRectangle (bounds, 6.0f);
 
-	const auto header = headerArea.toFloat();
+	// The deck's bar with its name inside, the text a share of the bar.
+	const auto bar = headerArea.toFloat().reduced (headerArea.getHeight() * 0.3f, headerArea.getHeight() * 0.1f);
 	g.setColour (Theme::deck (deckIndex));
-	g.fillRoundedRectangle (header.reduced (6.0f, 4.0f), 3.0f);
+	g.fillRoundedRectangle (bar, bar.getHeight() * 0.2f);
 	g.setColour (juce::Colours::black);
-	g.setFont (juce::FontOptions (header.getHeight() * 0.7f, juce::Font::bold));
-	g.drawText ("DECK " + Theme::deckName (deckIndex), header, juce::Justification::centred);
+	g.setFont (juce::FontOptions (bar.getHeight() * 0.75f, juce::Font::bold));
+	g.drawText ("DECK " + Theme::deckName (deckIndex), bar, juce::Justification::centred);
 }
 
 void ChannelStrip::resized()

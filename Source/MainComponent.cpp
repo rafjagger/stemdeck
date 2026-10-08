@@ -63,6 +63,7 @@ MainComponent::MainComponent()
 		decks[(size_t) d]->onSyncToggled = [this, d] (bool enabled) { setSync (d, enabled); };
 		decks[(size_t) d]->onGridEdit = [this, d] (DeckPanel::GridAction action, double seconds) { editGrid (d, action, seconds); };
 		decks[(size_t) d]->onMasterPressed = [this, d] { pressMaster (d); };
+		decks[(size_t) d]->onStep = [this, d] (int direction) { stepDeck (d, direction); };
 	}
 
 	addAndMakeVisible (mixer);
@@ -77,6 +78,7 @@ MainComponent::MainComponent()
 	};
 	library.onCreateStems = [this] (const juce::Array<juce::File>& files) { createStems (files); };
 	library.onCancelCreation = [this] { stemCreator.cancelRunning(); };
+	library.onOrderChanged = [this] { findSteps(); };
 	stemCreator.onSetCreated = [this] (const juce::File& firstStem)
 	{
 		library.setFolder (library.getFolder());
@@ -97,9 +99,6 @@ MainComponent::MainComponent()
 										   : juce::File::getCurrentWorkingDirectory().getChildFile ("stems"));
 	stemCreator.setLibraryFolder (library.getFolder());
 
-	audioSettingsButton.onClick = [this] { showAudioSettings(); };
-	audioSettingsButton.setMouseClickGrabsKeyboardFocus (false);
-	addAndMakeVisible (audioSettingsButton);
 	settingsButton.onClick = [this] { showSettings(); };
 	settingsButton.setMouseClickGrabsKeyboardFocus (false);
 	addAndMakeVisible (settingsButton);
@@ -141,7 +140,8 @@ MainComponent::MainComponent()
 	autoDjButton.setClickingTogglesState (true);
 	autoDjButton.setMouseClickGrabsKeyboardFocus (false);
 	autoDjButton.setColour (juce::TextButton::buttonOnColourId, Theme::play);
-	autoDjButton.setTooltip (juce::String ("Auto DJ: plays at random from the library as searched/filtered and mixes on the beat over 16 bars"));
+	setAutoDjFade ({ settings().getIntValue ("autoDjMixBars", AutoDj::defaultMixBars),
+					 settings().getDoubleValue ("autoDjMixSeconds", AutoDj::defaultNoGridMixSeconds) });
 	autoDjButton.onClick = [this] { setAutoDj (autoDjButton.getToggleState()); };
 	addAndMakeVisible (autoDjButton);
 
@@ -277,6 +277,7 @@ void MainComponent::loadSet (const StemSet& set, int deckIndex)
 	decks[d]->setSet (set);
 	waves[d]->setTitle (set.name);
 	mixer.strip (deckIndex).setStemNames (set.stemNames);
+	findSteps();
 
 	++loadGeneration[d];
 
@@ -843,6 +844,71 @@ void MainComponent::setAutoDj (bool on)
 		runAutoDj();
 }
 
+// Next / Prev asked for the track beside the playing one; when there is none
+// after all (the library changed since), Auto DJ's own pick rather than none.
+const StemSet* MainComponent::autoDjPick (AutoDj::Pick pick, int loadDeck)
+{
+	if (pick != AutoDj::Pick::random)
+		if (const auto* set = library.neighbourInFolder (loadedSetIds[(size_t) (1 - loadDeck)], pick == AutoDj::Pick::next ? 1 : -1))
+			return set;
+	return library.randomVisibleSet (autoDjPlayed);
+}
+
+void MainComponent::setAutoDjFade (AutoDj::MixLength length)
+{
+	autoDj.setMixLength (length);
+	const auto applied = autoDj.mixLength();
+	settings().setValue ("autoDjMixBars", applied.bars);
+	settings().setValue ("autoDjMixSeconds", applied.noGridSeconds);
+	autoDjButton.setTooltip ("Auto DJ: plays at random from the library as searched/filtered and mixes on the beat over "
+							 + juce::String (applied.bars) + " bars (" + juce::String (applied.noGridSeconds, 0)
+							 + " s without a beat grid)");
+}
+
+void MainComponent::stepDeck (int deckIndex, int direction)
+{
+	if (autoDj.isEnabled())
+	{
+		// Only the deck Auto DJ plays: the other one is where its mix goes.
+		if (deckIndex == autoDj.playingDeck())
+			autoDj.requestMixNow (direction > 0 ? AutoDj::Pick::next : AutoDj::Pick::previous);
+		return;
+	}
+
+	if (const auto* set = library.neighbourInFolder (loadedSetIds[(size_t) deckIndex], direction))
+		loadSet (*set, deckIndex);
+}
+
+void MainComponent::findSteps()
+{
+	for (int d = 0; d < numDecks; ++d)
+	{
+		const auto& id = loadedSetIds[(size_t) d];
+		steps[(size_t) d] = { library.neighbourInFolder (id, -1) != nullptr, library.neighbourInFolder (id, 1) != nullptr };
+	}
+	showSteps();
+}
+
+void MainComponent::showSteps()
+{
+	for (int d = 0; d < numDecks; ++d)
+	{
+		auto previous = steps[(size_t) d].previous;
+		auto next = steps[(size_t) d].next;
+		juce::String previousTip ("Previous track in this folder"), nextTip ("Next track in this folder");
+
+		if (autoDj.isEnabled())
+		{
+			const auto takes = d == autoDj.playingDeck() && autoDj.canMixNow();
+			previous = previous && takes;
+			next = next && takes;
+			previousTip = "Auto DJ: mix to the previous track in this folder now";
+			nextTip = "Auto DJ: mix to the next track in this folder now";
+		}
+		decks[(size_t) d]->setStepsAvailable (previous, next, previousTip, nextTip);
+	}
+}
+
 void MainComponent::runAutoDj()
 {
 	if (! autoDj.isEnabled())
@@ -871,7 +937,7 @@ void MainComponent::runAutoDj()
 
 	if (c.load >= 0)
 	{
-		if (const auto* set = library.randomVisibleSet (autoDjPlayed))
+		if (const auto* set = autoDjPick (c.loadPick, c.load))
 		{
 			if (autoDjPlayed.count (set->files[0].getFullPathName()) > 0)
 				autoDjPlayed.clear();   // every one was played: round again
@@ -1083,8 +1149,6 @@ void MainComponent::initialiseAudio()
 	if (! usingJack)
 		initialiseDeviceManager();
 
-	audioSettingsButton.setEnabled (! usingJack);
-	audioSettingsButton.setTooltip (usingJack ? "Under JACK: route with qjackctl or a patchbay" : juce::String());
 	updateDeviceStatus();
 }
 
@@ -1213,8 +1277,18 @@ void MainComponent::showWorkspaces()
 void MainComponent::showSettings()
 {
 	juce::DialogWindow::LaunchOptions dialog;
-	dialog.content.setOwned (new SettingsPanel (library.getFolder(),
-												[this] (const juce::File& folder) { library.setFolder (folder); }));
+	SettingsPanel::Values values;
+	values.libraryFolder = library.getFolder();
+	values.autoDjFade = autoDj.mixLength();
+	values.audioDeviceChoosable = ! usingJack;
+	values.audioDeviceNote = usingJack ? "Under JACK: route with qjackctl or a patchbay" : juce::String();
+
+	SettingsPanel::Actions actions;
+	actions.onLibraryFolder = [this] (const juce::File& folder) { library.setFolder (folder); };
+	actions.onAutoDjFade = [this] (AutoDj::MixLength length) { setAutoDjFade (length); };
+	actions.onAudioDevice = [this] { showAudioSettings(); };
+
+	dialog.content.setOwned (new SettingsPanel (values, std::move (actions)));
 	dialog.dialogTitle = "Settings";
 	dialog.dialogBackgroundColour = Theme::panel;
 	dialog.useNativeTitleBar = true;
@@ -1241,6 +1315,7 @@ void MainComponent::timerCallback()
 	updateCreatorStatus();
 
 	runAutoDj();
+	showSteps();
 	updateRecorder();
 
 	if (--controllerScanCountdown <= 0)
@@ -1394,8 +1469,6 @@ void MainComponent::resized()
 	motionButton.setBounds (switchArea.removeFromRight (switcher.appKeyWidth));
 	topBar.setRight (motionButton.getX() - 6);
 	settingsButton.setBounds (topBar.removeFromRight (90));
-	topBar.removeFromRight (6);
-	audioSettingsButton.setBounds (topBar.removeFromRight (70));
 	topBar.removeFromRight (6);
 	keysButton.setBounds (topBar.removeFromRight (60));
 	topBar.removeFromRight (6);

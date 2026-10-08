@@ -147,7 +147,6 @@ private:
 	std::array<ScrollingWaveform*, numDecks> waves { &waveA, &waveB };
 	std::array<DeckPanel*, numDecks> decks { &deckA, &deckB };
 
-	juce::TextButton audioSettingsButton { "Audio" };
 	juce::TextButton settingsButton { "Settings" };
 	juce::TextButton keysButton { "KEYS" };
 	OnScreenKeyboard keyboard;
@@ -186,6 +185,18 @@ private:
 	std::set<juce::String> autoDjPlayed;
 	void setAutoDj (bool on);
 	void runAutoDj();
+	const StemSet* autoDjPick (AutoDj::Pick pick, int loadDeck);
+	// The fade, kept in the settings (autoDjMixBars, autoDjMixSeconds).
+	void setAutoDjFade (AutoDj::MixLength length);
+
+	// Next / Prev on a deck: the track beside the loaded one in its folder,
+	// loaded straight on; under Auto DJ, on the deck it plays, the mix to it
+	// now. Shown greyed where there is none, or Auto DJ would not take it.
+	void stepDeck (int deckIndex, int direction);
+	void findSteps();   // on a load and a new library order: sorts are not per tick
+	void showSteps();   // every tick: Auto DJ's state changes what a press does
+	struct Steps { bool previous = false, next = false; };
+	std::array<Steps, numDecks> steps;
 
 	// The deck with SYNC on follows the other one's tempo and beat phase.
 	int syncFollower = -1;

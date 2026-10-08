@@ -43,6 +43,8 @@ add_executable(stemdeck-tests
     ${CMAKE_SOURCE_DIR}/Source/KeyboardPolicy.cpp
     FolderChoice.cpp
     ${CMAKE_SOURCE_DIR}/Source/FolderChoice.cpp
+    FolderStep.cpp
+    ${CMAKE_SOURCE_DIR}/Source/FolderStep.cpp
     DataPaths.cpp
     ${CMAKE_SOURCE_DIR}/Source/DataPaths.cpp)
 target_include_directories(stemdeck-tests PRIVATE ${CMAKE_SOURCE_DIR}/Source)

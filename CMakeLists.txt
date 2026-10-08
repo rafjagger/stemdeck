@@ -66,6 +66,7 @@ target_sources(StemDeck PRIVATE
     Source/StemLibrary.cpp
     Source/SettingsPanel.cpp
     Source/FolderChoice.cpp
+    Source/FolderStep.cpp
     Source/AudioPanel.cpp
     Source/Workspaces.cpp
     Source/KeyboardPolicy.cpp

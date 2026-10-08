@@ -38,6 +38,11 @@ public:
 	void selectRelative (int delta);
 	const StemSet* selectedSet() const;
 
+	// Next / Prev on a deck: the set beside `setId` in its own folder, in
+	// the order the table is sorted (the search aside); null at the folder's
+	// ends or for a set not in the library.
+	const StemSet* neighbourInFolder (const juce::String& setId, int direction) const;
+
 	// A set picked at random from those the search shows, not one of
 	// `played`; when every one was, from all of them again. Null: none shown.
 	const StemSet* randomVisibleSet (const std::set<juce::String>& played) const;
@@ -54,6 +59,7 @@ public:
 	std::function<std::optional<BeatGrid> (const StemSet&)> lookUpBeatGrid; // for the BPM column
 	std::function<void (const juce::Array<juce::File>&)> onCreateStems;       // stereo files, dropped or chosen
 	std::function<void()> onCancelCreation;
+	std::function<void()> onOrderChanged;   // a rescan, a new sort or search
 
 	bool isInterestedInFileDrag (const juce::StringArray& files) override;
 	void fileDragEnter (const juce::StringArray&, int, int) override { setDropHighlight (true); }
@@ -66,6 +72,7 @@ private:
 	enum Columns { nameColumn = 1, bpmColumn, stemsColumn, lengthColumn, artistColumn, albumColumn };
 
 	double bpmOf (const StemSet& set) const;
+	bool listsBefore (const StemSet& a, const StemSet& b) const;   // the table's sort
 
 	int getNumRows() override;
 	void paintRowBackground (juce::Graphics&, int row, int width, int height, bool selected) override;
@@ -86,7 +93,8 @@ private:
 	juce::AudioFormatManager& formatManager;
 	juce::File folder;
 	std::vector<StemSet> allSets;
-	std::vector<const StemSet*> visibleSets;
+	std::vector<const StemSet*> orderedSets;   // all of them, sorted
+	std::vector<const StemSet*> visibleSets;   // those the search matches
 	int sortColumn = artistColumn;
 	bool sortForwards = true;
 

@@ -9,12 +9,12 @@ PartOf=a3-main.service
 
 [Service]
 Environment=DISPLAY=:0
-ExecStartPre=/home/aaa/a3-system/stemdeck/tools/a3-wait-for-the-screen
+ExecStartPre=/usr/lib/stemdeck/a3-wait-for-the-screen
 # JACK is the machine's own; QjackCtl only connects, it starts no server
 # (no -s). The patchbay reconnects clients as they appear, so StemDeck and
 # zita need not be up first.
 ExecStartPre=/usr/bin/jack_wait -w
-ExecStart=/usr/bin/qjackctl -a /home/aaa/a3-system/stemdeck/.config/rncbc.org/stemdeck-without-core.xml
+ExecStart=/usr/bin/qjackctl -a /usr/share/stemdeck/stemdeck-without-core.xml
 Restart=on-failure
 RestartSec=5
 

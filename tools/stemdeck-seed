@@ -1,0 +1,179 @@
+#!/usr/bin/env python3
+"""Make StemDeck's data folder, and copy the recordings out of the checkout once.
+
+Runs as the user before every start of the packaged unit (ExecStartPre), so it
+only ever runs while StemDeck is stopped, and never as root.
+
+Until the package, StemDeck recorded to ./recordings in its working directory,
+the checkout (~/a3-system/stemdeck/recordings, 415 MB on a3nuc1, 2026-10-07).
+It now records to ~/.local/share/stemdeck/recordings (Source/DataPaths.cpp).
+This copies -- never moves -- what the checkout holds; the originals stay until
+the maintainer removes them himself.
+
+Every failure is logged and the exit is 0: a copy that cannot be made must not
+keep the stem player off a set. A source counts as done only once every file is
+in, so whatever stopped one start is retried at the next.
+"""
+
+import os
+import shutil
+import sys
+from pathlib import Path
+
+DATA_SUBDIR = "stemdeck"
+RECORDINGS = "recordings"
+OLD_RECORDINGS = (Path("a3-system/stemdeck/recordings"),)
+MARKER = ".recordings-copied"
+MARGIN_BYTES = 64 * 1024 * 1024
+
+
+def data_folder(home, environ):
+    xdg = environ.get("XDG_DATA_HOME", "")
+    base = Path(xdg) if xdg.startswith("/") else Path(home) / ".local/share"
+    return base / DATA_SUBDIR
+
+
+def free_space(path):
+    return shutil.disk_usage(path).free
+
+
+def _raise(error):
+    raise error
+
+
+def destination_for(source_file, target_file):
+    """Where a take goes: its own name, None when a copy of equal size is
+    already there, or a sibling name when a different file holds the name --
+    nothing in the target is ever overwritten."""
+    if not target_file.exists():
+        return target_file
+    if target_file.stat().st_size == source_file.stat().st_size:
+        return None
+    beside = target_file.with_name(f"{target_file.stem} (checkout){target_file.suffix}")
+    return destination_for(source_file, beside)
+
+
+def pending_files(source, target, log):
+    """(source, destination) pairs still to copy. Anything that is not a plain
+    file -- broken links, links to folders, sockets, files that cannot be
+    stat'ed -- is logged and skipped; it never blocks the rest."""
+    pairs = []
+    for folder, dirs, files in os.walk(source, onerror=_raise):
+        for name in dirs:
+            if (Path(folder) / name).is_symlink():
+                log(f"stemdeck-seed: skipped {Path(folder) / name}: a link to a folder, not followed")
+        for name in sorted(files):
+            source_file = Path(folder) / name
+            try:
+                if source_file.is_symlink() or not source_file.is_file():
+                    log(f"stemdeck-seed: skipped {source_file}: not a plain file")
+                    continue
+                destination = destination_for(source_file, target / source_file.relative_to(source))
+            except OSError as error:
+                log(f"stemdeck-seed: skipped {source_file}: {error}")
+                continue
+            if destination is not None:
+                pairs.append((source_file, destination))
+    return pairs
+
+
+def _sync(path):
+    with open(path, "rb") as handle:
+        os.fsync(handle.fileno())
+
+
+def _free_names(destination):
+    yield destination
+    base = destination.with_name(f"{destination.stem} (checkout")
+    yield from (Path(f"{base}{'' if n == 1 else f' {n}'}){destination.suffix}") for n in range(1, 10_000))
+
+
+def copy_one(source_file, destination):
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    part = destination.with_name(f".{destination.name}.part")
+    shutil.copy2(source_file, part)
+    if part.stat().st_size != source_file.stat().st_size:
+        raise OSError(f"{part}: size differs from {source_file} after the copy")
+    _sync(part)
+    # link, not rename: it fails instead of replacing a file that appeared meanwhile
+    for candidate in _free_names(destination):
+        try:
+            os.link(part, candidate)
+        except FileExistsError:
+            continue
+        os.unlink(part)
+        return candidate
+    raise OSError(f"{destination}: no free name beside it")
+
+
+def copy_recordings(source, target, log, free_bytes):
+    """True once every plain file of `source` is in `target`."""
+    pending = pending_files(source, target, log)
+    needed = sum(source_file.stat().st_size for source_file, _ in pending)
+    if needed + MARGIN_BYTES > free_bytes(target):
+        log(f"stemdeck-seed: not enough space in {target} for {needed} bytes "
+            f"from {source}; nothing copied, tried again at the next start")
+        return False
+    complete = True
+    for source_file, destination in pending:
+        try:
+            placed = copy_one(source_file, destination)
+        except OSError as error:
+            log(f"stemdeck-seed: {source_file}: {error}")
+            complete = False
+            continue
+        log(f"stemdeck-seed: copied {source_file} -> {placed}")
+    return complete
+
+
+def _record(marker, source):
+    with marker.open("a") as record:
+        record.write(f"{source}\n")
+        record.flush()
+        os.fsync(record.fileno())
+
+
+def _safe(log):
+    def write(line):
+        try:
+            log(line.encode("utf-8", "backslashreplace").decode("utf-8"))
+        except Exception:  # a log that fails must not stop the start either
+            pass
+    return write
+
+
+def seed(home, environ, log=print, free_bytes=free_space):
+    log = _safe(log)
+    try:
+        data = data_folder(home, environ)
+        target = data / RECORDINGS
+        marker = data / MARKER
+        target.mkdir(parents=True, exist_ok=True)
+        done = marker.read_text(errors="replace").splitlines() if marker.exists() else []
+        for old in OLD_RECORDINGS:
+            source = Path(home) / old
+            if str(source) in done:
+                continue
+            if not source.is_dir():
+                if not marker.exists():
+                    log(f"stemdeck-seed: no old recordings at {source}")
+                continue
+            if copy_recordings(source, target, log, free_bytes):
+                _record(marker, source)
+                log(f"stemdeck-seed: the recordings of {source} are in {target}; "
+                    "the originals stay where they were")
+    except Exception as error:  # never keep the stem player off a set
+        log(f"stemdeck-seed: {type(error).__name__}: {error}")
+    return 0
+
+
+def main():
+    try:
+        return seed(Path.home(), os.environ)
+    except Exception as error:
+        print(f"stemdeck-seed: {type(error).__name__}: {error}", file=sys.stderr)
+        return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

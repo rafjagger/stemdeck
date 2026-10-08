@@ -78,6 +78,7 @@ target_sources(StemDeck PRIVATE
     Source/FollowLeader.cpp
     Source/ProLinkReceiver.cpp
     Source/MasterDeck.cpp
+    Source/SyncLabels.cpp
     Source/ProLinkSender.cpp
     Source/BeatScheduler.cpp
     Source/LibraryPath.cpp
@@ -90,6 +91,7 @@ target_sources(StemDeck PRIVATE
     Source/GridEdit.cpp
     Source/AutoDj.cpp
     Source/Recorder.cpp
+    Source/DataPaths.cpp
     Source/Scs3d.cpp
     Source/Scs3dDevice.cpp)
 

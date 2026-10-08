@@ -76,6 +76,17 @@ namespace osctruth
 				 patternOf ("vu"), patternOf ("device.hello"), meters };
 	}
 
+	MeterParameters readMeterParameters (const std::string& path, std::string& error)
+	{
+		const auto truth = parsed (path, error);
+		std::map<std::string, double> numbers;
+		if (const auto* object = truth["meters"].getDynamicObject())
+			for (const auto& property : object->getProperties())
+				if (property.value.isDouble() || property.value.isInt() || property.value.isInt64())
+					numbers[property.name.toString().toStdString()] = (double) property.value;
+		return meterParametersFrom (numbers);
+	}
+
 	std::string unusableTruth (const std::string& text)
 	{
 		juce::var truth;

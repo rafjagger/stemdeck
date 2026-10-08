@@ -64,8 +64,10 @@ namespace sections
 		if (sliceSamples == 0)
 			return;
 
-		const auto sliceStart = (double) currentSlice * sliceSeconds;
-		const auto frame = sliceStart >= startSeconds ? (long long) std::floor ((sliceStart - startSeconds) / hopSeconds) : -1;
+		// By the slice's middle: the slice holding the downbeat starts before
+		// it (the grid is never on a slice boundary) but its attack is the one.
+		const auto sliceMiddle = ((double) currentSlice + 0.5) * sliceSeconds;
+		const auto frame = sliceMiddle >= startSeconds ? (long long) std::floor ((sliceMiddle - startSeconds) / hopSeconds) : -1;
 
 		for (size_t s = 0; s < (size_t) numStems; ++s)
 		{
@@ -148,7 +150,8 @@ namespace sections
 		Features features;
 
 		if (! (in >> word >> fileVersion >> features.startSeconds >> features.hopSeconds >> count)
-			|| word != magic || fileVersion != version || features.hopSeconds <= 0.0)
+			|| word != magic || fileVersion != version || ! (features.hopSeconds > 0.0)
+			|| ! std::isfinite (features.hopSeconds) || ! std::isfinite (features.startSeconds))
 			return std::nullopt;
 
 		features.frames.resize (count);
@@ -207,7 +210,8 @@ namespace sections
 	{
 		std::vector<BarLevels> bars;
 
-		if (bpm <= 0.0 || features.hopSeconds <= 0.0)
+		if (! (bpm > 0.0) || ! (features.hopSeconds > 0.0) || ! std::isfinite (bpm) || ! std::isfinite (firstBeat)
+			|| ! std::isfinite (features.hopSeconds) || ! std::isfinite (features.startSeconds))
 			return bars;
 
 		const auto beatSeconds = 60.0 / bpm;

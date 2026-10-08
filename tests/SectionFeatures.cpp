@@ -1,5 +1,7 @@
 #include <gtest/gtest.h>
 
+#include <cmath>
+
 #include "Sections.h"
 #include "SyntheticStems.h"
 
@@ -72,7 +74,7 @@ TEST (SectionFeatures, ACacheFileThatIsNotOneIsNothing)
 	EXPECT_FALSE (sections::decode ("<ANALYSIS/>").has_value());
 }
 
-// Review Focus 3: sets whose stems are not in the stem creator's order.
+// Sets whose stems are not in the stem creator's order must still find drums and bass.
 TEST (SectionFeatures, TheStemsByNameElseByOrder)
 {
 	const auto demucs = sections::rolesFor ({ "drums", "bass", "other", "vocals" });
@@ -90,4 +92,34 @@ TEST (SectionFeatures, TheStemsByNameElseByOrder)
 	const auto shuffled = sections::rolesFor ({ "Vocals", "Bass", "Drums", "Other" });
 	EXPECT_EQ (shuffled.drums, 2);
 	EXPECT_EQ (shuffled.bass, 1);
+}
+
+// Real analysed grids never put the downbeat on a 10 ms slice boundary.
+TEST (SectionFeatures, TheKickOnAnOffSliceDownbeatCounts)
+{
+	const double downbeat = 0.2537;
+	synthetic::Stems stems;
+	const auto total = (size_t) ((downbeat + 2.0) * synthetic::sampleRate);
+	for (auto& stem : stems.samples)
+		stem.assign (total, 0.0f);
+	uint32_t state = 1;
+	synthetic::hit (stems.samples[0], downbeat, 60.0, 0.8f, 0.08, 0.15, state);
+
+	sections::FeatureBuilder builder (synthetic::sampleRate, downbeat, synthetic::beat);
+	builder.add ({ stems.samples[0].data(), stems.samples[1].data(), stems.samples[2].data(), stems.samples[3].data() }, (int) total);
+	const auto bars = sections::barLevels (builder.finish(), synthetic::bpm, downbeat, {});
+	ASSERT_EQ (bars.size(), 1u);
+	EXPECT_GT (bars[0].drumOnsetsPerBeat, 0.0f) << "the kick on the one";
+}
+
+TEST (SectionFeatures, NoFiniteGridNoBars)
+{
+	const auto features = synthetic::featuresOf (synthetic::fromScript ("FF"));
+	const double nan = std::nan ("");
+	EXPECT_TRUE (sections::barLevels (features, nan, 0.25, {}).empty());
+	EXPECT_TRUE (sections::barLevels (features, 120.0, nan, {}).empty());
+	EXPECT_TRUE (sections::barLevels (features, INFINITY, 0.25, {}).empty());
+	auto badHop = features;
+	badHop.hopSeconds = nan;
+	EXPECT_TRUE (sections::barLevels (badHop, 120.0, 0.25, {}).empty());
 }

@@ -1,6 +1,7 @@
 #include "DeckPanel.h"
 #include "Theme.h"
 #include "SyncLabels.h"
+#include "SurfaceJuce.h"
 
 namespace
 {
@@ -65,8 +66,9 @@ DeckPanel::DeckPanel (StemDeckPlayer& p, StemThumbnails& thumbnails, int index)
 	masterButton.setTooltip (syncLabels::masterTooltip());
 	masterButton.onClick = [this] { if (onMasterPressed) onMasterPressed(); };
 
-	rangeButton.setTooltip ("Tempo-Bereich umschalten");
-	rangeButton.onClick = [this]
+	pitch.range.setTooltip ("Tempo-Bereich umschalten");
+	pitch.range.setMouseClickGrabsKeyboardFocus (false);
+	pitch.range.onClick = [this]
 	{
 		const auto current = std::find (std::begin (tempoRanges), std::end (tempoRanges), tempoRange);
 		const auto next = (current == std::end (tempoRanges) || current + 1 == std::end (tempoRanges)) ? tempoRanges[0] : *(current + 1);
@@ -83,7 +85,7 @@ DeckPanel::DeckPanel (StemDeckPlayer& p, StemThumbnails& thumbnails, int index)
 	nextButton.onClick = [this] { if (onStep) onStep (1); };
 	setStepsAvailable (false, false, {}, {});
 
-	for (auto* b : { &previousButton, &nextButton, &cueButton, &playButton, &loopOffButton, &repeatButton, &syncButton, &masterButton, &rangeButton, &vinylButton, &gridButton })
+	for (auto* b : { &previousButton, &nextButton, &cueButton, &playButton, &loopOffButton, &repeatButton, &syncButton, &masterButton, &vinylButton, &gridButton })
 	{
 		b->setMouseClickGrabsKeyboardFocus (false); // keyboard shortcuts stay with the main window
 		addAndMakeVisible (b);
@@ -111,21 +113,20 @@ DeckPanel::DeckPanel (StemDeckPlayer& p, StemThumbnails& thumbnails, int index)
 	gridAction (shiftButton, GridAction::shiftToLeader, "SHIFT GRID: take the beat matched by ear into the grid");
 	gridAction (resetGridButton, GridAction::reset, "Grid wie analysiert");
 
-	tempo.setValue (1.0, juce::dontSendNotification);
-	tempo.setDoubleClickReturnValue (true, 1.0);
-	tempo.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 64, 20);
-	tempo.textFromValueFunction = [] (double v)
+	pitch.fader.setValue (1.0, juce::dontSendNotification);
+	pitch.fader.setDoubleClickReturnValue (true, 1.0);
+	pitch.fader.textFromValueFunction = [] (double v)
 	{
 		const auto percent = (v - 1.0) * 100.0;
 		return (percent >= 0.0 ? "+" : "") + juce::String (percent, 2) + "%";
 	};
-	tempo.valueFromTextFunction = [] (const juce::String& t) { return 1.0 + t.getDoubleValue() / 100.0; };
-	tempo.setColour (juce::Slider::thumbColourId, Theme::deck (deckIndex));
-	tempo.setTooltip ("Tempo (Doppelklick: 0%)");
-	tempo.setMouseClickGrabsKeyboardFocus (false);
-	tempo.onValueChange = [this]
+	pitch.fader.valueFromTextFunction = [] (const juce::String& t) { return 1.0 + t.getDoubleValue() / 100.0; };
+	pitch.fader.setColour (juce::Slider::thumbColourId, Theme::deck (deckIndex));
+	pitch.fader.setTooltip ("Tempo (Doppelklick: 0%)");
+	pitch.fader.setMouseClickGrabsKeyboardFocus (false);
+	pitch.fader.onValueChange = [this]
 	{
-		player.setSpeed (tempo.getValue());
+		player.setSpeed (pitch.fader.getValue());
 
 		// Moving the fader by hand takes the deck out of sync.
 		if (! settingTempoFromSync && syncButton.getToggleState())
@@ -136,16 +137,15 @@ DeckPanel::DeckPanel (StemDeckPlayer& p, StemThumbnails& thumbnails, int index)
 				onSyncToggled (false);
 		}
 	};
-	addAndMakeVisible (tempo);
 	setTempoRange (0.08);
 }
 
 void DeckPanel::setTempoRange (double range)
 {
 	tempoRange = range;
-	tempo.setRange (1.0 - range, 1.0 + range, 0.000001);
-	tempo.updateText();
-	rangeButton.setButtonText (juce::String::fromUTF8 ("\xc2\xb1") + juce::String (juce::roundToInt (range * 100.0)) + "%");
+	pitch.fader.setRange (1.0 - range, 1.0 + range, 0.000001);
+	pitch.fader.updateText();
+	pitch.range.setButtonText (juce::String::fromUTF8 ("\xc2\xb1") + juce::String (juce::roundToInt (range * 100.0)) + "%");
 }
 
 void DeckPanel::setTempoFromSync (double rate)
@@ -163,7 +163,7 @@ void DeckPanel::setTempoFromSync (double rate)
 	}
 
 	const juce::ScopedValueSetter<bool> svs (settingTempoFromSync, true);
-	tempo.setValue (rate, juce::sendNotificationSync);
+	pitch.fader.setValue (rate, juce::sendNotificationSync);
 }
 
 void DeckPanel::setStepsAvailable (bool previous, bool next, const juce::String& previousTip, const juce::String& nextTip)
@@ -185,7 +185,7 @@ void DeckPanel::setGridMode (bool on)
 
 void DeckPanel::saveState (DeckSession& state) const
 {
-	state.tempo = tempo.getValue();
+	state.tempo = pitch.fader.getValue();
 	state.tempoRange = tempoRange;
 	state.vinyl = vinylButton.getToggleState();
 	state.repeat = repeatButton.getToggleState();
@@ -199,7 +199,7 @@ void DeckPanel::restoreState (const DeckSession& state)
 	{
 		// Not a hand on the fader: SYNC is restored after it.
 		const juce::ScopedValueSetter<bool> svs (settingTempoFromSync, true);
-		tempo.setValue (state.tempo, juce::sendNotificationSync);
+		pitch.fader.setValue (state.tempo, juce::sendNotificationSync);
 	}
 	vinylButton.setToggleState (state.vinyl, juce::sendNotificationSync);
 	repeatButton.setToggleState (state.repeat, juce::sendNotificationSync);
@@ -296,93 +296,43 @@ void DeckPanel::paint (juce::Graphics& g)
 	g.fillRect (deckIndex == 0 ? bounds.removeFromRight (3.0f) : bounds.removeFromLeft (3.0f));
 }
 
-void DeckPanel::setTempoSpan (int top, int bottom)
-{
-	if (top == tempoTop && bottom == tempoBottom)
-		return;
-	tempoTop = top;
-	tempoBottom = bottom;
-	resized();
-}
-
 void DeckPanel::resized()
 {
-	auto area = getLocalBounds().reduced (6);
-	const auto gap = 6;
+	const auto layout = surface::deckColumn (surface::fromJuce (getLocalBounds()), gridButton.getToggleState());
+	const auto place = [] (juce::Component& c, const surface::Rect& r) { c.setBounds (surface::toJuce (r)); };
 
-	// At the foot, level with the mixer's volume faders and as tall: the pitch
-	// fader on the outer edge and the small keys beside it. Everything above
-	// has the deck's whole width -- the overview and the BPM got the room the
-	// full-height pitch fader took (2026-09-30).
-	const auto fallbackTop = area.getBottom() - 4 * (28 + gap);
-	const auto bandTop = tempoBottom > tempoTop ? juce::jlimit (area.getY() + 120, area.getBottom() - 4 * (22 + gap), tempoTop)
-												: fallbackTop;
-	auto band = area.withTop (bandTop).withBottom (tempoBottom > tempoTop ? juce::jmin (area.getBottom(), tempoBottom) : area.getBottom());
-	area.setBottom (bandTop - gap);
+	place (titleLabel, layout.title);
+	place (stemsLabel, layout.stems);
+	place (overview, layout.overview);
+	place (elapsedLabel, layout.elapsed);
+	place (remainingLabel, layout.remaining);
+	place (bpmLabel, layout.bpm);
+	place (bpmInfoLabel, layout.bpmInfo);
+	place (previousButton, layout.previous);
+	place (cueButton, layout.cue);
+	place (playButton, layout.play);
+	place (nextButton, layout.next);
+	place (loopOffButton, layout.loopOff);
+	place (repeatButton, layout.repeat);
+	place (syncButton, layout.sync);
+	place (masterButton, layout.master);
+	place (vinylButton, layout.vinyl);
+	place (gridButton, layout.grid);
 
-	tempo.setBounds (deckIndex == 0 ? band.removeFromLeft (54) : band.removeFromRight (54));   // "+0.00%" below it
-	deckIndex == 0 ? band.removeFromLeft (gap) : band.removeFromRight (gap);
+	// Hidden while GRID is off; their places then are the overview's.
+	const std::array<juce::Component*, 5> nudge { &halfBackButton, &oneBackButton, &downbeatButton, &oneForwardButton, &halfForwardButton };
+	const std::array<juce::Component*, 3> edit { &snapButton, &shiftButton, &resetGridButton };
+	for (size_t i = 0; i < nudge.size(); ++i)
+		place (*nudge[i], layout.gridNudge[i]);
+	for (size_t i = 0; i < edit.size(); ++i)
+		place (*edit[i], layout.gridEdit[i]);
+}
 
-	const auto rowHeight = juce::jmax (22, (band.getHeight() - 3 * gap) / 4);
-	const auto pairRow = [&band, gap, rowHeight] (juce::Component& a, juce::Component* b)
-	{
-		auto row = band.removeFromTop (rowHeight);
-		band.removeFromTop (gap);
-		if (b == nullptr)
-		{
-			a.setBounds (row);
-			return;
-		}
-		a.setBounds (row.removeFromLeft ((row.getWidth() - gap) / 2));
-		row.removeFromLeft (gap);
-		b->setBounds (row);
-	};
-	pairRow (loopOffButton, &repeatButton);
-	pairRow (syncButton, &masterButton);
-	pairRow (rangeButton, &vinylButton);
-	pairRow (gridButton, nullptr);
-
-	// Above, the whole width: title, times, overview, BPM, the transport.
-	titleLabel.setBounds (area.removeFromTop (22));
-	stemsLabel.setBounds (area.removeFromTop (16));
-	auto times = area.removeFromTop (22);
-	elapsedLabel.setBounds (times.removeFromLeft (times.getWidth() / 2));
-	remainingLabel.setBounds (times);
-	area.removeFromTop (4);
-
-	// Track search either side of CUE | PLAY, as on a CDJ: an eighth of the
-	// row each, so the keys played in time keep most of it.
-	auto transport = area.removeFromBottom (44);
-	const auto stepWidth = transport.getWidth() / 8;
-	previousButton.setBounds (transport.removeFromLeft (stepWidth));
-	nextButton.setBounds (transport.removeFromRight (stepWidth));
-	transport.removeFromLeft (gap);
-	transport.removeFromRight (gap);
-	cueButton.setBounds (transport.removeFromLeft ((transport.getWidth() - gap) / 2));
-	transport.removeFromLeft (gap);
-	playButton.setBounds (transport);
-	area.removeFromBottom (gap);
-
-	// Grid Adjust while GRID is on: moving the grid is the controller's jog
-	// wheel; these nudge it, snap it and set its one.
-	if (gridButton.getToggleState())
-	{
-		const auto gridRow = [&area, gap] (std::initializer_list<juce::Component*> keys)
-		{
-			auto row = area.removeFromBottom (26);
-			area.removeFromBottom (4);
-			const auto width = row.getWidth() / (int) keys.size();
-			for (auto* key : keys)
-				key->setBounds (row.removeFromLeft (width).reduced (1, 0));
-		};
-		gridRow ({ &snapButton, &shiftButton, &resetGridButton });
-		gridRow ({ &halfBackButton, &oneBackButton, &downbeatButton, &oneForwardButton, &halfForwardButton });
-		area.removeFromBottom (gap - 4);
-	}
-
-	auto bpm = area.removeFromBottom (40);
-	bpmLabel.setBounds (bpm.removeFromTop (26));
-	bpmInfoLabel.setBounds (bpm);
-	area.removeFromBottom (gap);
-	overview.setBounds (area);
+//==============================================================================
+void PitchColumn::resized()
+{
+	const auto layout = surface::pitchColumn (surface::fromJuce (getLocalBounds()));
+	fader.setTextBoxStyle (juce::Slider::TextBoxBelow, false, layout.fader.w, layout.valueHeight);
+	fader.setBounds (surface::toJuce (layout.fader));
+	range.setBounds (surface::toJuce (layout.range));
 }

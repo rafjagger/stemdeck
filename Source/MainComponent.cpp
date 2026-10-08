@@ -4,6 +4,7 @@
 #include "GridEdit.h"
 #include "OscTruthFile.h"
 #include "SyncLabels.h"
+#include "SurfaceJuce.h"
 
 #include <cstdlib>
 #include <iostream>
@@ -58,6 +59,7 @@ MainComponent::MainComponent()
 	{
 		addAndMakeVisible (waves[(size_t) d]);
 		addAndMakeVisible (decks[(size_t) d]);
+		addAndMakeVisible (decks[(size_t) d]->pitchColumn());
 		waves[(size_t) d]->onSetDropped = [this, d] (const juce::String& id) { loadDroppedSet (id, d); };
 		decks[(size_t) d]->onSetDropped = [this, d] (const juce::String& id) { loadDroppedSet (id, d); };
 		decks[(size_t) d]->onSyncToggled = [this, d] (bool enabled) { setSync (d, enabled); };
@@ -1459,9 +1461,11 @@ void MainComponent::paint (juce::Graphics& g)
 
 void MainComponent::resized()
 {
-	auto area = getLocalBounds().reduced (6);
+	// The sections (SurfaceLayout.h): the top bar; the waveforms with a deck's
+	// pitch column at each outer edge; deck A | mixer | deck B; the library.
+	const auto layout = surface::sections (getWidth(), getHeight());
 
-	auto topBar = area.removeFromTop (30);
+	auto topBar = surface::toJuce (layout.topBar);
 	// The switch at the very right, where A3 Motion has it: the key under the
 	// finger stays put when the workspace changes.
 	const auto switcher = switcherGeometry (getWidth());
@@ -1488,34 +1492,16 @@ void MainComponent::resized()
 	pioPlayer.setBounds (topBar.removeFromRight (90));
 	pioStatus.setBounds (topBar.removeFromRight (220));
 	deviceStatus.setBounds (topBar);
-	area.removeFromTop (4);
 
-	const auto waveHeight = juce::jlimit (90, 170, getHeight() / 8);
-	auto waves = area.removeFromTop (waveHeight * 2 + 3);
-	waveA.setBounds (waves.removeFromTop (waveHeight));
-	waves.removeFromTop (3);
-	waveB.setBounds (waves);
-	area.removeFromTop (6);
-
-	auto middle = area.removeFromTop (juce::jmin (460, area.getHeight() - 150));
-	// 400 at the least, so a deck column keeps ~180 px on the rig's 768 px
-	// screen; it was 460, which left them 154 and cut their right half off.
-	const auto mixerWidth = juce::jlimit (400, 560, getWidth() / 3);
-	const auto deckWidth = (middle.getWidth() - mixerWidth) / 2;
-	deckA.setBounds (middle.removeFromLeft (deckWidth));
-	deckB.setBounds (middle.removeFromRight (deckWidth));
-	mixer.setBounds (middle);
-
-	// The pitch faders line up with the mixer's volume faders.
+	waveA.setBounds (surface::toJuce (layout.waveA));
+	waveB.setBounds (surface::toJuce (layout.waveB));
 	for (int d = 0; d < numDecks; ++d)
 	{
-		const auto fader = getLocalArea (&mixer, mixer.faderArea (d));
-		auto& deck = *decks[(size_t) d];
-		deck.setTempoSpan (fader.getY() - deck.getY(), fader.getBottom() - deck.getY());
+		decks[(size_t) d]->pitchColumn().setBounds (surface::toJuce (layout.pitch[(size_t) d]));
+		decks[(size_t) d]->setBounds (surface::toJuce (layout.deck[(size_t) d]));
 	}
-	area.removeFromTop (6);
-
-	library.setBounds (area);
+	mixer.setBounds (surface::toJuce (layout.mixer));
+	library.setBounds (surface::toJuce (layout.library));
 }
 
 bool MainComponent::keyPressed (const juce::KeyPress& key)

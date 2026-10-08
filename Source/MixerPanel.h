@@ -55,14 +55,12 @@ private:
 };
 
 //==============================================================================
-// Channel strip of one deck: a knob per stem, with mute and one switch per
-// bus (1-4, AUX -- one stem per bus, the rest on AUX, Buses.h), above the
-// channel fader.
+// Channel strip of one deck: a knob per stem, with one switch per bus (1-4,
+// AUX -- one stem per bus, the rest on AUX, Buses.h) and mute in one row,
+// above the channel fader, which shows the deck's level in its slot.
 class ChannelStrip : public juce::Component
 {
 public:
-	// Where its volume fader stands, for the deck beside it to line up with.
-	juce::Rectangle<int> faderBounds() const { return fader.getBounds(); }
 	ChannelStrip (StemDeckPlayer& player, int deckIndex);
 
 	void setStemNames (const std::array<juce::String, StemSet::numStems>& names);
@@ -90,9 +88,8 @@ public:
 	void restoreState (const DeckSession& state);
 
 	// Room left free beside the fader on the side towards the mixer's middle,
-	// for the output meters; where that room is, in this strip's coordinates.
+	// for the output meters.
 	void setMeterReserve (int width) { meterReserve = width; resized(); }
-	juce::Rectangle<int> getMeterZone() const { return meterZone; }
 
 	void paint (juce::Graphics& g) override;
 	void resized() override;
@@ -108,7 +105,7 @@ private:
 	LevelMeter meter;
 
 	int meterReserve = 0;
-	juce::Rectangle<int> meterZone;
+	juce::Rectangle<int> headerArea;
 	std::array<juce::Rectangle<int>, StemSet::numStems> stemFrames;
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ChannelStrip)
@@ -122,11 +119,6 @@ public:
 
 	ChannelStrip& strip (int deckIndex) { return deckIndex == 0 ? stripA : stripB; }
 	const ChannelStrip& strip (int deckIndex) const { return deckIndex == 0 ? stripA : stripB; }
-	// A deck's volume fader in this panel's coordinates.
-	juce::Rectangle<int> faderArea (int deckIndex) const
-	{
-		return strip (deckIndex).faderBounds() + strip (deckIndex).getPosition();
-	}
 	void refresh();
 
 	// One bus switch under the one-stem-per-bus rule (Buses.h), across both

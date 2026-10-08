@@ -90,9 +90,12 @@ private:
 	struct TapArea : public juce::Component
 	{
 		explicit TapArea (FolderItem& i) : item (i) {}
+		// On the screen, not in the row: a drag scrolls the row along with the
+		// finger, and in its own coordinates the finger has not moved at all.
 		void mouseUp (const juce::MouseEvent& e) override
 		{
-			if (touchlist::isTap ((float) e.getDistanceFromDragStart(), getHeight()))
+			const auto moved = e.getScreenPosition().getDistanceFrom (e.getMouseDownScreenPosition());
+			if (touchlist::isTap ((float) moved, getHeight()))
 				item.owner.folderTapped (item);
 		}
 		FolderItem& item;

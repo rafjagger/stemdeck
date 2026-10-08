@@ -294,13 +294,15 @@ void StemDeckPlayer::getNextAudioBlock (const juce::AudioSourceChannelInfo& info
 			squares += rms * rms * info.numSamples;
 		}
 
-		// Both meters, the desk's and the strip's, as the stem leaves on its
-		// bus: scaled rather than measured on the bus, which sums every stem
-		// switched to it.
-		const auto sent = remote::sentToBus ({ peak, squares, 2 * info.numSamples }, deckGain.load());
-		deskLevels[(size_t) s].add (sent);
-		if (sent.peak > stemPeak[(size_t) s].load())
-			stemPeak[(size_t) s] = sent.peak;
+		// One measurement, two meters. The desk's: as the stem leaves on its
+		// bus, scaled rather than measured on the bus, which sums every stem
+		// switched to it. The screen's, behind the deck's volume fader: before
+		// that fader, as a DJ mixer's channel meter.
+		const remote::Block afterKnob { peak, squares, 2 * info.numSamples };
+		deskLevels[(size_t) s].add (remote::sentToBus (afterKnob, deckGain.load()));
+		const auto screenPeak = remote::beforeFader (afterKnob).peak;
+		if (screenPeak > stemPeak[(size_t) s].load())
+			stemPeak[(size_t) s] = screenPeak;
 	}
 }
 

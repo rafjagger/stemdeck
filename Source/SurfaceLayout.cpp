@@ -260,6 +260,6 @@ namespace surface
 
 	int meterCaptionHeight (int metersHeight)
 	{
-		return share (metersHeight, 150);
+		return share (metersHeight, 90);
 	}
 }

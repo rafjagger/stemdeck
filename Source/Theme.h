@@ -76,12 +76,14 @@ public:
 	{
 		return juce::jmin (faderCapHeight (fader) * 2.2f, track.getWidth() * 0.8f);
 	}
+	// A fader with this property set has meters behind its slot (the mixer's
+	// volume faders: one per stem): the slot is as wide as the cap and left
+	// open for them.
+	static constexpr const char* meterInSlot = "meterInSlot";
 	static juce::Rectangle<float> faderSlot (const juce::Component& fader, juce::Rectangle<float> track)
 	{
-		return track.withSizeKeepingCentre (faderCapWidth (fader, track) * 0.3f, track.getHeight());
+		const auto share = fader.getProperties().getWithDefault (meterInSlot, false) ? 1.0f : 0.3f;
+		return track.withSizeKeepingCentre (faderCapWidth (fader, track) * share, track.getHeight());
 	}
-	// A fader with this property set has a meter behind its slot (the
-	// mixer's volume faders): the slot is left open for it.
-	static constexpr const char* meterInSlot = "meterInSlot";
 	int getSliderThumbRadius (juce::Slider&) override;
 };

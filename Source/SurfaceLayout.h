@@ -97,7 +97,7 @@ namespace surface
 	// The mixer above the band, in its own coordinates: two strips.
 	std::array<Rect, 2> mixerStrips (Rect local);
 
-	// The output meters' caption line (bus names, L/R) under the bars; the
+	// The output meters' caption line (the bus names) under the bars; the
 	// volume faders end where the bars do.
 	int meterCaptionHeight (int metersHeight);
 }

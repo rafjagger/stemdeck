@@ -70,13 +70,13 @@ void LevelMeter::paint (juce::Graphics& g)
 		return juce::Rectangle<float> (bounds.getX() + 1.0f, bounds.getBottom() - segmentHeight * (float) (i + 1),
 									   bounds.getWidth() - 2.0f, segmentHeight - 1.0f);
 	};
-	const auto colourOf = [barSegments] (int i)
+	const auto colourOf = [this, barSegments] (int i)
 	{
 		switch (zoneOfSegment (i, barSegments))
 		{
 			case MeterZone::red:    return clipColour;
 			case MeterZone::yellow: return juce::Colour (0xffe8c33d);
-			case MeterZone::green:  return juce::Colour (0xff3ec46d);
+			case MeterZone::green:  return barColour.value_or (juce::Colour (0xff3ec46d));
 		}
 		return juce::Colour (0xff3ec46d);
 	};
@@ -119,25 +119,15 @@ void OutputMeters::paint (juce::Graphics& g)
 	g.setColour (Theme::panelRaised);
 	g.fillRoundedRectangle (getLocalBounds().toFloat(), 6.0f);
 
-	// The bus name over L / R, each a share of the caption line.
-	const auto nameHeight = labelArea.getHeight() * 55 / 100;
-	const auto sideHeight = labelArea.getHeight() - nameHeight;
-	const auto nameFont = juce::FontOptions ((float) nameHeight * 0.85f, juce::Font::bold);
-	const auto sideFont = juce::FontOptions ((float) sideHeight * 0.85f);
+	// The bus names under their pairs, a share of the caption line.
+	g.setFont (juce::FontOptions ((float) labelArea.getHeight() * 0.8f, juce::Font::bold));
 
 	for (int bus = 0; bus < numBuses; ++bus)
 	{
-		const auto left = meters[bus * 2]->getBounds();
-		const auto right = meters[bus * 2 + 1]->getBounds();
-		const auto pair = left.getUnion (right);
-
-		g.setFont (nameFont);
+		const auto pair = meters[bus * 2]->getBounds().getUnion (meters[bus * 2 + 1]->getBounds());
 		g.setColour (bus < buses::aux ? Theme::text : busColour (bus, 0));
-		g.drawText (busName (bus), pair.withY (labelArea.getY()).withHeight (nameHeight).expanded (6, 0), juce::Justification::centred);
-		g.setFont (sideFont);
-		g.setColour (Theme::textDim);
-		g.drawText ("L", left.withY (labelArea.getY() + nameHeight).withHeight (sideHeight), juce::Justification::centred);
-		g.drawText ("R", right.withY (labelArea.getY() + nameHeight).withHeight (sideHeight), juce::Justification::centred);
+		g.drawText (busName (bus), pair.withY (labelArea.getY()).withHeight (labelArea.getHeight()).expanded (6, 0),
+					juce::Justification::centred);
 	}
 }
 
@@ -212,6 +202,8 @@ ChannelStrip::ChannelStrip (StemDeckPlayer& p, int index) : player (p), deckInde
 		label->setJustificationType (juce::Justification::centredLeft);
 		label->setMinimumHorizontalScale (0.45f);   // "3 vocals" in the 400 px mixer
 		addAndMakeVisible (label);
+
+		stemMeters.add (new LevelMeter())->setBarColour (Theme::stem (s));
 	}
 
 	fader.setRange (minDb, 0.0, 0.1);
@@ -226,8 +218,8 @@ ChannelStrip::ChannelStrip (StemDeckPlayer& p, int index) : player (p), deckInde
 	{
 		player.setDeckGain (juce::Decibels::decibelsToGain ((float) fader.getValue(), minDb));
 	};
-	// The deck's VU in the fader's slot: the meter behind, the fader's ticks
-	// and cap drawn over it (2026-10-08, the clean surface).
+	// The deck's four stems metered in the fader's slot, pre-fader: the meters
+	// behind, the fader's ticks and cap drawn over them (2026-10-08).
 	fader.getProperties().set (DJLookAndFeel::meterInSlot, true);
 }
 
@@ -287,12 +279,8 @@ void ChannelStrip::toggleMute (int stem)
 
 void ChannelStrip::refresh()
 {
-	float peak = 0.0f;
-
 	for (int s = 0; s < StemSet::numStems; ++s)
-		peak = juce::jmax (peak, player.popStemPeak (s));
-
-	meter.setLevel (peak);
+		stemMeters[s]->setLevel (player.popStemPeak (s));
 }
 
 void ChannelStrip::paint (juce::Graphics& g)
@@ -336,7 +324,8 @@ void ChannelStrip::resized()
 
 void ChannelStrip::addFaderTo (juce::Component& parent)
 {
-	parent.addAndMakeVisible (meter);   // first: behind the fader
+	for (auto* meter : stemMeters)
+		parent.addAndMakeVisible (meter);   // first: behind the fader
 	parent.addAndMakeVisible (fader);
 }
 
@@ -344,10 +333,14 @@ void ChannelStrip::setFaderBounds (juce::Rectangle<int> area)
 {
 	fader.setBounds (area);
 
-	// The meter fills the slot over the fader's travel: from where the cap's
+	// The meters fill the slot over the fader's travel: from where the cap's
 	// centre stands at full level to where it stands at the bottom.
 	const auto travel = fader.getLocalBounds().toFloat().reduced (0.0f, DJLookAndFeel::faderCapHeight (fader) / 2.0f);
-	meter.setBounds (DJLookAndFeel::faderSlot (fader, travel).getSmallestIntegerContainer() + fader.getPosition());
+	// The four stem meters side by side in the slot, a hairline apart.
+	auto slot = DJLookAndFeel::faderSlot (fader, travel).getSmallestIntegerContainer() + fader.getPosition();
+	const auto width = slot.getWidth() / stemMeters.size();
+	for (auto* meter : stemMeters)
+		meter->setBounds (slot.removeFromLeft (width).withTrimmedRight (1));
 }
 
 //==============================================================================

@@ -15,6 +15,8 @@ public:
 	void setLevel (float newPeak);
 	void setParameters (MeterParameters parameters) { ballistics.setParameters (parameters); }
 	void setShowsClip (bool shows) { showsClip = shows; repaint(); }
+	// The bar's normal range in this colour (a stem's) instead of the LEDs' green.
+	void setBarColour (juce::Colour colour) { barColour = colour; repaint(); }
 	void paint (juce::Graphics& g) override;
 
 private:
@@ -24,6 +26,7 @@ private:
 	double lastFeedMs = 0.0;
 	int litSegments = 0, heldSegment = 0;
 	bool showsClip = false;
+	std::optional<juce::Colour> barColour;
 	ClipHold clipHold;
 	bool clipping = false;
 };
@@ -67,7 +70,11 @@ public:
 	void setStemNames (const std::array<juce::String, StemSet::numStems>& names);
 	void toggleMute (int stem);
 	void refresh(); // meters, called by the main timer
-	void setMeterParameters (MeterParameters parameters) { meter.setParameters (parameters); }
+	void setMeterParameters (MeterParameters parameters)
+	{
+		for (auto* meter : stemMeters)
+			meter->setParameters (parameters);
+	}
 
 	// The bus switches as the player has them, after a change from elsewhere
 	// (the rule, or Core, spec stemdeck-remote); nothing is sent back from here.
@@ -88,7 +95,7 @@ public:
 	void saveState (DeckSession& state) const;
 	void restoreState (const DeckSession& state);
 
-	// The fader and the meter behind it: made children of `parent`, placed by it.
+	// The fader and the stem meters behind it: made children of `parent`, placed by it.
 	void addFaderTo (juce::Component& parent);
 	void setFaderBounds (juce::Rectangle<int> area);
 
@@ -103,7 +110,7 @@ private:
 	juce::OwnedArray<juce::TextButton> muteButtons, busButtons;   // busButtons: stem * buses::count + bus
 	juce::OwnedArray<juce::Label> stemLabels;
 	juce::Slider fader { juce::Slider::LinearVertical, juce::Slider::NoTextBox };
-	LevelMeter meter;
+	juce::OwnedArray<LevelMeter> stemMeters;   // behind the fader, one per stem
 
 	juce::Rectangle<int> headerArea;
 	std::array<juce::Rectangle<int>, StemSet::numStems> stemFrames;

@@ -23,6 +23,11 @@ std::optional<sections::Features> SectionAnalysis::analyse (const StemSet& set, 
 		if (readers[i] == nullptr)
 			return std::nullopt;
 
+		// The stems are read in step at one rate; at another, a stem's beats
+		// would land in the wrong bars. No features rather than wrong ones.
+		if (i > 0 && ! juce::exactlyEqual (readers[i]->sampleRate, sampleRate))
+			return std::nullopt;
+
 		sampleRate = readers[i]->sampleRate;
 		length = juce::jmax (length, readers[i]->lengthInSamples);
 	}

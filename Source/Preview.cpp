@@ -22,8 +22,10 @@ namespace preview
 		while (change < count && bars[(size_t) change].section == here.section)
 			++change;
 
-		// A loop that turns back before the change keeps it from coming.
-		if (loop && loop->start <= barPosition && loop->end <= (double) change)
+		// A loop that turns back before the change keeps it from coming. As in
+		// the player: a playhead short of the loop's end plays into it (also
+		// from before its start); one past its end plays on freely.
+		if (loop && barPosition < loop->end && loop->end <= (double) change)
 		{
 			ahead.next = ahead.section;
 			ahead.barsUntilNext = -1;

@@ -79,11 +79,30 @@ TEST (Preview, ALoopPastTheChangeDoesNot)
 	EXPECT_EQ (ahead.barsUntilNext, 1);
 }
 
-TEST (Preview, ALoopStillAheadIsNoLoopYet)
+// The player plays into a loop that lies ahead (it reads on to the loop's
+// end and turns back), so a loop ahead that ends before the change holds it
+// off already.
+TEST (Preview, ALoopAheadIsEnteredAndHoldsTheChangeOff)
 {
 	const auto ahead = preview::aheadAt (aSet(), 0.5, preview::LoopBars { 1.0, 2.0 });
+	EXPECT_EQ (ahead.next, "groove");
+	EXPECT_EQ (ahead.barsUntilNext, -1);
+}
+
+TEST (Preview, ALoopAheadPastTheChangeLetsItCome)
+{
+	const auto ahead = preview::aheadAt (aSet(), 0.5, preview::LoopBars { 3.0, 4.0 });
 	EXPECT_EQ (ahead.next, "breakdown");
 	EXPECT_EQ (ahead.barsUntilNext, 2);
+}
+
+// A jump past the loop's end leaves the loop set, but the player plays on
+// freely from there.
+TEST (Preview, APlayheadPastTheLoopPlaysOn)
+{
+	const auto ahead = preview::aheadAt (aSet(), 1.2, preview::LoopBars { 0.0, 1.0 });
+	EXPECT_EQ (ahead.next, "breakdown");
+	EXPECT_EQ (ahead.barsUntilNext, 1);
 }
 
 TEST (Preview, TheAudibleDeck)
@@ -178,7 +197,7 @@ TEST (Preview, NoneIsSentOnceNotEveryTick)
 	EXPECT_FALSE (gate.shouldSend (silent));
 }
 
-// Review Focus 1: the one moved by hand while the deck plays.
+// The one moved by hand while the deck plays.
 TEST (Preview, TheOneMovedByHandSendsAtOnce)
 {
 	preview::Gate gate;

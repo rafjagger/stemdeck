@@ -92,3 +92,34 @@ TEST (GridEdit, WithoutATempoTheLoopStaysPut)
 	EXPECT_DOUBLE_EQ (loop.start, 10.2);
 	EXPECT_DOUBLE_EQ (loop.end, 12.1);
 }
+
+// "1 < / > 1": the beats sit right and only the bar's one is wrong, which is
+// what the analysis gets wrong on most tracks (2026-10-08). The one moves a
+// whole beat; every beat stays where it was.
+TEST (GridEdit, TheOneMovesABeatAndTheBeatsStay)
+{
+	const auto later = GridEdit::moveOne (at120, true);
+	EXPECT_NEAR (later.firstBeat, 0.75, 1e-9) << "the one a beat later";
+	EXPECT_NEAR (GridEdit::moveOne (at120, false).firstBeat, 1.75, 1e-9) << "a beat earlier, past zero: a bar on";
+
+	const auto phase = [] (Grid g) { return std::fmod (g.firstBeat, 60.0 / g.bpm); };
+	EXPECT_NEAR (phase (later), phase (at120), 1e-9) << "the beats themselves do not move";
+	EXPECT_DOUBLE_EQ (later.bpm, 120.0);
+}
+
+TEST (GridEdit, FourTimesTheOneComesBackToWhereItWas)
+{
+	auto grid = at120;
+	for (int i = 0; i < 4; ++i)
+	{
+		grid = GridEdit::moveOne (grid, true);
+		EXPECT_GE (grid.firstBeat, 0.0);
+		EXPECT_LT (grid.firstBeat, 2.0) << "within the first bar";
+	}
+	EXPECT_NEAR (grid.firstBeat, at120.firstBeat, 1e-9);
+}
+
+TEST (GridEdit, NoTempoNoOneToMove)
+{
+	EXPECT_DOUBLE_EQ (GridEdit::moveOne (Grid {}, true).firstBeat, 0.0);
+}

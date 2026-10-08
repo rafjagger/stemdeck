@@ -26,6 +26,13 @@ namespace GridEdit
 		return shift (grid, (forwards ? 0.5 : -0.5) * 60.0 / grid.bpm);
 	}
 
+	Grid moveOne (Grid grid, bool later)
+	{
+		if (grid.bpm <= 0.0)
+			return grid;
+		return shift (grid, (later ? 1.0 : -1.0) * 60.0 / grid.bpm);
+	}
+
 	Grid snapToCue (Grid grid, double cueSeconds)
 	{
 		grid.firstBeat = cueSeconds;

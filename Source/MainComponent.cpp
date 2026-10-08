@@ -615,6 +615,8 @@ void MainComponent::editGrid (int deckIndex, DeckPanel::GridAction action, doubl
 		case Action::shift:       grid = GridEdit::shift (grid, seconds); break;
 		case Action::halfBack:    grid = GridEdit::shiftHalfBeat (grid, false); break;
 		case Action::halfForward: grid = GridEdit::shiftHalfBeat (grid, true); break;
+		case Action::oneBack:     grid = GridEdit::moveOne (grid, false); break;
+		case Action::oneForward:  grid = GridEdit::moveOne (grid, true); break;
 		case Action::snapToCue:   grid = GridEdit::snapToCue (grid, player.getCuePoint()); break;
 		case Action::downbeatAtPlayhead:
 		{

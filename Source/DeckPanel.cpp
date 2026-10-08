@@ -104,6 +104,8 @@ DeckPanel::DeckPanel (StemDeckPlayer& p, StemThumbnails& thumbnails, int index)
 	};
 	gridAction (halfBackButton, GridAction::halfBack, "Grid half a beat earlier");
 	gridAction (halfForwardButton, GridAction::halfForward, "Grid half a beat later");
+	gridAction (oneBackButton, GridAction::oneBack, "The bar's one a beat earlier, the beats stay");
+	gridAction (oneForwardButton, GridAction::oneForward, "The bar's one a beat later, the beats stay");
 	gridAction (snapButton, GridAction::snapToCue, "SNAP GRID (CUE): the bar's one onto the cue point");
 	gridAction (downbeatButton, GridAction::downbeatAtPlayhead, "SET 1: the bar's one where the playhead is");
 	gridAction (shiftButton, GridAction::shiftToLeader, "SHIFT GRID: take the beat matched by ear into the grid");
@@ -176,7 +178,7 @@ void DeckPanel::setGridMode (bool on)
 {
 	gridButton.setToggleState (on, juce::dontSendNotification);
 	jog.setGridMode (on);
-	for (auto* b : { &halfBackButton, &halfForwardButton, &snapButton, &downbeatButton, &shiftButton, &resetGridButton })
+	for (auto* b : { &halfBackButton, &halfForwardButton, &oneBackButton, &oneForwardButton, &snapButton, &downbeatButton, &shiftButton, &resetGridButton })
 		b->setVisible (on);
 	resized();
 }
@@ -374,7 +376,7 @@ void DeckPanel::resized()
 				key->setBounds (row.removeFromLeft (width).reduced (1, 0));
 		};
 		gridRow ({ &snapButton, &shiftButton, &resetGridButton });
-		gridRow ({ &halfBackButton, &downbeatButton, &halfForwardButton });
+		gridRow ({ &halfBackButton, &oneBackButton, &downbeatButton, &oneForwardButton, &halfForwardButton });
 		area.removeFromBottom (gap - 4);
 	}
 

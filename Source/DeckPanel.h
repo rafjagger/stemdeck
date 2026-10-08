@@ -91,7 +91,7 @@ private:
 	juce::TextButton cueButton { "CUE" }, playButton { "PLAY" }, loopOffButton { "LOOP OFF" }, repeatButton { "REPEAT" };
 	juce::TextButton syncButton { "SYNC" }, masterButton { "MASTER" }, rangeButton, vinylButton { "VINYL" };
 	juce::TextButton gridButton { "GRID" };
-	juce::TextButton halfBackButton { juce::String::fromUTF8 ("\xe2\x80\xb9" "1/2") }, halfForwardButton { juce::String::fromUTF8 ("1/2\xe2\x80\xba") };
+	juce::TextButton halfBackButton { juce::String::fromUTF8 ("\xe2\x80\xb9" "\xc2\xbd") }, halfForwardButton { juce::String::fromUTF8 ("\xc2\xbd" "\xe2\x80\xba") };
 	juce::TextButton snapButton { "SNAP" }, shiftButton { "SHIFT" }, resetGridButton { "RESET" };
 	juce::TextButton downbeatButton { "SET 1" };
 	juce::TextButton oneBackButton { juce::String::fromUTF8 ("\xe2\x97\x80" " 1") }, oneForwardButton { juce::String::fromUTF8 ("1 " "\xe2\x96\xb6") };

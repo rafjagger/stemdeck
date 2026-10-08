@@ -146,6 +146,8 @@ TEST (Remote, TheSidesOfAStereoBlockAreMeasuredApart)
 	EXPECT_FLOAT_EQ (r.rms, 0.0f);
 }
 
+// The desk gets raw peaks, one per tick: no fall and no hold here -- the desk
+// applies the system's meter ballistics itself (decided 2026-10-07).
 TEST (Remote, ATapGathersBlocksUntilItIsEmptied)
 {
 	const float loud[] { 0.5f, 0.5f }, quiet[] { 0.0f, 0.0f };
@@ -282,4 +284,68 @@ TEST (Remote, ARemoteSwitchObeysTheRuleAndTheReportShowsIt)
 		{ "/stemdeck/2/4/buses", 1u << 0 },
 	};
 	EXPECT_EQ (reports, expected);
+}
+
+// The stem meters /vu 41-48 read what a stem leaves StemDeck with: after
+// knob and mute (applied to the stem's samples by the player), the deck fader
+// and the bus trim -- so the desk's stem bar and the channel's input LEDs
+// read the same for a stem alone on a channel (2026-10-07, they were 6 dB
+// apart).
+namespace
+{
+	const float stemAfterKnob[] = { 0.8f, -0.4f, 0.2f, -0.8f, 0.1f, -0.3f };
+	constexpr int stemSamples = 6;
+
+	float decibels (float ratio) { return 20.0f * std::log10 (ratio); }
+	float fromDecibels (float db) { return std::pow (10.0f, db / 20.0f); }
+
+	// The bus the stem plays alone on, built the way the audio callback does:
+	// the route gain for a stem on that bus, then the trim on the whole bus.
+	remote::Block busCarrying (const float* stem, int count, float fader)
+	{
+		std::vector<float> bus ((size_t) count);
+		for (int i = 0; i < count; ++i)
+			bus[(size_t) i] = stem[i] * buses::gain (true, fader) * buses::trim;
+		return remote::measure (bus.data(), count);
+	}
+}
+
+TEST (Remote, AStemMeterAtTheTopOfTheFaderReadsTheTrim)
+{
+	const auto raw = remote::measure (stemAfterKnob, stemSamples);
+	const auto sent = remote::sentToBus (raw, 1.0f);
+
+	EXPECT_FLOAT_EQ (sent.peak, 0.5f * raw.peak);
+	EXPECT_NEAR (decibels (sent.peak / raw.peak), -6.02f, 0.01f);
+	EXPECT_NEAR (decibels ((float) std::sqrt (sent.squares / raw.squares)), -6.02f, 0.01f) << "rms as peak";
+	EXPECT_EQ (sent.samples, raw.samples);
+}
+
+TEST (Remote, AStemMeterFollowsTheDeckFader)
+{
+	const auto raw = remote::measure (stemAfterKnob, stemSamples);
+	const auto sent = remote::sentToBus (raw, fromDecibels (-10.0f));
+
+	EXPECT_NEAR (decibels (sent.peak / raw.peak), -16.02f, 0.01f);
+	EXPECT_NEAR (decibels ((float) std::sqrt (sent.squares / raw.squares)), -16.02f, 0.01f);
+}
+
+TEST (Remote, AMutedStemMeterReadsNothing)
+{
+	// Mute is the player's: the stem's samples are zero before they are measured.
+	std::vector<float> muted (stemSamples, 0.0f);
+	const auto sent = remote::sentToBus (remote::measure (muted.data(), stemSamples), 1.0f);
+	EXPECT_EQ (sent.peak, 0.0f);
+	EXPECT_EQ (sent.squares, 0.0);
+}
+
+TEST (Remote, AStemMeterReadsWhatItsBusCarries)
+{
+	for (const auto fader : { 1.0f, 0.7f, fromDecibels (-10.0f), 0.0f })
+	{
+		const auto sent = remote::sentToBus (remote::measure (stemAfterKnob, stemSamples), fader);
+		const auto bus = busCarrying (stemAfterKnob, stemSamples, fader);
+		EXPECT_FLOAT_EQ (sent.peak, bus.peak) << fader;
+		EXPECT_NEAR (sent.squares, bus.squares, 1.0e-6) << fader;
+	}
 }

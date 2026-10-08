@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# StemDeck's recipe for its Debian package, called by a3-system's
+# installer/package.py from an exported tree (git archive), never the checkout:
+#
+#   packaging/stage build <src> <build> <juce-prefix> <jobs> [--test]
+#   packaging/stage files <src> <build> <stage>
+#
+# `build` compiles in <build>; `files` lays out the package tree under <stage>
+# (the builder adds DEBIAN/). Neither writes anywhere else.
+set -euo pipefail
+
+TOOLS=(a3-wait-for-the-screen rig-keep-the-screen.sh setup-separator.sh zita-from-truth.py stemdeck-seed)
+
+usage() {
+    echo "usage: $0 build <src> <build> <juce> <jobs> [--test] | files <src> <build> <stage>" >&2
+    exit 2
+}
+
+build() {
+    [[ $# -eq 4 || ( $# -eq 5 && "$5" == --test ) ]] || usage
+    local src=$1 build=$2 juce=$3 jobs=$4 test=${5:-}
+    local tests=OFF
+    [[ "$test" == --test ]] && tests=ON
+    cmake -S "$src" -B "$build" -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_PREFIX_PATH="$juce" -DSTEMDECK_TESTS="$tests"
+    cmake --build "$build" -j "$jobs"
+    if [[ "$tests" == ON ]]; then
+        ctest --test-dir "$build" --output-on-failure
+        (cd "$src" && PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/tests)
+    fi
+}
+
+files() {
+    [[ $# -eq 3 ]] || usage
+    local src=$1 build=$2 stage=$3
+    install -D -m 755 "$build/StemDeck_artefacts/Release/StemDeck" "$stage/usr/bin/stemdeck"
+    for tool in "${TOOLS[@]}"; do
+        install -D -m 755 "$src/tools/$tool" "$stage/usr/lib/stemdeck/$tool"
+    done
+    install -D -m 644 "$src/.config/rncbc.org/stemdeck-without-core.xml" \
+        "$stage/usr/share/stemdeck/stemdeck-without-core.xml"
+    install -D -m 644 "$src/.config/systemd/user/stemdeck.service" \
+        "$stage/usr/lib/systemd/user/stemdeck.service"
+    # .reuse/dep5 is already in Debian's machine-readable copyright format.
+    install -D -m 644 "$src/.reuse/dep5" "$stage/usr/share/doc/stemdeck/copyright"
+}
+
+case "${1:-}" in
+    build) shift; build "$@" ;;
+    files) shift; files "$@" ;;
+    *) usage ;;
+esac

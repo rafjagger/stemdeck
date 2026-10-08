@@ -7,7 +7,7 @@ down when JACK came up later (2026-10-02). It was bound to a3-jack for that.
 But a3-jack exists only on a Core, and StemDeck may run on a machine of its
 own: a unit bound to a missing unit is never started ("Unit a3-jack.service
 not found", 2026-10-05). So the unit itself waits for whatever JACK runs
-(jack_wait) and uses only files of this repository; the binding to a3-jack
+(jack_wait) and uses only files the stemdeck package ships; the binding to a3-jack
 comes from the Core, as a drop-in the a3-core package ships."""
 
 import configparser
@@ -16,7 +16,6 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 UNIT = REPO / ".config/systemd/user/stemdeck.service"
-INSTALLED_REPO = "/home/aaa/a3-system/stemdeck"
 
 
 def section(name):
@@ -48,14 +47,14 @@ class StemDeckStandsAlone(unittest.TestCase):
         for key in ("BindsTo", "Requires", "Requisite"):
             self.assertNotIn("a3-", section("Unit").get(key, ""), key)
 
-    def test_it_runs_only_its_own_files_and_the_system_s(self):
+    def test_it_runs_only_packaged_files_and_the_system_s(self):
         for line in exec_lines():
-            program = line.split()[0]
-            self.assertTrue(program.startswith((INSTALLED_REPO + "/", "/usr/", "/bin/")), line)
+            program = line.lstrip("-").split()[0]
+            self.assertTrue(program.startswith(("/usr/", "/bin/")), line)
 
-    def test_its_screen_wait_is_in_this_repository(self):
+    def test_its_screen_wait_is_the_packaged_copy(self):
         wait = REPO / "tools/a3-wait-for-the-screen"
-        self.assertIn(f"{INSTALLED_REPO}/tools/a3-wait-for-the-screen", exec_lines())
+        self.assertIn("/usr/lib/stemdeck/a3-wait-for-the-screen", exec_lines())
         self.assertTrue(wait.is_file())
         self.assertTrue(wait.stat().st_mode & 0o111, "executable")
 

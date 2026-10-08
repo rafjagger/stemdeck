@@ -1,6 +1,7 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include "Remote.h"
 #include "StemSet.h"
 #include "TempoAnalysis.h"
 
@@ -83,14 +84,17 @@ public:
 	void setCuePoint (double seconds) { cuePoint = seconds; }
 	double getCuePoint() const { return cuePoint.load(); }
 
-	// Peak level after knob, mute and fader since the last call, for metering.
+	// The strip's meter since the last call: the peak the stem leaves
+	// StemDeck with on a bus, after knob, mute, fader and the bus trim -- the
+	// same level as popDeskLevel, so the screen and the desk read alike.
 	float popStemPeak (int stem);
 
 	// The desk's meter for a stem since the last call (spec stemdeck-remote):
-	// after knob and mute, before the fader and the buses -- what the stem
-	// gives, wherever it is routed. Peak of the louder side, rms over both.
-	struct Level { float peak = 0.0f, rms = 0.0f; };
-	Level popDeskLevel (int stem);
+	// what the stem leaves StemDeck with on a bus -- after knob, mute, fader
+	// and the bus trim (remote::sentToBus), so it reads as the desk channel's
+	// input does. The same on every bus; a stem on none shows what it would
+	// send. Peak of the louder side, rms over both.
+	remote::Level popDeskLevel (int stem);
 
 	// AudioSource: the buffer must have at least numOutputChannels channels.
 	void prepareToPlay (int samplesPerBlockExpected, double sampleRate) override;
@@ -155,9 +159,7 @@ private:
 	std::array<std::atomic<unsigned>, numStems> stemBuses;
 	std::array<std::atomic<float>, numStems> stemPeak;
 	// The desk's meters: written by the audio thread, emptied by popDeskLevel.
-	std::array<std::atomic<float>, numStems> deskPeak;
-	std::array<std::atomic<double>, numStems> deskSquares;
-	std::array<std::atomic<int>, numStems> deskSamples;
+	std::array<remote::LevelTap, numStems> deskLevels;
 	std::array<juce::SmoothedValue<float>, numStems> gainSmoothers;
 
 	StemReader stemReader { *this };

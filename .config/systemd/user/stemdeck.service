@@ -12,14 +12,20 @@ PartOf=a3-main.service
 
 [Service]
 Environment=DISPLAY=:0
-# stems/ and recordings/ are found next to where StemDeck starts.
-WorkingDirectory=/home/aaa/a3-system/stemdeck
-ExecStartPre=/home/aaa/a3-system/stemdeck/tools/a3-wait-for-the-screen
+# Its data folder: the fallback library (stems/, when no stemFolder is set)
+# is found here. Recordings are decided in code (Source/DataPaths.cpp). '-':
+# on the very first start the seed below makes the folder.
+WorkingDirectory=-%h/.local/share/stemdeck
+# As the user, while StemDeck is stopped: the data folder, and the old
+# recordings copied once out of the checkout. '-': a copy that fails must not
+# keep StemDeck off a set.
+ExecStartPre=-/usr/lib/stemdeck/stemdeck-seed
+ExecStartPre=/usr/lib/stemdeck/a3-wait-for-the-screen
 ExecStartPre=/usr/bin/jack_wait -w
 # Its start takes the screen for a moment; put back what was showing.
-ExecStartPre=/home/aaa/a3-system/stemdeck/tools/rig-keep-the-screen.sh remember
-ExecStart=/home/aaa/a3-system/stemdeck/build-make/StemDeck_artefacts/Release/StemDeck
-ExecStartPost=/home/aaa/a3-system/stemdeck/tools/rig-keep-the-screen.sh restore
+ExecStartPre=/usr/lib/stemdeck/rig-keep-the-screen.sh remember
+ExecStart=/usr/bin/stemdeck
+ExecStartPost=/usr/lib/stemdeck/rig-keep-the-screen.sh restore
 Restart=on-failure
 RestartSec=5
 

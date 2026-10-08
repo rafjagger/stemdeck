@@ -6,17 +6,23 @@
 #include "Session.h"
 #include "MeterBallistics.h"
 
-// Vertical peak meter fed from a player's stem peaks.
+// Vertical peak meter fed from a player's stem peaks, with the system's
+// ballistics (PeakMeter) and a line where the held peak stands.
 // With a clip lamp, its top segment lights only above full scale and holds.
 class LevelMeter : public juce::Component
 {
 public:
 	void setLevel (float newPeak);
+	void setParameters (MeterParameters parameters) { ballistics.setParameters (parameters); }
 	void setShowsClip (bool shows) { showsClip = shows; repaint(); }
 	void paint (juce::Graphics& g) override;
 
 private:
-	float level = 0.0f;
+	float secondsSinceLastFeed();
+
+	PeakMeter ballistics;
+	double lastFeedMs = 0.0;
+	int litSegments = 0, heldSegment = 0;
 	bool showsClip = false;
 	ClipHold clipHold;
 	bool clipping = false;
@@ -33,6 +39,11 @@ public:
 	OutputMeters();
 
 	void setLevel (int channel, float peak) { meters[channel]->setLevel (peak); }
+	void setMeterParameters (MeterParameters parameters)
+	{
+		for (auto* meter : meters)
+			meter->setParameters (parameters);
+	}
 	static juce::String busName (int bus) { return juce::String (buses::name (bus)); }
 
 	void paint (juce::Graphics& g) override;
@@ -57,6 +68,7 @@ public:
 	void setStemNames (const std::array<juce::String, StemSet::numStems>& names);
 	void toggleMute (int stem);
 	void refresh(); // meters, called by the main timer
+	void setMeterParameters (MeterParameters parameters) { meter.setParameters (parameters); }
 
 	// The bus switches as the player has them, after a change from elsewhere
 	// (the rule, or Core, spec stemdeck-remote); nothing is sent back from here.
@@ -127,6 +139,8 @@ public:
 	std::function<void (int deck, int stem)> onBusesChanged;
 
 	void setOutputLevel (int channel, float peak) { outputMeters.setLevel (channel, peak); }
+	// Every meter on it: both strips and the output meters.
+	void setMeterParameters (MeterParameters parameters);
 
 	void paint (juce::Graphics& g) override;
 	void resized() override;

@@ -1,0 +1,6 @@
+#!/bin/sh
+# Nothing to do: the unit is disabled by prerm, and user data stays
+# (settings, recordings, the library): it is the user's, not the package's.
+set -e
+
+exit 0

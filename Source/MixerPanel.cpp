@@ -119,7 +119,11 @@ void OutputMeters::paint (juce::Graphics& g)
 	g.setColour (Theme::panelRaised);
 	g.fillRoundedRectangle (getLocalBounds().toFloat(), 6.0f);
 
-	g.setFont (juce::FontOptions (10.0f, juce::Font::bold));
+	// The bus name over L / R, each a share of the caption line.
+	const auto nameHeight = labelArea.getHeight() * 55 / 100;
+	const auto sideHeight = labelArea.getHeight() - nameHeight;
+	const auto nameFont = juce::FontOptions ((float) nameHeight * 0.85f, juce::Font::bold);
+	const auto sideFont = juce::FontOptions ((float) sideHeight * 0.85f);
 
 	for (int bus = 0; bus < numBuses; ++bus)
 	{
@@ -127,11 +131,13 @@ void OutputMeters::paint (juce::Graphics& g)
 		const auto right = meters[bus * 2 + 1]->getBounds();
 		const auto pair = left.getUnion (right);
 
+		g.setFont (nameFont);
 		g.setColour (bus < buses::aux ? Theme::text : busColour (bus, 0));
-		g.drawText (busName (bus), pair.withY (labelArea.getY()).withHeight (14).expanded (6, 0), juce::Justification::centred);
+		g.drawText (busName (bus), pair.withY (labelArea.getY()).withHeight (nameHeight).expanded (6, 0), juce::Justification::centred);
+		g.setFont (sideFont);
 		g.setColour (Theme::textDim);
-		g.drawText ("L", left.withY (labelArea.getY() + 14).withHeight (12), juce::Justification::centred);
-		g.drawText ("R", right.withY (labelArea.getY() + 14).withHeight (12), juce::Justification::centred);
+		g.drawText ("L", left.withY (labelArea.getY() + nameHeight).withHeight (sideHeight), juce::Justification::centred);
+		g.drawText ("R", right.withY (labelArea.getY() + nameHeight).withHeight (sideHeight), juce::Justification::centred);
 	}
 }
 

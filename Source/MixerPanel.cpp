@@ -116,8 +116,10 @@ OutputMeters::OutputMeters()
 
 void OutputMeters::paint (juce::Graphics& g)
 {
-	g.setColour (Theme::panelRaised);
-	g.fillRoundedRectangle (getLocalBounds().toFloat(), 6.0f);
+	// Its own tile in the band, like the decks'.
+	const auto tile = getLocalBounds().toFloat();
+	g.setColour (Theme::panel);
+	g.fillRoundedRectangle (tile, Theme::corner (tile));
 
 	// The bus names under their pairs, a share of the caption line.
 	g.setFont (juce::FontOptions ((float) labelArea.getHeight() * 0.6f, juce::Font::bold));
@@ -135,16 +137,16 @@ void OutputMeters::resized()
 {
 	// Bars top-aligned with the faders; captions below them, level with the
 	// strips' empty bottom line.
-	auto area = getLocalBounds().withTrimmedLeft (4).withTrimmedRight (4);
-	labelArea = area.removeFromBottom (surface::meterCaptionHeight (getHeight()));
+	auto area = getLocalBounds().reduced (inset);
+	labelArea = area.removeFromBottom (surface::meterCaptionHeight (area.getHeight()));
 
-	const auto pairGap = juce::jmax (2, area.getWidth() / 25);
+	const auto pairGap = area.getWidth() / 25;
 	const auto meterWidth = (area.getWidth() - pairGap * (numBuses - 1)) / numChannels;
 	auto x = area.getX() + (area.getWidth() - (meterWidth * numChannels + pairGap * (numBuses - 1))) / 2;
 
 	for (int ch = 0; ch < numChannels; ++ch)
 	{
-		meters[ch]->setBounds (x, area.getY(), meterWidth - 1, area.getHeight());
+		meters[ch]->setBounds (x, area.getY(), meterWidth - surface::hairline (meterWidth), area.getHeight());
 		x += meterWidth + ((ch % 2 == 1) ? pairGap : 0);
 	}
 }
@@ -339,11 +341,12 @@ void MixerPanel::addBandPartsTo (juce::Component& parent)
 	parent.addAndMakeVisible (outputMeters);
 }
 
-void MixerPanel::setBandBounds (juce::Rectangle<int> faderA, juce::Rectangle<int> faderB, juce::Rectangle<int> meters)
+void MixerPanel::setBandBounds (juce::Rectangle<int> faderA, juce::Rectangle<int> faderB, juce::Rectangle<int> metersTile, int inset)
 {
 	stripA.setFaderBounds (faderA);
 	stripB.setFaderBounds (faderB);
-	outputMeters.setBounds (meters);
+	outputMeters.setInset (inset);
+	outputMeters.setBounds (metersTile);
 }
 
 void MixerPanel::setMeterParameters (MeterParameters parameters)

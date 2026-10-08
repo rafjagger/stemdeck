@@ -532,49 +532,55 @@ void StemLibrary::paint (juce::Graphics& g)
 
 void StemLibrary::resized()
 {
-	auto area = getLocalBounds().reduced (10);
+	// Every size a share of the library's width or height (sized for the
+	// rig's 756 x 222).
+	const auto wide = [this] (int perMille) { return getWidth() * perMille / 1000; };
+	const auto high = [this] (int perMille) { return getHeight() * perMille / 1000; };
+	const auto gap = wide (8);
+	auto area = getLocalBounds().reduced (wide (13));
 
-	// Two rows where one does not hold them all (the rig's 768 px screen): the
+	// Two rows where one does not hold them all (a portrait screen): the
 	// search and the load keys, then where the library is, creating and
 	// rescanning. The folder itself is chosen in Settings (2026-09-30).
-	const auto twoRows = getWidth() < 1000;
+	const auto twoRows = getWidth() < getHeight() * 4;
+	const auto keyWidth = wide (132);
 
-	auto bar = area.removeFromTop (30);
-	auto folderBar = twoRows ? (area.removeFromTop (6), area.removeFromTop (30)) : bar;
+	auto bar = area.removeFromTop (high (135));
+	auto folderBar = twoRows ? (area.removeFromTop (gap), area.removeFromTop (high (135))) : bar;
 
-	searchBox.setBounds (bar.removeFromLeft (twoRows ? bar.getWidth() - 2 * 100 - 2 * 6 : 280));
-	bar.removeFromLeft (twoRows ? 6 : 10);
-	loadAButton.setBounds (bar.removeFromLeft (100));
-	bar.removeFromLeft (6);
-	loadBButton.setBounds (bar.removeFromLeft (100));
-	bar.removeFromLeft (16);
+	searchBox.setBounds (bar.removeFromLeft (twoRows ? bar.getWidth() - 2 * keyWidth - 2 * gap : wide (370)));
+	bar.removeFromLeft (gap);
+	loadAButton.setBounds (bar.removeFromLeft (keyWidth));
+	bar.removeFromLeft (gap);
+	loadBButton.setBounds (bar.removeFromLeft (keyWidth));
+	bar.removeFromLeft (2 * gap);
 	if (! twoRows)
 		folderBar = bar;
 
-	foldersButton.setBounds (folderBar.removeFromLeft (100));
-	folderBar.removeFromLeft (10);
-	rescanButton.setBounds (folderBar.removeFromRight (110));
-	folderBar.removeFromRight (6);
-	createButton.setBounds (folderBar.removeFromRight (130));
-	folderBar.removeFromRight (10);
+	foldersButton.setBounds (folderBar.removeFromLeft (keyWidth));
+	folderBar.removeFromLeft (gap);
+	rescanButton.setBounds (folderBar.removeFromRight (wide (145)));
+	folderBar.removeFromRight (gap);
+	createButton.setBounds (folderBar.removeFromRight (wide (172)));
+	folderBar.removeFromRight (gap);
 	folderLabel.setBounds (folderBar);
 
 	if (creatorLabel.isVisible())
 	{
-		area.removeFromTop (6);
-		auto strip = area.removeFromTop (24);
+		area.removeFromTop (gap);
+		auto strip = area.removeFromTop (high (108));
 		if (cancelCreateButton.isVisible())
-			cancelCreateButton.setBounds (strip.removeFromRight (100));
+			cancelCreateButton.setBounds (strip.removeFromRight (keyWidth));
 		creatorLabel.setBounds (strip);
 	}
 
-	area.removeFromTop (8);
+	area.removeFromTop (gap);
 
-	// The tree a third of the width, when shown; the header as high as a key.
+	// The tree a third of the width, when shown.
 	if (folderTree.isVisible())
 	{
 		folderTree.setBounds (area.removeFromLeft (area.getWidth() * 3 / 10));
-		area.removeFromLeft (8);
+		area.removeFromLeft (gap);
 	}
 	// Rows a share of the library's height, so more fit; the header a little
 	// higher, as a row of keys.

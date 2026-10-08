@@ -126,12 +126,15 @@ namespace
 
 juce::Font DJLookAndFeel::getTextButtonFont (juce::TextButton& button, int buttonHeight)
 {
-	const auto font = juce::LookAndFeel_V4::getTextButtonFont (button, buttonHeight);
+	// A share of the key's height, and of its width for a tall narrow key
+	// (JUCE's own caps it at 15 px); narrowed below where the label would
+	// not fit.
+	const juce::Font font (juce::FontOptions (juce::jmin ((float) buttonHeight * 0.45f, (float) button.getWidth() * 0.6f)));
 	const auto room = (float) (button.getWidth() - 2 * textIndent (button));
 	const auto wanted = juce::GlyphArrangement::getStringWidth (font, button.getButtonText());
 	if (wanted <= room || wanted <= 0.0f)
 		return font;
-	return font.withHeight (juce::jmax (9.0f, font.getHeight() * room / wanted));
+	return font.withHeight (font.getHeight() * room / wanted);
 }
 
 void DJLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& button, bool, bool)

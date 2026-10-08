@@ -1457,12 +1457,16 @@ void MainComponent::releaseResources()
 void MainComponent::paint (juce::Graphics& g)
 {
 	g.fillAll (Theme::background);
-	g.setColour (Theme::panel);
-	g.fillRoundedRectangle (bandArea.toFloat(), 6.0f);
+	// The band: one tile per deck (the meters' tile paints itself).
+	for (const auto& tile : deckTiles)
+	{
+		g.setColour (Theme::panel);
+		g.fillRoundedRectangle (tile.toFloat(), Theme::corner (tile.toFloat()));
+	}
 
 	// Each deck's line, from its column's stripe (the column paints that)
-	// down, along the gap and down beside its volume fader, the meters'
-	// side: the output meters stand between the two decks' lines.
+	// down, along the gap above the band and down between the deck's tile
+	// and the meters' tile; every tile one gap from it.
 	for (size_t d = 0; d < (size_t) numDecks; ++d)
 	{
 		g.setColour (Theme::deck ((int) d));
@@ -1485,24 +1489,28 @@ void MainComponent::resized()
 	workspacesButton.setBounds (switchArea.removeFromRight (switcher.arrowWidth));
 	switchArea.removeFromRight (switcher.gap);
 	motionButton.setBounds (switchArea.removeFromRight (switcher.appKeyWidth));
-	topBar.setRight (motionButton.getX() - 6);
-	settingsButton.setBounds (topBar.removeFromRight (90));
-	topBar.removeFromRight (6);
-	keysButton.setBounds (topBar.removeFromRight (60));
-	topBar.removeFromRight (6);
-	syncSourceButton.setBounds (topBar.removeFromRight (110));
-	topBar.removeFromRight (6);
-	autoDjButton.setBounds (topBar.removeFromRight (100));
-	topBar.removeFromRight (6);
+	// The rest as shares of the window's width (sized for 768 px, the rig).
+	const auto share = [this] (int perMille) { return getWidth() * perMille / 1000; };
+	const auto gap = layout.metrics.gap;
+	topBar.setRight (motionButton.getX() - gap);
+	settingsButton.setBounds (topBar.removeFromRight (share (117)));
+	topBar.removeFromRight (gap);
+	keysButton.setBounds (topBar.removeFromRight (share (78)));
+	topBar.removeFromRight (gap);
+	syncSourceButton.setBounds (topBar.removeFromRight (share (143)));
+	topBar.removeFromRight (gap);
+	autoDjButton.setBounds (topBar.removeFromRight (share (130)));
+	topBar.removeFromRight (gap);
 	// The input meters left of REC, where the eye comes from.
-	recButton.setBounds (topBar.removeFromRight (100));
-	topBar.removeFromRight (4);
-	recMeterR.setBounds (topBar.removeFromRight (6).reduced (0, 3));
-	topBar.removeFromRight (2);
-	recMeterL.setBounds (topBar.removeFromRight (6).reduced (0, 3));
-	topBar.removeFromRight (6);
-	pioPlayer.setBounds (topBar.removeFromRight (90));
-	pioStatus.setBounds (topBar.removeFromRight (220));
+	recButton.setBounds (topBar.removeFromRight (share (130)));
+	topBar.removeFromRight (gap * 2 / 3);
+	const auto recMeterInset = topBar.getHeight() / 10;
+	recMeterR.setBounds (topBar.removeFromRight (share (8)).reduced (0, recMeterInset));
+	topBar.removeFromRight (gap / 3);
+	recMeterL.setBounds (topBar.removeFromRight (share (8)).reduced (0, recMeterInset));
+	topBar.removeFromRight (gap);
+	pioPlayer.setBounds (topBar.removeFromRight (share (117)));
+	pioStatus.setBounds (topBar.removeFromRight (share (286)));
 	deviceStatus.setBounds (topBar);
 
 	waveA.setBounds (surface::toJuce (layout.waveA));
@@ -1513,14 +1521,15 @@ void MainComponent::resized()
 	library.setBounds (surface::toJuce (layout.library));
 
 	// The band under the decks and the mixer: their parts, placed here.
-	bandArea = surface::toJuce (layout.band);
-	const auto band = surface::band (layout.band);
+	const auto band = surface::band (layout.band, layout.metrics);
 	for (size_t d = 0; d < (size_t) numDecks; ++d)
 	{
 		decks[d]->setBandBounds (band.deck[d]);
+		deckTiles[d] = surface::toJuce (band.deck[d].tile);
 		deckLines[d] = surface::deckLine (layout, band, (int) d);
 	}
-	mixer.setBandBounds (surface::toJuce (band.fader[0]), surface::toJuce (band.fader[1]), surface::toJuce (band.meters));
+	mixer.setBandBounds (surface::toJuce (band.deck[0].fader), surface::toJuce (band.deck[1].fader),
+						 surface::toJuce (band.metersTile), layout.metrics.gap);
 }
 
 bool MainComponent::keyPressed (const juce::KeyPress& key)

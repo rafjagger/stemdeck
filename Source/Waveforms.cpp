@@ -254,25 +254,27 @@ void ScrollingWaveform::paint (juce::Graphics& g)
 	g.setColour (juce::Colours::white);
 	g.fillRect (bounds.getCentreX() - 1.0f, 0.0f, 2.0f, bounds.getHeight());
 
-	// Deck badge and title
-	const auto badge = juce::Rectangle<float> (6.0f, 6.0f, 22.0f, 18.0f);
+	// Deck badge and title, shares of the waveform's height.
+	const auto unit = bounds.getHeight() / 19.0f;   // 6 px on the rig's 113 px waveform
+	const auto badge = juce::Rectangle<float> (unit, unit, unit * 3.7f, unit * 3.0f);
 	g.setColour (Theme::deck (deckIndex));
-	g.fillRoundedRectangle (badge, 3.0f);
+	g.fillRoundedRectangle (badge, unit / 2.0f);
 	g.setColour (juce::Colours::black);
-	g.setFont (juce::FontOptions (13.0f, juce::Font::bold));
+	g.setFont (juce::FontOptions (badge.getHeight() * 0.72f, juce::Font::bold));
 	g.drawText (Theme::deckName (deckIndex), badge, juce::Justification::centred);
 
 	if (title.isNotEmpty())
 	{
-		const juce::FontOptions font (13.0f);
-		const auto titleWidth = juce::jmin ((float) getWidth() / 2.0f - 40.0f,
-											juce::GlyphArrangement::getStringWidth (juce::Font (font), title) + 12.0f);
-		const auto titleArea = juce::Rectangle<float> (32.0f, 6.0f, titleWidth, 18.0f);
+		const juce::FontOptions font (badge.getHeight() * 0.72f);
+		const auto titleX = badge.getRight() + unit * 0.7f;
+		const auto titleWidth = juce::jmin ((float) getWidth() / 2.0f - titleX - unit,
+											juce::GlyphArrangement::getStringWidth (juce::Font (font), title) + unit * 2.0f);
+		const auto titleArea = juce::Rectangle<float> (titleX, unit, titleWidth, badge.getHeight());
 		g.setColour (Theme::background.withAlpha (0.8f));
-		g.fillRoundedRectangle (titleArea, 3.0f);
+		g.fillRoundedRectangle (titleArea, unit / 2.0f);
 		g.setColour (Theme::text);
 		g.setFont (font);
-		g.drawText (title, titleArea.reduced (6.0f, 0.0f), juce::Justification::centredLeft, true);
+		g.drawText (title, titleArea.reduced (unit, 0.0f), juce::Justification::centredLeft, true);
 	}
 }
 

@@ -78,55 +78,66 @@ namespace surface
 		{
 			const auto width = row.w / (int) count;
 			for (auto& key : keys)
-				key = row.removeFromLeft (width).reduced (1, 0);
+				key = row.removeFromLeft (width).reduced (hairline (width), 0);
 		}
-	}
 
-	namespace
-	{
-		// A deck column in thousandths of a key: the rows and the gaps between them.
-		// The transport's two rows are the tallest keys (PLAY, CUE, NEXT, PREV).
+		// A deck column in thousandths of a key: the rows and the gaps between
+		// them. The transport's two rows are the tallest keys (PLAY, CUE,
+		// NEXT, PREV).
 		constexpr int timesUnits = 550, gridUnits = 830, keyUnits = 1000, transportUnits = 1400, gapUnits = 120;
 		constexpr int deckUnits = timesUnits + 2 * gridUnits + 3 * keyUnits + 2 * transportUnits
-								+ 9 * gapUnits;   // 7 between rows, 2 margins
+								+ 7 * gapUnits;   // 6 between rows, 1 inside the transport
+
+		// The column's panel stands this far inside its bounds.
+		int panelInset (Metrics m) { return m.line * 2 / 3; }
 	}
 
-	int deckColumnHeight (int keyHeight)
+	int hairline (int size)
 	{
-		return keyHeight * deckUnits / 1000;
+		return std::max (1, size / 24);
+	}
+
+	Metrics metrics (int windowWidth)
+	{
+		return { windowWidth / 128, windowWidth / 256 };
+	}
+
+	int deckColumnHeight (int keyHeight, Metrics m)
+	{
+		// The rows, the margins at top and foot, the transport tile's padding.
+		return keyHeight * deckUnits / 1000 + 4 * m.gap + 2 * panelInset (m);
 	}
 
 	Sections sections (int width, int height)
 	{
 		Sections s;
-		Rect area { 0, 0, width, height };
-		const auto margin = std::max (2, width / 128);
-		area = area.reduced (margin);
+		s.metrics = metrics (width);
+		const auto gap = s.metrics.gap;
+		auto area = Rect { 0, 0, width, height }.reduced (gap);
 
 		s.topBar = area.removeFromTop (share (height, 30));
-		area.removeFromTop (margin * 2 / 3);
+		area.removeFromTop (gap);
 
 		// The rolling waveforms, A over B, the whole width.
-		const auto waveHeight = std::clamp (height / 9, 80, 170);
-		const auto waveGap = margin / 2;
-		s.waves = area.removeFromTop (waveHeight * 2 + waveGap);
+		const auto waveHeight = height / 9;
+		s.waves = area.removeFromTop (waveHeight * 2 + gap / 2);
 		auto waves = s.waves;
 		s.waveA = waves.removeFromTop (waveHeight);
-		waves.removeFromTop (waveGap);
+		waves.removeFromTop (gap / 2);
 		s.waveB = waves;
-		area.removeFromTop (margin);
+		area.removeFromTop (gap);
 
 		s.library = area.removeFromBottom (share (area.h, 300));
-		area.removeFromBottom (margin);
+		area.removeFromBottom (gap);
 
-		// Deck A | mixer | deck B, as tall as a deck's keys need; the band
-		// takes the rest. The mixer keeps 400 px at the least, so a deck
-		// column keeps ~180 px on the rig's 768 px screen.
-		auto upper = area.removeFromTop (deckColumnHeight (share (height, 32)));
-		area.removeFromTop (margin);
+		// Deck A | mixer | deck B, as tall as a deck's keys need; then the gap
+		// the deck lines run in (a gap either side of them); the band takes
+		// the rest.
+		auto upper = area.removeFromTop (deckColumnHeight (share (height, 30), s.metrics));
+		area.removeFromTop (2 * gap + s.metrics.line);
 		s.band = area;
 
-		const auto mixerWidth = std::clamp (width / 3, 400, 560);
+		const auto mixerWidth = share (width, 521);
 		const auto deckWidth = (upper.w - mixerWidth) / 2;
 		s.deck[0] = upper.removeFromLeft (deckWidth);
 		s.deck[1] = upper.removeFromRight (deckWidth);
@@ -136,123 +147,131 @@ namespace surface
 
 	namespace
 	{
-		// One deck's half of the band, from its outer edge (`outer`) to its
-		// fader frame; `mirrored` for B, whose outer edge is on the right.
-		BandDeck bandDeck (Rect side, int gap, int pitchWidth, int line, int info, bool mirrored)
+		// One deck's tile, from its outer edge to its inner one (towards the
+		// meters); `mirrored` for B, whose outer edge is on the right.
+		DeckTile deckTile (Rect tile, Rect metersInner, Metrics m, int pitchWidth, int faderWidth, bool mirrored)
 		{
-			BandDeck d;
+			DeckTile d;
+			d.tile = tile;
+			const auto gap = m.gap;
 			const auto outer = [mirrored] (Rect& r, int w) { return mirrored ? r.removeFromRight (w) : r.removeFromLeft (w); };
+			const auto inner = [mirrored] (Rect& r, int w) { return mirrored ? r.removeFromLeft (w) : r.removeFromRight (w); };
 
-			// The bottom line reaches the fader's frame: the BPM and the fader
-			// read as one block, flush at the side and at the foot.
-			auto foot = side.removeFromBottom (line);
-			foot = mirrored ? Rect { foot.x - gap, foot.y, foot.w + gap, foot.h } : Rect { foot.x, foot.y, foot.w + gap, foot.h };
-			side.removeFromBottom (gap);
-			d.pitch = outer (side, pitchWidth);
-			outer (side, gap);
-			auto infoArea = side.removeFromBottom (info);
-			d.title = infoArea.removeFromTop (infoArea.h * 3 / 5);
-			d.stems = infoArea;
-			side.removeFromBottom (gap);
-			d.overview = side;
+			// Level with the meters' tile inside: the fader ends where the bars do.
+			auto area = Rect { tile.x, metersInner.y, tile.w, metersInner.h }.reduced (gap, 0);
+			const auto line = share (area.h, 150);
 
-			d.pitchValue = outer (foot, pitchWidth);
-			outer (foot, gap);
-			d.range = outer (foot, pitchWidth);
-			outer (foot, gap);
-			d.bpm = foot.removeFromTop (foot.h * 2 / 3);   // big, the original under it
-			d.bpmInfo = foot;
+			auto pitchColumn = outer (area, pitchWidth);
+			outer (area, gap);
+			d.pitchValue = pitchColumn.removeFromTop (line);
+			d.range = pitchColumn.removeFromBottom (line);
+			pitchColumn.removeFromTop (gap);
+			pitchColumn.removeFromBottom (gap);
+			d.pitch = pitchColumn;
+
+			d.fader = inner (area, faderWidth);
+			d.fader.h -= meterCaptionHeight (metersInner.h);
+			inner (area, gap);
+
+			d.title = area.removeFromTop (share (tile.h, 110));
+			d.stems = area.removeFromTop (share (tile.h, 70));
+			area.removeFromTop (gap);
+			d.bpmInfo = area.removeFromBottom (share (tile.h, 70));
+			d.bpm = area.removeFromBottom (share (tile.h, 130));
+			area.removeFromBottom (gap);
+			d.overview = area;
 			return d;
 		}
 	}
 
-	Band band (Rect area)
+	Band band (Rect area, Metrics m)
 	{
 		Band b;
-		const auto gap = std::max (3, area.w / 150);
-		const auto pitchWidth = share (area.w, 85);
+		const auto gap = m.gap;
+
+		// The meters' tile in the middle; a gap, the line, a gap either side;
+		// the decks' tiles to the window's edges.
 		const auto metersWidth = share (area.w, 150);
+		b.metersTile = { area.x + (area.w - metersWidth) / 2, area.y, metersWidth, area.h };
+		b.meters = b.metersTile.reduced (gap);
+		const auto offset = 2 * gap + m.line;
+		const Rect tileA { area.x, area.y, b.metersTile.x - offset - area.x, area.h };
+		const Rect tileB { b.metersTile.right() + offset, area.y, area.right() - b.metersTile.right() - offset, area.h };
+
+		const auto pitchWidth = share (area.w, 85);
 		const auto faderWidth = share (area.w, 75);
-		const auto frameWidth = faderWidth + 2 * gap;
-
-		// The middle: the meters, a gap, each deck's fader in its colour frame.
-		b.meters = { area.x + (area.w - metersWidth) / 2, area.y, metersWidth, area.h };
-		b.faderFrame[0] = { b.meters.x - gap - frameWidth, area.y, frameWidth, area.h };
-		b.faderFrame[1] = { b.meters.right() + gap, area.y, frameWidth, area.h };
-		const auto faderBottom = area.bottom() - meterCaptionHeight (area.h);
-		for (size_t d = 0; d < 2; ++d)
-			b.fader[d] = { b.faderFrame[d].x + gap, area.y + gap, faderWidth, faderBottom - area.y - gap };
-
-		const auto line = share (area.h, 170);
-		const auto info = share (area.h, 150);
-		const Rect sideA { area.x, area.y, b.faderFrame[0].x - gap - area.x, area.h };
-		const Rect sideB { b.faderFrame[1].right() + gap, area.y, area.right() - b.faderFrame[1].right() - gap, area.h };
-		b.deck[0] = bandDeck (sideA, gap, pitchWidth, line, info, false);
-		b.deck[1] = bandDeck (sideB, gap, pitchWidth, line, info, true);
+		b.deck[0] = deckTile (tileA, b.meters, m, pitchWidth, faderWidth, false);
+		b.deck[1] = deckTile (tileB, b.meters, m, pitchWidth, faderWidth, true);
 		return b;
 	}
 
-	namespace
+	Rect deckStripe (Rect deck, int deckIndex, Metrics m)
 	{
-		constexpr int lineWidth = 3;   // the deck column's stripe, since before the clean surface
-		constexpr int panelInset = 2;  // the column's panel stands this far inside its bounds
-	}
-
-	Rect deckStripe (Rect deck, int deckIndex)
-	{
-		const auto panel = deck.reduced (panelInset);
-		return { deckIndex == 0 ? panel.right() - lineWidth : panel.x, panel.y, lineWidth, panel.h };
+		const auto panel = deck.reduced (panelInset (m));
+		return { deckIndex == 0 ? panel.right() - m.line : panel.x, panel.y, m.line, panel.h };
 	}
 
 	DeckLine deckLine (const Sections& sections, const Band& band, int deckIndex)
 	{
 		DeckLine line;
-		const auto& frame = band.faderFrame[(size_t) deckIndex];
-		line.stripe = deckStripe (sections.deck[(size_t) deckIndex], deckIndex);
+		const auto m = sections.metrics;
+		line.stripe = deckStripe (sections.deck[(size_t) deckIndex], deckIndex, m);
 
-		// The top runs in the middle of the gap between the column and the band.
-		const auto gapTop = sections.deck[(size_t) deckIndex].bottom();
-		const auto topY = gapTop + (sections.band.y - gapTop - lineWidth) / 2;
-		line.drop = { line.stripe.x, line.stripe.bottom(), lineWidth, topY - line.stripe.bottom() };
+		// The top runs a gap above the band's tiles; the side a gap from the
+		// deck's tile and from the meters' tile.
+		const auto topY = sections.band.y - m.gap - m.line;
+		line.drop = { line.stripe.x, line.stripe.bottom(), m.line, topY - line.stripe.bottom() };
 
-		const auto sideX = deckIndex == 0 ? frame.right() - lineWidth : frame.x;
-		line.side = { sideX, topY, lineWidth, sections.band.bottom() - topY };
-		line.top = deckIndex == 0 ? Rect { line.stripe.x, topY, line.side.right() - line.stripe.x, lineWidth }
-								  : Rect { sideX, topY, line.stripe.right() - sideX, lineWidth };
+		const auto sideX = deckIndex == 0 ? band.metersTile.x - m.gap - m.line : band.metersTile.right() + m.gap;
+		line.side = { sideX, topY, m.line, sections.band.bottom() - topY };
+		line.top = deckIndex == 0 ? Rect { line.stripe.x, topY, line.side.right() - line.stripe.x, m.line }
+								  : Rect { sideX, topY, line.stripe.right() - sideX, m.line };
 		return line;
 	}
 
-	DeckColumn deckColumn (Rect local, bool gridOn)
+	DeckColumn deckColumn (Rect local, bool gridOn, int deckIndex, Metrics m)
 	{
 		DeckColumn c;
-		const auto key = local.h * 1000 / deckUnits;
-		const auto units = [key] (int u) { return key * u / 1000; };
-		const auto gap = units (gapUnits);
-		auto area = local.reduced (std::max (3, local.w / 30), gap);
+		const auto gap = m.gap;
 
-		// At the foot, within the DJ's reach and the biggest keys on the deck:
-		// CUE | PLAY, and the track search over them, as large -- a 2 x 2
-		// block gives each key half the column's width, where a row of four
-		// would give a quarter.
-		splitPair (area.removeFromBottom (units (transportUnits)), gap, c.cue, c.play);
-		area.removeFromBottom (gap);
-		splitPair (area.removeFromBottom (units (transportUnits)), gap, c.previous, c.next);
-		area.removeFromBottom (gap);
+		// Inside the panel: a gap from the stripe and from the outer edge.
+		auto area = local.reduced (panelInset (m));
+		if (deckIndex == 0)
+			area.removeFromRight (m.line + gap);
+		else
+			area.removeFromLeft (m.line + gap);
+		area = deckIndex == 0 ? Rect { area.x + gap, area.y, area.w - gap, area.h } : Rect { area.x, area.y, area.w - gap, area.h };
+		area = area.reduced (0, gap);
+
+		const auto key = (area.h - 2 * gap) * 1000 / deckUnits;
+		const auto units = [key] (int u) { return key * u / 1000; };
+		const auto rowGap = units (gapUnits);
+
+		// At the foot, within the DJ's reach and the biggest keys on the deck,
+		// on their own tile: CUE | PLAY, and the track search over them, as
+		// large -- a 2 x 2 block gives each key half the tile's width, where a
+		// row of four would give a quarter.
+		c.transportTile = area.removeFromBottom (2 * units (transportUnits) + rowGap + 2 * gap);
+		auto transport = c.transportTile.reduced (gap);
+		splitPair (transport.removeFromBottom (units (transportUnits)), rowGap, c.cue, c.play);
+		transport.removeFromBottom (rowGap);
+		splitPair (transport, rowGap, c.previous, c.next);
+		area.removeFromBottom (rowGap);
 
 		// Above: the keys, which stay where they are whatever GRID does.
-		splitPair (area.removeFromBottom (units (keyUnits)), gap, c.vinyl, c.grid);
-		area.removeFromBottom (gap);
-		splitPair (area.removeFromBottom (units (keyUnits)), gap, c.sync, c.master);
-		area.removeFromBottom (gap);
-		splitPair (area.removeFromBottom (units (keyUnits)), gap, c.loopOff, c.repeat);
-		area.removeFromBottom (gap);
+		splitPair (area.removeFromBottom (units (keyUnits)), rowGap, c.vinyl, c.grid);
+		area.removeFromBottom (rowGap);
+		splitPair (area.removeFromBottom (units (keyUnits)), rowGap, c.sync, c.master);
+		area.removeFromBottom (rowGap);
+		splitPair (area.removeFromBottom (units (keyUnits)), rowGap, c.loopOff, c.repeat);
+		area.removeFromBottom (rowGap);
 
 		// Grid Adjust above the keys; with GRID off its room is the times'.
 		auto times = area;
 		splitRow (area.removeFromBottom (units (gridUnits)), c.gridEdit);
-		area.removeFromBottom (gap);
+		area.removeFromBottom (rowGap);
 		splitRow (area.removeFromBottom (units (gridUnits)), c.gridNudge);
-		area.removeFromBottom (gap);
+		area.removeFromBottom (rowGap);
 
 		if (gridOn)
 		{
@@ -271,9 +290,9 @@ namespace surface
 	Strip channelStrip (Rect local)
 	{
 		Strip strip;
-		auto area = local.reduced (std::max (3, local.w / 40));
+		auto area = local.reduced (local.w / 40);
 		strip.header = area.removeFromTop (share (local.h, 90));
-		const auto gap = std::max (2, area.w / 56);
+		const auto gap = area.w / 56;
 		area.removeFromTop (gap);
 
 		// [knob] [1 2 3 4 A  M], four rows tight under each other: a matrix.
@@ -290,19 +309,19 @@ namespace surface
 			auto inner = row.frame;
 			row.knob = inner.removeFromLeft (knobSize).withSizeKeepingCentre (knobSize, knobSize);
 			inner.removeFromLeft (gap);
-			inner = inner.reduced (0, 1);
+			inner = inner.reduced (0, hairline (rowHeight));
 
 			for (auto& bus : row.buses)
-				bus = inner.removeFromLeft (switchWidth).reduced (1, 0);
+				bus = inner.removeFromLeft (switchWidth).reduced (hairline (switchWidth), 0);
 			inner.removeFromLeft (gap);
-			row.mute = inner.reduced (1, 0);
+			row.mute = inner.reduced (hairline (switchWidth), 0);
 		}
 		return strip;
 	}
 
 	std::array<Rect, 2> mixerStrips (Rect local)
 	{
-		const auto pad = std::max (4, local.w / 50);
+		const auto pad = local.w / 50;
 		auto area = local.reduced (pad);
 		const auto gap = 2 * pad;   // the two decks' matrices clearly apart
 		const auto stripWidth = (area.w - gap) / 2;

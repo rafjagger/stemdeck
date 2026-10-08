@@ -157,7 +157,7 @@ private:
 	WorkspacePanel workspacePanel;
 	juce::Label deviceStatus;
 	int statusCountdown = 0;
-	juce::Rectangle<int> bandArea;   // the decks' and the mixer's band, painted as a panel
+	std::array<juce::Rectangle<int>, numDecks> deckTiles;   // each deck's tile in the band
 	std::array<surface::DeckLine, numDecks> deckLines;   // each deck's colour line around its volume fader
 
 	// Keyboard: edge-detected so held keys don't repeat.

@@ -65,7 +65,7 @@ public:
 
 	// The parts in the band: made children of `parent`, placed by it.
 	void addBandPartsTo (juce::Component& parent);
-	void setBandBounds (const surface::BandDeck& parts);   // window coordinates
+	void setBandBounds (const surface::DeckTile& parts);   // window coordinates
 	std::function<void (GridAction, double seconds)> onGridEdit;
 
 	void saveState (DeckSession& state) const;
@@ -100,6 +100,8 @@ private:
 	juce::TextButton oneBackButton { juce::String::fromUTF8 ("\xe2\x97\x80" " 1") }, oneForwardButton { juce::String::fromUTF8 ("1 " "\xe2\x96\xb6") };
 	void setGridMode (bool on);
 	void showPitchValue();
+	surface::Metrics metrics() const;   // the window's gap and line width
+	juce::Rectangle<int> transportTile;
 	juce::Slider pitchFader { juce::Slider::LinearVertical, juce::Slider::NoTextBox };
 	juce::Label pitchValue;
 	juce::TextButton rangeKey;

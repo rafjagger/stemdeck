@@ -49,12 +49,16 @@ public:
 	}
 	static juce::String busName (int bus) { return juce::String (buses::name (bus)); }
 
+	// On its own tile: the bars and captions this far inside its bounds.
+	void setInset (int newInset) { inset = newInset; resized(); }
+
 	void paint (juce::Graphics& g) override;
 	void resized() override;
 
 private:
 	juce::OwnedArray<LevelMeter> meters;
 	juce::Rectangle<int> labelArea;
+	int inset = 0;
 };
 
 //==============================================================================
@@ -139,7 +143,8 @@ public:
 	// The volume faders and the output meters, in the band under the mixer:
 	// made children of `parent`, placed by it.
 	void addBandPartsTo (juce::Component& parent);
-	void setBandBounds (juce::Rectangle<int> faderA, juce::Rectangle<int> faderB, juce::Rectangle<int> meters);
+	// `metersTile` with the bars and captions `inset` inside it.
+	void setBandBounds (juce::Rectangle<int> faderA, juce::Rectangle<int> faderB, juce::Rectangle<int> metersTile, int inset);
 
 	void setOutputLevel (int channel, float peak) { outputMeters.setLevel (channel, peak); }
 	// Every meter on it: both strips and the output meters.

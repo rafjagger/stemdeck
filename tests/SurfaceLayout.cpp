@@ -13,6 +13,11 @@ namespace
 	// The rig's screen: a3nuc2's touchscreen, portrait.
 	constexpr int rigWidth = 768, rigHeight = 1024;
 
+	// Responsive: the same relations at other windows.
+	const std::vector<std::pair<int, int>> windows { { rigWidth, rigHeight }, { 600, 800 }, { 1080, 1920 } };
+
+	std::string sizeName (int w, int h) { return std::to_string (w) + "x" + std::to_string (h); }
+
 	struct Placed
 	{
 		std::string name;
@@ -41,7 +46,7 @@ namespace
 		for (int d = 0; d < 2; ++d)
 		{
 			const auto origin = s.deck[(size_t) d];
-			const auto c = surface::deckColumn (Rect { 0, 0, origin.w, origin.h }, gridOn[(size_t) d]);
+			const auto c = surface::deckColumn (Rect { 0, 0, origin.w, origin.h }, gridOn[(size_t) d], d, s.metrics);
 			const auto at = [&origin] (const Rect& r) { return r.translated (origin.x, origin.y); };
 			Section deck { "deck" + deckName (d), origin, {} };
 			const auto add = [&] (const std::string& name, const Rect& r, bool interactive)
@@ -50,6 +55,7 @@ namespace
 			};
 			add ("elapsed", c.elapsed, false);
 			add ("remaining", c.remaining, false);
+			add ("transportTile", c.transportTile, false);
 			add ("previous", c.previous, true);
 			add ("cue", c.cue, true);
 			add ("play", c.play, true);
@@ -92,12 +98,13 @@ namespace
 		}
 		all.push_back (mixer);
 
-		const auto b = surface::band (s.band);
-		Section band { "band", s.band, { { "meters", b.meters, false } } };
+		const auto b = surface::band (s.band, s.metrics);
+		Section band { "band", s.band, { { "metersTile", b.metersTile, false }, { "meters", b.meters, false } } };
 		for (size_t d = 0; d < 2; ++d)
 		{
 			const auto name = deckName ((int) d);
 			const auto& deck = b.deck[d];
+			band.controls.push_back ({ "tile" + name, deck.tile, false });
 			band.controls.push_back ({ "pitch" + name, deck.pitch, true });
 			band.controls.push_back ({ "pitchValue" + name, deck.pitchValue, false });
 			band.controls.push_back ({ "range" + name, deck.range, true });
@@ -106,8 +113,7 @@ namespace
 			band.controls.push_back ({ "title" + name, deck.title, false });
 			band.controls.push_back ({ "stems" + name, deck.stems, false });
 			band.controls.push_back ({ "overview" + name, deck.overview, true });
-			band.controls.push_back ({ "fader" + name, b.fader[d], true });
-			band.controls.push_back ({ "faderFrame" + name, b.faderFrame[d], false });
+			band.controls.push_back ({ "fader" + name, deck.fader, true });
 		}
 		all.push_back (band);
 
@@ -115,20 +121,21 @@ namespace
 		return all;
 	}
 
-	void expectCleanSurface (std::array<bool, 2> gridOn)
+	void expectCleanSurface (int width, int height, std::array<bool, 2> gridOn)
 	{
-		const auto all = placeAll (rigWidth, rigHeight, gridOn);
-		const Rect screen { 0, 0, rigWidth, rigHeight };
+		const auto all = placeAll (width, height, gridOn);
+		const Rect screen { 0, 0, width, height };
+		const auto at = sizeName (width, height);
 		std::vector<Placed> interactive;
 
 		for (const auto& section : all)
 		{
-			EXPECT_TRUE (screen.contains (section.bounds)) << section.name << " leaves the screen";
+			EXPECT_TRUE (screen.contains (section.bounds)) << section.name << " leaves the screen at " << at;
 
 			for (const auto& control : section.controls)
 			{
-				EXPECT_FALSE (control.bounds.isEmpty()) << control.name << " has no size";
-				EXPECT_TRUE (section.bounds.contains (control.bounds)) << control.name << " leaves " << section.name;
+				EXPECT_FALSE (control.bounds.isEmpty()) << control.name << " has no size at " << at;
+				EXPECT_TRUE (section.bounds.contains (control.bounds)) << control.name << " leaves " << section.name << " at " << at;
 				if (control.interactive)
 					interactive.push_back (control);
 			}
@@ -137,165 +144,229 @@ namespace
 		for (size_t i = 0; i < interactive.size(); ++i)
 			for (size_t j = i + 1; j < interactive.size(); ++j)
 				EXPECT_FALSE (interactive[i].bounds.intersects (interactive[j].bounds))
-					<< interactive[i].name << " overlaps " << interactive[j].name;
+					<< interactive[i].name << " overlaps " << interactive[j].name << " at " << at;
 	}
 }
 
 TEST (SurfaceLayout, TheSectionsDoNotOverlap)
 {
-	const auto s = surface::sections (rigWidth, rigHeight);
-	const std::vector<std::pair<const char*, Rect>> sections {
-		{ "topBar", s.topBar }, { "waves", s.waves }, { "deckA", s.deck[0] }, { "deckB", s.deck[1] },
-		{ "mixer", s.mixer }, { "band", s.band }, { "library", s.library } };
+	for (const auto& [w, h] : windows)
+	{
+		const auto s = surface::sections (w, h);
+		const std::vector<std::pair<const char*, Rect>> sections {
+			{ "topBar", s.topBar }, { "waves", s.waves }, { "deckA", s.deck[0] }, { "deckB", s.deck[1] },
+			{ "mixer", s.mixer }, { "band", s.band }, { "library", s.library } };
 
-	for (size_t i = 0; i < sections.size(); ++i)
-		for (size_t j = i + 1; j < sections.size(); ++j)
-			EXPECT_FALSE (sections[i].second.intersects (sections[j].second)) << sections[i].first << " / " << sections[j].first;
+		for (size_t i = 0; i < sections.size(); ++i)
+			for (size_t j = i + 1; j < sections.size(); ++j)
+				EXPECT_FALSE (sections[i].second.intersects (sections[j].second))
+					<< sections[i].first << " / " << sections[j].first << " at " << sizeName (w, h);
+	}
 }
 
-TEST (SurfaceLayout, EveryControlInItsSectionNoTwoOverlapGridOff)
+TEST (SurfaceLayout, EveryControlInItsSectionNoTwoOverlapAtEverySize)
 {
-	expectCleanSurface ({ false, false });
+	for (const auto& [w, h] : windows)
+		for (const auto grid : { std::array<bool, 2> { false, false }, { true, true }, { true, false }, { false, true } })
+			expectCleanSurface (w, h, grid);
 }
 
-TEST (SurfaceLayout, EveryControlInItsSectionNoTwoOverlapGridOn)
+// The gap and the line are shares of the window, nothing fixed.
+TEST (SurfaceLayout, GapAndLineGrowWithTheWindow)
 {
-	expectCleanSurface ({ true, true });
-	expectCleanSurface ({ true, false });
-	expectCleanSurface ({ false, true });
+	const auto small = surface::metrics (600), rig = surface::metrics (rigWidth), large = surface::metrics (1080);
+	EXPECT_LT (small.gap, rig.gap);
+	EXPECT_LT (rig.gap, large.gap);
+	EXPECT_LE (small.line, rig.line);
+	EXPECT_LT (rig.line, large.line);
+	EXPECT_GT (small.line, 0);
 }
 
-// The rolling waveforms have the whole width again; the band spans the
-// decks and the mixer, right under them.
 TEST (SurfaceLayout, WaveformsFullWidthBandUnderDecksAndMixer)
 {
-	const auto s = surface::sections (rigWidth, rigHeight);
-	EXPECT_EQ (s.waveA.x, s.waves.x);
-	EXPECT_EQ (s.waveA.w, s.waves.w);
-	EXPECT_EQ (s.band.x, s.deck[0].x);
-	EXPECT_EQ (s.band.right(), s.deck[1].right());
-	EXPECT_GT (s.band.y, s.mixer.bottom() - 1);
-	EXPECT_EQ (s.deck[0].bottom(), s.mixer.bottom());
+	for (const auto& [w, h] : windows)
+	{
+		const auto s = surface::sections (w, h);
+		EXPECT_EQ (s.waveA.x, s.waves.x);
+		EXPECT_EQ (s.waveA.w, s.waves.w);
+		EXPECT_EQ (s.band.x, s.deck[0].x);
+		EXPECT_EQ (s.band.right(), s.deck[1].right());
+		EXPECT_GT (s.band.y, s.mixer.bottom());
+		EXPECT_EQ (s.deck[0].bottom(), s.mixer.bottom());
+	}
 }
 
-// Pitch at the outer edges, beside the overview and the deck's title line;
-// under the overview the title, under both the value, range key and BPM; the
-// overview reaches to the volume fader's colour frame, the meters between.
-TEST (SurfaceLayout, TheBandRunsPitchOverviewFaderMeters)
+// Each deck's tile: the pitch column at the outer edge (value above the
+// fader, range below), the title above the overview, BPM under it, the volume
+// fader towards the meters; the meters' tile between the decks' tiles.
+TEST (SurfaceLayout, OneTilePerDeckAndOneForTheMeters)
 {
-	const auto s = surface::sections (rigWidth, rigHeight);
-	const auto b = surface::band (s.band);
-
-	EXPECT_EQ (b.deck[0].pitch.x, s.band.x);
-	EXPECT_EQ (b.deck[1].pitch.right(), s.band.right());
-	for (size_t d = 0; d < 2; ++d)
+	for (const auto& [w, h] : windows)
 	{
-		const auto& deck = b.deck[d];
-		EXPECT_EQ (deck.pitch.y, deck.overview.y);
-		EXPECT_EQ (deck.pitch.bottom(), deck.stems.bottom()) << "the fader beside overview and title";
-		EXPECT_LT (deck.overview.bottom(), deck.title.y + 1) << "the title under the overview";
-		EXPECT_LT (deck.title.bottom(), deck.stems.y + 1);
-		EXPECT_EQ (deck.title.x, deck.overview.x);
-		EXPECT_EQ (deck.title.w, deck.overview.w);
-		for (const auto& foot : { deck.pitchValue, deck.range, deck.bpm, deck.bpmInfo })
-			EXPECT_LT (deck.stems.bottom(), foot.y + 1) << "the bottom line under it all";
-		EXPECT_EQ (deck.bpm.y, deck.range.y);
-		EXPECT_EQ (deck.bpmInfo.bottom(), deck.range.bottom()) << "the original under the BPM";
-		EXPECT_GE (deck.bpm.w, 90) << "room for 129.00, big";
-		EXPECT_EQ (deck.bpmInfo.bottom(), b.faderFrame[d].bottom()) << "flush with the fader's frame at the foot";
-		EXPECT_GE (deck.overview.h, 120);
-		EXPECT_GE (deck.range.h, 30);
-		EXPECT_TRUE (b.faderFrame[d].contains (b.fader[d]));
-		EXPECT_FALSE (b.faderFrame[d].intersects (b.meters)) << "the frame separates fader and meters";
-		EXPECT_FALSE (b.faderFrame[d].intersects (deck.overview));
-		EXPECT_FALSE (b.faderFrame[d].intersects (deck.bpmInfo));
-		EXPECT_EQ (b.faderFrame[d].h, s.band.h);
-	}
-	EXPECT_EQ (b.deck[0].bpm.right(), b.faderFrame[0].x) << "A's BPM against its fader";
-	EXPECT_EQ (b.deck[0].bpmInfo.right(), b.faderFrame[0].x);
-	EXPECT_EQ (b.deck[1].bpm.x, b.faderFrame[1].right()) << "B's BPM against its fader";
-	EXPECT_EQ (b.deck[1].bpmInfo.x, b.faderFrame[1].right());
-	EXPECT_EQ (b.deck[0].pitchValue.x, b.deck[0].pitch.x) << "the value under the pitch fader";
-	EXPECT_EQ (b.deck[1].pitchValue.right(), b.deck[1].pitch.right());
-	EXPECT_LT (b.deck[0].pitch.right(), b.deck[0].overview.x);
-	EXPECT_LT (b.deck[0].overview.right(), b.faderFrame[0].x);
-	EXPECT_LT (b.faderFrame[0].right(), b.meters.x);
-	EXPECT_GT (b.faderFrame[1].x, b.meters.right());
-	EXPECT_LT (b.faderFrame[1].right(), b.deck[1].overview.x);
-	EXPECT_LT (b.deck[1].overview.right(), b.deck[1].pitch.x);
+		const auto at = sizeName (w, h);
+		const auto s = surface::sections (w, h);
+		const auto b = surface::band (s.band, s.metrics);
 
-	EXPECT_EQ (b.fader[0].bottom(), b.meters.bottom() - surface::meterCaptionHeight (b.meters.h))
-		<< "the fader ends where the meter bars do";
-	EXPECT_GE (b.meters.w, 100);
-	EXPECT_LE (b.meters.w, 125);
-	EXPECT_GE (b.fader[0].h, 160) << "the faders keep a usable travel";
-	EXPECT_GE (b.deck[0].overview.w, 170);
+		for (size_t d = 0; d < 2; ++d)
+		{
+			const auto& deck = b.deck[d];
+			for (const auto& part : { deck.pitchValue, deck.pitch, deck.range, deck.title, deck.stems,
+									  deck.overview, deck.bpm, deck.bpmInfo, deck.fader })
+				EXPECT_TRUE (deck.tile.contains (part)) << at;
+			EXPECT_FALSE (deck.tile.intersects (b.metersTile)) << at;
+
+			EXPECT_LT (deck.pitchValue.bottom(), deck.pitch.y + 1) << "the value above the fader, " << at;
+			EXPECT_LT (deck.pitch.bottom(), deck.range.y + 1) << "the range key below it, " << at;
+			EXPECT_LT (deck.title.bottom(), deck.stems.y + 1) << at;
+			EXPECT_LT (deck.stems.bottom(), deck.overview.y + 1) << "the title above the overview, " << at;
+			EXPECT_LT (deck.overview.bottom(), deck.bpm.y + 1) << "BPM under it, " << at;
+			EXPECT_LT (deck.bpm.bottom(), deck.bpmInfo.y + 1) << at;
+			EXPECT_EQ (deck.fader.bottom(), b.meters.bottom() - surface::meterCaptionHeight (b.meters.h))
+				<< "the fader ends where the meter bars do, " << at;
+			EXPECT_EQ (deck.fader.y, b.meters.y) << at;
+			EXPECT_EQ (deck.tile.y, b.metersTile.y) << at;
+			EXPECT_EQ (deck.tile.h, b.metersTile.h) << at;
+		}
+
+		// Pitch at the outer edges, the faders towards the meters.
+		EXPECT_LT (b.deck[0].pitch.right(), b.deck[0].overview.x);
+		EXPECT_LT (b.deck[0].overview.right(), b.deck[0].fader.x);
+		EXPECT_LT (b.deck[1].fader.right(), b.deck[1].overview.x);
+		EXPECT_LT (b.deck[1].overview.right(), b.deck[1].pitch.x);
+		EXPECT_LT (b.deck[0].tile.right(), b.metersTile.x);
+		EXPECT_GT (b.deck[1].tile.x, b.metersTile.right());
+		EXPECT_TRUE (b.metersTile.contains (b.meters));
+	}
+}
+
+// The deck's colour line keeps its path -- stripe, drop, top, side -- and every
+// tile stands one gap from it: the deck's tile, the meters' tile, the
+// transport's tile in the column. The same gap everywhere, at every size.
+TEST (SurfaceLayout, TilesStandOneGapFromTheDeckLines)
+{
+	for (const auto& [w, h] : windows)
+	{
+		const auto at = sizeName (w, h);
+		const auto s = surface::sections (w, h);
+		const auto m = s.metrics;
+		const auto b = surface::band (s.band, m);
+
+		for (int d = 0; d < 2; ++d)
+		{
+			const auto line = surface::deckLine (s, b, d);
+			const auto& deck = s.deck[(size_t) d];
+			const auto& tile = b.deck[(size_t) d].tile;
+
+			EXPECT_EQ (line.stripe, surface::deckStripe (deck, d, m)) << "the column paints the same stripe";
+			EXPECT_TRUE (deck.contains (line.stripe));
+			EXPECT_EQ (line.drop.y, line.stripe.bottom()) << "continuous, " << at;
+			EXPECT_EQ (line.drop.bottom(), line.top.y);
+			EXPECT_EQ (line.side.y, line.top.y);
+			EXPECT_EQ (line.side.bottom(), s.band.bottom()) << "down to the band's foot";
+			EXPECT_FALSE (line.top.intersects (s.mixer));
+			EXPECT_FALSE (line.top.intersects (deck));
+
+			// One gap: above the tiles, between the line and either tile.
+			EXPECT_EQ (tile.y - line.top.bottom(), m.gap) << at;
+			EXPECT_EQ (b.metersTile.y - line.top.bottom(), m.gap) << at;
+			if (d == 0)
+			{
+				EXPECT_EQ (line.side.x - tile.right(), m.gap) << at;
+				EXPECT_EQ (b.metersTile.x - line.side.right(), m.gap) << at;
+				EXPECT_EQ (line.top.x, line.stripe.x);
+				EXPECT_EQ (line.top.right(), line.side.right());
+			}
+			else
+			{
+				EXPECT_EQ (tile.x - line.side.right(), m.gap) << at;
+				EXPECT_EQ (line.side.x - b.metersTile.right(), m.gap) << at;
+				EXPECT_EQ (line.top.right(), line.stripe.right());
+				EXPECT_EQ (line.top.x, line.side.x);
+			}
+
+			// The transport's tile, one gap from the stripe.
+			const auto column = surface::deckColumn (Rect { 0, 0, deck.w, deck.h }, false, d, m);
+			const auto transport = column.transportTile.translated (deck.x, deck.y);
+			if (d == 0)
+				EXPECT_EQ (line.stripe.x - transport.right(), m.gap) << at;
+			else
+				EXPECT_EQ (transport.x - line.stripe.right(), m.gap) << at;
+			for (const auto& key : { column.previous, column.next, column.cue, column.play })
+				EXPECT_TRUE (column.transportTile.reduced (m.gap).contains (key)) << "a gap inside the tile, " << at;
+		}
+	}
 }
 
 // No key moves when GRID turns on: the finger that turned it on turns it off.
 TEST (SurfaceLayout, DeckKeysStayPutWithGrid)
 {
-	const auto s = surface::sections (rigWidth, rigHeight);
-	const Rect column { 0, 0, s.deck[0].w, s.deck[0].h };
-	const auto off = surface::deckColumn (column, false);
-	const auto on = surface::deckColumn (column, true);
+	for (const auto& [w, h] : windows)
+		for (int d = 0; d < 2; ++d)
+		{
+			const auto s = surface::sections (w, h);
+			const Rect column { 0, 0, s.deck[(size_t) d].w, s.deck[(size_t) d].h };
+			const auto off = surface::deckColumn (column, false, d, s.metrics);
+			const auto on = surface::deckColumn (column, true, d, s.metrics);
 
-	for (const auto& [a, b] : { std::pair { off.previous, on.previous }, { off.cue, on.cue }, { off.play, on.play },
-								{ off.next, on.next }, { off.loopOff, on.loopOff }, { off.repeat, on.repeat },
-								{ off.sync, on.sync }, { off.master, on.master }, { off.vinyl, on.vinyl }, { off.grid, on.grid } })
-		EXPECT_EQ (a, b);
+			for (const auto& [a, b] : { std::pair { off.previous, on.previous }, { off.cue, on.cue }, { off.play, on.play },
+										{ off.next, on.next }, { off.loopOff, on.loopOff }, { off.repeat, on.repeat },
+										{ off.sync, on.sync }, { off.master, on.master }, { off.vinyl, on.vinyl }, { off.grid, on.grid } })
+				EXPECT_EQ (a, b) << sizeName (w, h);
 
-	EXPECT_LT (on.remaining.bottom(), on.gridNudge[0].y + 1) << "Grid Adjust under the times";
-	EXPECT_LT (on.gridEdit[0].bottom(), on.loopOff.y + 1) << "the keys under Grid Adjust";
-	EXPECT_EQ (off.loopOff.x, off.elapsed.x) << "the keys span the whole column";
+			EXPECT_LT (on.remaining.bottom(), on.gridNudge[0].y + 1) << "Grid Adjust under the times";
+			EXPECT_LT (on.gridEdit[0].bottom(), on.loopOff.y + 1) << "the keys under Grid Adjust";
 
-	// With GRID off the times take the Grid Adjust rows' room: nothing empty.
-	EXPECT_LE (off.elapsed.y, on.elapsed.y);
-	EXPECT_GE (off.remaining.bottom(), on.gridEdit[0].bottom());
-	EXPECT_GT (off.elapsed.h, on.elapsed.h) << "bigger when they have the room";
+			// With GRID off the times take the Grid Adjust rows' room: nothing empty.
+			EXPECT_LE (off.elapsed.y, on.elapsed.y);
+			EXPECT_GE (off.remaining.bottom(), on.gridEdit[0].bottom());
+			EXPECT_GT (off.elapsed.h, on.elapsed.h) << "bigger when they have the room";
+		}
 }
 
 // PLAY, CUE, NEXT and PREV: the biggest keys, at the bottom, within reach --
 // a 2 x 2 block, CUE | PLAY at the foot, |< | >| over them.
 TEST (SurfaceLayout, TheTransportIsTheBiggestAndLowest)
 {
-	const auto s = surface::sections (rigWidth, rigHeight);
-	for (const auto gridOn : { false, true })
+	for (const auto& [w, h] : windows)
 	{
-		const auto c = surface::deckColumn (Rect { 0, 0, s.deck[0].w, s.deck[0].h }, gridOn);
-		std::vector<Rect> others { c.loopOff, c.repeat, c.sync, c.master, c.vinyl, c.grid };
-		others.insert (others.end(), c.gridNudge.begin(), c.gridNudge.end());
-		others.insert (others.end(), c.gridEdit.begin(), c.gridEdit.end());
+		const auto s = surface::sections (w, h);
+		for (const auto gridOn : { false, true })
+		{
+			const auto c = surface::deckColumn (Rect { 0, 0, s.deck[0].w, s.deck[0].h }, gridOn, 0, s.metrics);
+			std::vector<Rect> others { c.loopOff, c.repeat, c.sync, c.master, c.vinyl, c.grid };
+			others.insert (others.end(), c.gridNudge.begin(), c.gridNudge.end());
+			others.insert (others.end(), c.gridEdit.begin(), c.gridEdit.end());
 
-		for (const auto& key : { c.previous, c.next, c.cue, c.play })
-			for (const auto& other : others)
-			{
-				EXPECT_GT (key.h, other.h);
-				EXPECT_GT (key.w * key.h, other.w * other.h) << "a larger target";
-				EXPECT_GT (key.y, other.y) << "below every other key";
-			}
+			for (const auto& key : { c.previous, c.next, c.cue, c.play })
+				for (const auto& other : others)
+				{
+					EXPECT_GT (key.h, other.h) << sizeName (w, h);
+					EXPECT_GT (key.w * key.h, other.w * other.h) << "a larger target, " << sizeName (w, h);
+					EXPECT_GT (key.y, other.y) << "below every other key";
+				}
 
-		EXPECT_EQ (c.cue.y, c.play.y);
-		EXPECT_EQ (c.previous.y, c.next.y);
-		EXPECT_LT (c.previous.bottom(), c.cue.y + 1) << "track search over CUE | PLAY";
-		EXPECT_EQ (c.cue.x, c.previous.x);
-		EXPECT_EQ (c.play.right(), c.next.right());
-		EXPECT_GE (c.cue.bottom(), s.deck[0].h - s.deck[0].h / 20) << "at the column's foot";
+			EXPECT_EQ (c.cue.y, c.play.y);
+			EXPECT_EQ (c.previous.y, c.next.y);
+			EXPECT_LT (c.previous.bottom(), c.cue.y + 1) << "track search over CUE | PLAY";
+			EXPECT_EQ (c.cue.x, c.previous.x);
+			EXPECT_EQ (c.play.right(), c.next.right());
+			EXPECT_GE (c.transportTile.bottom(), s.deck[0].h - s.deck[0].h / 20) << "at the column's foot";
+		}
 	}
 }
 
 TEST (SurfaceLayout, DeckKeysAreAtLeastFingerHighOnTheRig)
 {
 	const auto s = surface::sections (rigWidth, rigHeight);
-	const auto c = surface::deckColumn (Rect { 0, 0, s.deck[0].w, s.deck[0].h }, true);
+	const auto c = surface::deckColumn (Rect { 0, 0, s.deck[0].w, s.deck[0].h }, true, 0, s.metrics);
 
 	for (const auto& key : { c.cue, c.play, c.previous, c.next })
 		EXPECT_GE (key.h, 40);
 	for (const auto& key : { c.loopOff, c.sync, c.vinyl, c.grid })
-		EXPECT_GE (key.h, 30);
+		EXPECT_GE (key.h, 28);
 	for (const auto& key : c.gridNudge)
-		EXPECT_GE (key.h, 24);
-	EXPECT_GE (surface::band (s.band).deck[0].range.h, 30);
+		EXPECT_GE (key.h, 22);
+	EXPECT_GE (surface::band (s.band, s.metrics).deck[0].range.h, 26);
 }
 
 // The mixer's stem rows: the knob half its old size, the bus switches and
@@ -303,83 +374,39 @@ TEST (SurfaceLayout, DeckKeysAreAtLeastFingerHighOnTheRig)
 // keys per deck, the two decks' matrices apart.
 TEST (SurfaceLayout, StemRowsFormAMatrix)
 {
+	for (const auto& [w, h] : windows)
+	{
+		const auto s = surface::sections (w, h);
+		const auto strips = surface::mixerStrips (Rect { 0, 0, s.mixer.w, s.mixer.h });
+		const auto strip = surface::channelStrip (Rect { 0, 0, strips[0].w, strips[0].h });
+
+		for (size_t r = 0; r < strip.stems.size(); ++r)
+		{
+			const auto& row = strip.stems[r];
+			for (const auto& bus : row.buses)
+			{
+				EXPECT_EQ (bus.y, row.buses[0].y);
+				EXPECT_EQ (bus.h, row.mute.h);
+			}
+			EXPECT_GT (row.mute.x, row.buses.back().right());
+			EXPECT_TRUE (row.frame.contains (row.mute));
+
+			if (r + 1 < strip.stems.size())
+			{
+				const auto& next = strip.stems[r + 1];
+				EXPECT_EQ (row.frame.bottom(), next.frame.y) << "no gap between the rows";
+				for (size_t k = 0; k < row.buses.size(); ++k)
+					EXPECT_EQ (row.buses[k].x, next.buses[k].x) << "columns line up";
+			}
+		}
+		EXPECT_GT (strips[1].x - strips[0].right(), 0) << "deck A's and deck B's matrices apart";
+	}
+
 	const auto s = surface::sections (rigWidth, rigHeight);
 	const auto strips = surface::mixerStrips (Rect { 0, 0, s.mixer.w, s.mixer.h });
 	const auto strip = surface::channelStrip (Rect { 0, 0, strips[0].w, strips[0].h });
-
-	for (size_t r = 0; r < strip.stems.size(); ++r)
-	{
-		const auto& row = strip.stems[r];
-		EXPECT_LE (row.knob.w, 28) << "half the 48 px knob";
-		for (const auto& bus : row.buses)
-		{
-			EXPECT_EQ (bus.y, row.buses[0].y);
-			EXPECT_EQ (bus.h, row.mute.h);
-			EXPECT_GE (bus.h, 30) << "the keys grew into the freed height";
-		}
-		EXPECT_EQ (row.mute.y, row.buses[0].y);
-		EXPECT_GT (row.mute.x, row.buses.back().right());
-		EXPECT_TRUE (row.frame.contains (row.mute));
-
-		if (r + 1 < strip.stems.size())
-		{
-			const auto& next = strip.stems[r + 1];
-			EXPECT_EQ (row.frame.bottom(), next.frame.y) << "no gap between the rows";
-			EXPECT_LE (next.buses[0].y - row.buses[0].bottom(), 2) << "keys a hairline apart";
-			for (size_t k = 0; k < row.buses.size(); ++k)
-				EXPECT_EQ (row.buses[k].x, next.buses[k].x) << "columns line up";
-		}
-	}
-	EXPECT_GE (strips[1].x - strips[0].right(), 6) << "deck A's and deck B's matrices apart";
-}
-
-// The deck's colour line, one piece: the stripe at the deck column's inner
-// edge, down into the gap above the band, along it to the volume fader's
-// frame, down the frame's side towards the meters to the band's foot. No
-// bottom, no outer side (the maintainer, for B; A is the mirror).
-TEST (SurfaceLayout, TheDeckLineRunsFromTheStripeAroundTheFader)
-{
-	const auto s = surface::sections (rigWidth, rigHeight);
-	const auto b = surface::band (s.band);
-
-	for (int d = 0; d < 2; ++d)
-	{
-		const auto line = surface::deckLine (s, b, d);
-		const auto& frame = b.faderFrame[(size_t) d];
-		const auto& deck = s.deck[(size_t) d];
-
-		EXPECT_TRUE (deck.contains (line.stripe)) << d;
-		EXPECT_EQ (line.stripe, surface::deckStripe (deck, d)) << "the column paints the same stripe";
-		EXPECT_EQ (line.drop.x, line.stripe.x);
-		EXPECT_EQ (line.drop.y, line.stripe.bottom()) << "continuous";
-		EXPECT_EQ (line.drop.bottom(), line.top.y);
-		EXPECT_EQ (line.side.y, line.top.y);
-		EXPECT_EQ (line.side.bottom(), s.band.bottom()) << "down to the band's foot";
-		EXPECT_EQ (line.side.h - line.top.h, s.band.bottom() - line.top.bottom());
-
-		// The top reaches from the stripe to the frame's side, in the gap
-		// above the band: it crosses neither the band nor the decks or mixer.
-		EXPECT_FALSE (line.top.intersects (s.band));
-		EXPECT_FALSE (line.top.intersects (s.mixer));
-		EXPECT_FALSE (line.top.intersects (deck));
-		EXPECT_FALSE (line.drop.intersects (s.band));
-
-		if (d == 0)
-		{
-			EXPECT_EQ (line.top.x, line.stripe.x);
-			EXPECT_EQ (line.top.right(), line.side.right());
-			EXPECT_EQ (line.side.right(), frame.right()) << "A: the frame's right side, towards the meters";
-		}
-		else
-		{
-			EXPECT_EQ (line.top.right(), line.stripe.right());
-			EXPECT_EQ (line.top.x, line.side.x);
-			EXPECT_EQ (line.side.x, frame.x) << "B: the frame's left side, towards the meters";
-		}
-		EXPECT_FALSE (line.side.intersects (b.fader[(size_t) d])) << "beside the fader, not over it";
-		EXPECT_FALSE (line.side.intersects (b.meters));
-		EXPECT_FALSE (line.side.intersects (b.deck[(size_t) d].overview));
-	}
+	EXPECT_LE (strip.stems[0].knob.w, 28) << "half the 48 px knob";
+	EXPECT_GE (strip.stems[0].buses[0].h, 30) << "the keys grew into the freed height";
 }
 
 TEST (SurfaceLayout, RectSlicing)

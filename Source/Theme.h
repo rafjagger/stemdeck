@@ -34,6 +34,12 @@ namespace Theme
 		return index == 0 ? "A" : "B";
 	}
 
+	// A panel's or tile's corner: a share of its shorter side.
+	inline float corner (juce::Rectangle<float> area)
+	{
+		return juce::jmin (area.getWidth(), area.getHeight()) * 0.035f;
+	}
+
 	inline juce::String formatTime (double seconds)
 	{
 		const auto total = juce::jmax (0.0, seconds);

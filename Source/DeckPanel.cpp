@@ -12,18 +12,14 @@ namespace
 DeckPanel::DeckPanel (StemDeckPlayer& p, StemThumbnails& thumbnails, int index)
 	: player (p), deckIndex (index), overview (p, thumbnails), jog (p, index)
 {
-	titleLabel.setFont (juce::FontOptions (18.0f, juce::Font::bold));
+	// Fonts are set where the labels are placed: a share of their height.
 	titleLabel.setText ("Empty - drag a set here", juce::dontSendNotification);
 	titleLabel.setMinimumHorizontalScale (0.7f);
 	stemsLabel.setColour (juce::Label::textColourId, Theme::textDim);
-	elapsedLabel.setFont (juce::FontOptions (20.0f));
-	remainingLabel.setFont (juce::FontOptions (20.0f));
 	remainingLabel.setColour (juce::Label::textColourId, Theme::textDim);
 	remainingLabel.setJustificationType (juce::Justification::centredRight);
 
-	bpmLabel.setFont (juce::FontOptions (24.0f, juce::Font::bold));
 	bpmLabel.setJustificationType (juce::Justification::centred);
-	bpmInfoLabel.setFont (juce::FontOptions (11.0f));
 	bpmInfoLabel.setColour (juce::Label::textColourId, Theme::textDim);
 	bpmInfoLabel.setJustificationType (juce::Justification::centred);
 
@@ -294,21 +290,33 @@ void DeckPanel::refresh()
 	jog.refresh();
 }
 
+surface::Metrics DeckPanel::metrics() const
+{
+	return surface::metrics (getParentWidth());
+}
+
 void DeckPanel::paint (juce::Graphics& g)
 {
-	auto bounds = getLocalBounds().toFloat().reduced (2.0f);
+	const auto m = metrics();
+	const auto panel = getLocalBounds().toFloat().reduced ((float) m.line * 2.0f / 3.0f);
 	g.setColour (Theme::panel);
-	g.fillRoundedRectangle (bounds, 6.0f);
+	g.fillRoundedRectangle (panel, Theme::corner (panel));
+
+	// The transport on its own tile.
+	const auto tile = transportTile.toFloat();
+	g.setColour (Theme::panelRaised);
+	g.fillRoundedRectangle (tile, Theme::corner (tile));
 
 	// The coloured stripe on the side facing the mixer: the start of the
-	// deck's line, which the window carries on around its volume fader.
+	// deck's line, which the window carries on around its tile in the band.
 	g.setColour (Theme::deck (deckIndex));
-	g.fillRect (surface::toJuce (surface::deckStripe (surface::fromJuce (getLocalBounds()), deckIndex)));
+	g.fillRect (surface::toJuce (surface::deckStripe (surface::fromJuce (getLocalBounds()), deckIndex, m)));
 }
 
 void DeckPanel::resized()
 {
-	const auto layout = surface::deckColumn (surface::fromJuce (getLocalBounds()), gridButton.getToggleState());
+	const auto layout = surface::deckColumn (surface::fromJuce (getLocalBounds()), gridButton.getToggleState(), deckIndex, metrics());
+	transportTile = surface::toJuce (layout.transportTile);
 	const auto place = [] (juce::Component& c, const surface::Rect& r) { c.setBounds (surface::toJuce (r)); };
 
 	place (elapsedLabel, layout.elapsed);
@@ -348,7 +356,7 @@ void DeckPanel::addBandPartsTo (juce::Component& parent)
 		parent.addAndMakeVisible (part);
 }
 
-void DeckPanel::setBandBounds (const surface::BandDeck& parts)
+void DeckPanel::setBandBounds (const surface::DeckTile& parts)
 {
 	// Text a share of the line it stands in.
 	const auto place = [] (juce::Label& label, const surface::Rect& r, float share, bool bold)
@@ -359,11 +367,12 @@ void DeckPanel::setBandBounds (const surface::BandDeck& parts)
 	overview.setBounds (surface::toJuce (parts.overview));
 	pitchFader.setBounds (surface::toJuce (parts.pitch));
 	rangeKey.setBounds (surface::toJuce (parts.range));
-	place (pitchValue, parts.pitchValue, 0.42f, false);
+	place (pitchValue, parts.pitchValue, 0.6f, false);
 	place (titleLabel, parts.title, 0.8f, true);
 	place (stemsLabel, parts.stems, 0.8f, false);
 	place (bpmLabel, parts.bpm, 0.85f, true);
 	place (bpmInfoLabel, parts.bpmInfo, 0.85f, false);
+
 	// Against the volume fader beside them, so BPM and fader read as one block.
 	const auto towardsFader = deckIndex == 0 ? juce::Justification::centredRight : juce::Justification::centredLeft;
 	bpmLabel.setJustificationType (towardsFader);

@@ -87,6 +87,8 @@ private:
 	void returnKeyPressed (int row) override;
 	void sortOrderChanged (int columnId, bool forwards) override;
 	juce::var getDragSourceDescription (const juce::SparseSet<int>& rows) override;
+	bool pressHeldStill() const;
+	void mouseUp (const juce::MouseEvent&) override;   // from the table's rows: a set drag is over
 
 	static juce::String idFor (const StemSet& set) { return set.files[0].getFullPathName(); }
 	void applyFilter();

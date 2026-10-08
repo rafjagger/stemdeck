@@ -40,3 +40,16 @@ inline SortOrder sortAfterTap (SortOrder current, int tappedColumn)
 		return { current.column, ! current.forwards };
 	return { tappedColumn, true };
 }
+
+// A finger on a touch list (the library's table and folder tree).
+namespace touchlist
+{
+	// A press held still this long before it moves drags the row under it (a
+	// set onto a deck); a quicker one scrolls the list. JUCE's own long press.
+	constexpr double longPressMs = 300.0;
+	inline bool isLongPress (double heldMs) { return heldMs >= longPressMs; }
+
+	// A press that ends within a quarter of a row of where it began is a tap;
+	// further, it was a scroll.
+	inline bool isTap (float distance, int rowHeight) { return distance * 4.0f < (float) rowHeight; }
+}

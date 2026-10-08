@@ -43,9 +43,11 @@ private:
 
 //==============================================================================
 // A folder in the tree: its name and how many sets lie in and below it. A
-// tap chooses it and opens it; a tap on the chosen one opens or closes it.
-// JUCE's own open/close triangles are off: they toggle on the press, so the
-// twin of a touch closed what the touch had opened.
+// tap chooses it and opens or closes it; a drag scrolls the tree. The tap is
+// taken on release, from a transparent component over the row, so a drag
+// that began on a row neither chooses nor opens it. JUCE's own handling acts
+// on the press (and its triangles toggle there, so a touch's twin closed what
+// the touch had opened).
 class StemLibrary::FolderItem : public juce::TreeViewItem
 {
 public:
@@ -54,10 +56,11 @@ public:
 	{
 	}
 
+	std::unique_ptr<juce::Component> createItemComponent() override { return std::make_unique<TapArea> (*this); }
+
 	bool mightContainSubItems() override { return getNumSubItems() > 0; }
 	juce::String getUniqueName() const override { return path.isEmpty() ? juce::String ("/") : path; }
-	int getItemHeight() const override { return owner.table.getRowHeight() * 3 / 2; }
-	void itemClicked (const juce::MouseEvent&) override { owner.folderTapped (*this); }
+	int getItemHeight() const override { return owner.table.getRowHeight() * 6 / 5; }
 	void itemDoubleClicked (const juce::MouseEvent&) override {}
 
 	void paintItem (juce::Graphics& g, int width, int height) override
@@ -72,7 +75,7 @@ public:
 		}
 
 		auto marker = area.removeFromLeft (height * 2 / 3);
-		g.setFont (juce::FontOptions ((float) height * 0.45f));
+		g.setFont (juce::FontOptions ((float) height * 0.55f));
 		g.setColour (Theme::textDim);
 		if (mightContainSubItems())
 			g.drawText (juce::String::fromUTF8 (isOpen() ? "\xe2\x96\xbe" : "\xe2\x96\xb8"), marker, juce::Justification::centred);
@@ -84,6 +87,17 @@ public:
 	const juce::String path;
 
 private:
+	struct TapArea : public juce::Component
+	{
+		explicit TapArea (FolderItem& i) : item (i) {}
+		void mouseUp (const juce::MouseEvent& e) override
+		{
+			if (touchlist::isTap ((float) e.getDistanceFromDragStart(), getHeight()))
+				item.owner.folderTapped (item);
+		}
+		FolderItem& item;
+	};
+
 	StemLibrary& owner;
 	const juce::String label;
 };
@@ -141,12 +155,16 @@ StemLibrary::StemLibrary (juce::AudioFormatManager& fm) : formatManager (fm)
 	header.setColour (juce::TableHeaderComponent::backgroundColourId, Theme::panelRaised);
 	header.setColour (juce::TableHeaderComponent::textColourId, Theme::textDim);
 
-	table.setRowHeight (24);
 	table.setMultipleSelectionEnabled (false);
+	// Touch lists: a finger's drag scrolls (a held press drags a set, see
+	// getDragSourceDescription); a tap selects, on release.
+	table.getViewport()->setScrollOnDragMode (juce::Viewport::ScrollOnDragMode::all);
+	table.addMouseListener (this, true);
 	table.setColour (juce::ListBox::backgroundColourId, Theme::background);
 	addAndMakeVisible (table);
 
 	folderTree.setOpenCloseButtonsVisible (false);
+	folderTree.getViewport()->setScrollOnDragMode (juce::Viewport::ScrollOnDragMode::all);
 	folderTree.setRootItemVisible (true);
 	folderTree.setColour (juce::TreeView::backgroundColourId, Theme::background);
 	folderTree.setColour (juce::TreeView::selectedItemBackgroundColourId, juce::Colours::transparentBlack);
@@ -253,14 +271,12 @@ void StemLibrary::folderTapped (FolderItem& item)
 	if (! folderTaps.accept (nowMs()))
 		return;
 
-	if (item.path == chosenFolder)
-	{
+	if (item.mightContainSubItems())
 		item.setOpen (! item.isOpen());
-		return;
-	}
-
-	item.setOpen (true);
-	chooseFolder (item.path);
+	if (item.path != chosenFolder)
+		chooseFolder (item.path);
+	else
+		folderTree.repaint();
 }
 
 void StemLibrary::chooseFolder (const juce::String& relativeFolder)
@@ -454,7 +470,7 @@ void StemLibrary::paintCell (juce::Graphics& g, int row, int columnId, int width
 	}
 
 	g.setColour (columnId == nameColumn ? Theme::text : Theme::textDim);
-	g.setFont (juce::FontOptions (14.0f));
+	g.setFont (juce::FontOptions ((float) height * 0.6f));
 	g.drawText (text, 6, 0, width - 12, height, juce::Justification::centredLeft, true);
 }
 
@@ -469,12 +485,33 @@ void StemLibrary::returnKeyPressed (int)
 	loadSelected (-1);
 }
 
+// A row is dragged onto a deck only after a press held still (touchlist):
+// a quick swipe scrolls the table instead. While a set is dragged the table
+// stays put; the next release frees it again (mouseUp).
 juce::var StemLibrary::getDragSourceDescription (const juce::SparseSet<int>& rows)
 {
-	if (rows.size() == 1 && juce::isPositiveAndBelow (rows[0], (int) visibleSets.size()))
-		return juce::String (StemSetDropTarget::prefix) + idFor (*visibleSets[(size_t) rows[0]]);
+	if (rows.size() != 1 || ! juce::isPositiveAndBelow (rows[0], (int) visibleSets.size()) || ! pressHeldStill())
+		return {};
 
-	return {};
+	if (auto* content = table.getViewport()->getViewedComponent())
+		content->setViewportIgnoreDragFlag (true);
+	return juce::String (StemSetDropTarget::prefix) + idFor (*visibleSets[(size_t) rows[0]]);
+}
+
+bool StemLibrary::pressHeldStill() const
+{
+	auto& desktop = juce::Desktop::getInstance();
+	for (int i = 0; i < desktop.getNumDraggingMouseSources(); ++i)
+		if (auto* source = desktop.getDraggingMouseSource (i))
+			if (touchlist::isLongPress ((juce::Time::getCurrentTime() - source->getLastMouseDownTime()).inMilliseconds()))
+				return true;
+	return false;
+}
+
+void StemLibrary::mouseUp (const juce::MouseEvent&)
+{
+	if (auto* content = table.getViewport()->getViewedComponent())
+		content->setViewportIgnoreDragFlag (false);
 }
 
 //==============================================================================
@@ -536,7 +573,10 @@ void StemLibrary::resized()
 		folderTree.setBounds (area.removeFromLeft (area.getWidth() * 3 / 10));
 		area.removeFromLeft (8);
 	}
-	table.setHeaderHeight (juce::jmax (table.getRowHeight(), getHeight() * 16 / 100));
+	// Rows a share of the library's height, so more fit; the header a little
+	// higher, as a row of keys.
+	table.setRowHeight (juce::jmax (1, getHeight() / 11));
+	table.setHeaderHeight (table.getRowHeight() * 3 / 2);
 	table.setBounds (area);
 }
 

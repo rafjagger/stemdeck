@@ -92,3 +92,21 @@ TEST (SortTap, ANewColumnSortsForwardsTheSameOneReverses)
 	EXPECT_EQ (sortAfterTap ({ 3, false }, 3), (SortOrder { 3, true }));
 	EXPECT_EQ (sortAfterTap ({ 3, false }, 0), (SortOrder { 3, false })) << "a tap beside every column changes nothing";
 }
+
+// A finger on a touch list: a quick swipe scrolls, a press held still first
+// drags the row (to a deck); a press that ends near where it began is a tap.
+TEST (TouchList, AHeldPressDragsAQuickOneScrolls)
+{
+	EXPECT_FALSE (touchlist::isLongPress (40.0));
+	EXPECT_FALSE (touchlist::isLongPress (touchlist::longPressMs - 1.0));
+	EXPECT_TRUE (touchlist::isLongPress (touchlist::longPressMs));
+	EXPECT_TRUE (touchlist::isLongPress (900.0));
+}
+
+TEST (TouchList, ATapEndsWithinAQuarterRow)
+{
+	EXPECT_TRUE (touchlist::isTap (0.0f, 24));
+	EXPECT_TRUE (touchlist::isTap (5.0f, 24));
+	EXPECT_FALSE (touchlist::isTap (6.0f, 24));
+	EXPECT_FALSE (touchlist::isTap (40.0f, 24)) << "that was a scroll";
+}

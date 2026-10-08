@@ -108,7 +108,10 @@ private:
 	void showWorkspaces();
 
 	DJLookAndFeel lookAndFeel;
-	juce::TooltipWindow tooltips { this, 600 };
+	// The tips (tooltips), switchable in Settings (Tips.h): with them off
+	// there is no TooltipWindow at all, so no tip shows anywhere.
+	std::unique_ptr<juce::TooltipWindow> tooltips;
+	void showTips (bool shown);
 	juce::ApplicationProperties appProperties;
 
 	juce::AudioFormatManager formatManager;

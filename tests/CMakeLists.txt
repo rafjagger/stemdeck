@@ -50,6 +50,8 @@ add_executable(stemdeck-tests
     SurfaceLayout.cpp
     ${CMAKE_SOURCE_DIR}/Source/SurfaceLayout.cpp
     LibraryFolders.cpp
+    Tips.cpp
+    ${CMAKE_SOURCE_DIR}/Source/Tips.cpp
     ${CMAKE_SOURCE_DIR}/Source/LibraryFolders.cpp)
 target_include_directories(stemdeck-tests PRIVATE ${CMAKE_SOURCE_DIR}/Source)
 

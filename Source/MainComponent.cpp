@@ -4,6 +4,7 @@
 #include "GridEdit.h"
 #include "OscTruthFile.h"
 #include "SyncLabels.h"
+#include "Tips.h"
 #include "SurfaceJuce.h"
 
 #include <cstdlib>
@@ -54,6 +55,7 @@ MainComponent::MainComponent()
 	analysisCache = std::make_unique<AnalysisCache> (appProperties.getUserSettings()->getFile().getSiblingFile ("analysis.xml"));
 
 	formatManager.registerBasicFormats();
+	showTips (tips::shown (settings().getValue (tips::settingKey).toStdString()));
 
 	for (int d = 0; d < numDecks; ++d)
 	{
@@ -1278,6 +1280,14 @@ void MainComponent::showWorkspaces()
 	workspacePanel.show (entries);
 }
 
+void MainComponent::showTips (bool shown)
+{
+	if (shown && tooltips == nullptr)
+		tooltips = std::make_unique<juce::TooltipWindow> (this, 600);
+	else if (! shown)
+		tooltips.reset();
+}
+
 void MainComponent::showSettings()
 {
 	juce::DialogWindow::LaunchOptions dialog;
@@ -1286,11 +1296,17 @@ void MainComponent::showSettings()
 	values.autoDjFade = autoDj.mixLength();
 	values.audioDeviceChoosable = ! usingJack;
 	values.audioDeviceNote = usingJack ? "Under JACK: route with qjackctl or a patchbay" : juce::String();
+	values.tipsShown = tooltips != nullptr;
 
 	SettingsPanel::Actions actions;
 	actions.onLibraryFolder = [this] (const juce::File& folder) { library.setFolder (folder); };
 	actions.onAutoDjFade = [this] (AutoDj::MixLength length) { setAutoDjFade (length); };
 	actions.onAudioDevice = [this] { showAudioSettings(); };
+	actions.onTips = [this] (bool shown)
+	{
+		settings().setValue (tips::settingKey, juce::String (tips::stored (shown)));
+		showTips (shown);
+	};
 
 	dialog.content.setOwned (new SettingsPanel (values, std::move (actions)));
 	dialog.dialogTitle = "Settings";

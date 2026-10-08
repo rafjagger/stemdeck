@@ -6,7 +6,7 @@
 #include "FolderChoice.h"
 
 // StemDeck's settings: where the stem library lives, how long the Auto DJ
-// fades, and the way to the audio device. The folder is chosen, never typed
+// fades, whether tips show, and the way to the audio device. The folder is chosen, never typed
 // -- the rig's touch screen has no keyboard to type with (2026-09-30). OK and
 // Cancel are its own buttons: i3 gives a floating window no close button, so
 // the touch screen had no way out (2026-10-06). The audio device applies as
@@ -20,6 +20,7 @@ public:
 		AutoDj::MixLength autoDjFade;
 		bool audioDeviceChoosable = true;
 		juce::String audioDeviceNote;   // its tooltip, why not
+		bool tipsShown = true;
 	};
 
 	struct Actions
@@ -27,6 +28,7 @@ public:
 		std::function<void (const juce::File&)> onLibraryFolder;
 		std::function<void (AutoDj::MixLength)> onAutoDjFade;
 		std::function<void()> onAudioDevice;
+		std::function<void (bool shown)> onTips;
 	};
 
 	SettingsPanel (const Values& values, Actions actions);
@@ -48,6 +50,9 @@ private:
 	juce::ComboBox fadeBars, fadeSeconds;
 	juce::Label fadeBarsUnit { {}, "bars" }, fadeSecondsUnit { {}, "s without beat grid" };
 	AutoDj::MixLength fadeShown;
+
+	juce::ToggleButton tipsButton { "Show tips (help text on the keys)" };
+	bool tipsWereShown = true;
 
 	juce::TextButton audioButton { juce::String::fromUTF8 ("Audio device\xe2\x80\xa6") };
 	juce::TextButton okButton { "OK" };

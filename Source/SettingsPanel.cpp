@@ -56,6 +56,10 @@ SettingsPanel::SettingsPanel (const Values& values, Actions a)
 		addAndMakeVisible (unit);
 	}
 
+	tipsWereShown = values.tipsShown;
+	tipsButton.setToggleState (values.tipsShown, juce::dontSendNotification);
+	addAndMakeVisible (tipsButton);
+
 	audioButton.setEnabled (values.audioDeviceChoosable);
 	audioButton.setTooltip (values.audioDeviceNote);
 	audioButton.onClick = [this] { if (actions.onAudioDevice) actions.onAudioDevice(); };
@@ -67,7 +71,7 @@ SettingsPanel::SettingsPanel (const Values& values, Actions a)
 	addAndMakeVisible (cancelButton);
 
 	showFolder();
-	setSize (520, 236);
+	setSize (520, 276);
 }
 
 void SettingsPanel::resized()
@@ -88,6 +92,8 @@ void SettingsPanel::resized()
 	fade.removeFromLeft (12);
 	fadeSeconds.setBounds (fade.removeFromLeft (80));
 	fadeSecondsUnit.setBounds (fade);
+	area.removeFromTop (8);
+	tipsButton.setBounds (area.removeFromTop (30));
 
 	auto buttons = area.removeFromBottom (34);
 	audioButton.setBounds (buttons.removeFromLeft (140));
@@ -122,6 +128,8 @@ void SettingsPanel::ok()
 	const auto changed = fade.bars != fadeShown.bars || ! juce::approximatelyEqual (fade.noGridSeconds, fadeShown.noGridSeconds);
 	if (changed && actions.onAutoDjFade)
 		actions.onAutoDjFade (fade);
+	if (tipsButton.getToggleState() != tipsWereShown && actions.onTips)
+		actions.onTips (tipsButton.getToggleState());
 	close();
 }
 

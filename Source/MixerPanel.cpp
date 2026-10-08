@@ -120,7 +120,7 @@ void OutputMeters::paint (juce::Graphics& g)
 	g.fillRoundedRectangle (getLocalBounds().toFloat(), 6.0f);
 
 	// The bus names under their pairs, a share of the caption line.
-	g.setFont (juce::FontOptions ((float) labelArea.getHeight() * 0.8f, juce::Font::bold));
+	g.setFont (juce::FontOptions ((float) labelArea.getHeight() * 0.6f, juce::Font::bold));
 
 	for (int bus = 0; bus < numBuses; ++bus)
 	{
@@ -196,13 +196,6 @@ ChannelStrip::ChannelStrip (StemDeckPlayer& p, int index) : player (p), deckInde
 			addAndMakeVisible (button);
 		}
 
-		auto* label = stemLabels.add (new juce::Label ({}, "Stem " + juce::String (s + 1)));
-		label->setFont (juce::FontOptions (10.0f, juce::Font::bold));
-		label->setColour (juce::Label::textColourId, Theme::stem (s));
-		label->setJustificationType (juce::Justification::centredLeft);
-		label->setMinimumHorizontalScale (0.45f);   // "3 vocals" in the 400 px mixer
-		addAndMakeVisible (label);
-
 		stemMeters.add (new LevelMeter())->setBarColour (Theme::stem (s));
 	}
 
@@ -221,18 +214,6 @@ ChannelStrip::ChannelStrip (StemDeckPlayer& p, int index) : player (p), deckInde
 	// The deck's four stems metered in the fader's slot, pre-fader: the meters
 	// behind, the fader's ticks and cap drawn over them (2026-10-08).
 	fader.getProperties().set (DJLookAndFeel::meterInSlot, true);
-}
-
-void ChannelStrip::setStemNames (const std::array<juce::String, StemSet::numStems>& names)
-{
-	for (int s = 0; s < StemSet::numStems; ++s)
-	{
-		// "1 - drums" already carries its number; "DUB" or "Vox" gets one.
-		const auto& name = names[(size_t) s];
-		const auto numbered = juce::CharacterFunctions::isDigit (name[0]);
-		stemLabels[s]->setText (numbered ? name : juce::String (s + 1) + " " + name, juce::dontSendNotification);
-		stemLabels[s]->setTooltip (names[(size_t) s]);
-	}
 }
 
 void ChannelStrip::saveState (DeckSession& state) const
@@ -293,16 +274,8 @@ void ChannelStrip::paint (juce::Graphics& g)
 	g.setColour (Theme::deck (deckIndex));
 	g.fillRoundedRectangle (header.reduced (6.0f, 4.0f), 3.0f);
 	g.setColour (juce::Colours::black);
-	g.setFont (juce::FontOptions (14.0f, juce::Font::bold));
+	g.setFont (juce::FontOptions (header.getHeight() * 0.7f, juce::Font::bold));
 	g.drawText ("DECK " + Theme::deckName (deckIndex), header, juce::Justification::centred);
-
-	for (const auto& frame : stemFrames)
-	{
-		g.setColour (Theme::panel);
-		g.fillRoundedRectangle (frame.toFloat(), 4.0f);
-		g.setColour (Theme::outline);
-		g.drawRoundedRectangle (frame.toFloat().reduced (0.5f), 4.0f, 1.0f);
-	}
 }
 
 void ChannelStrip::resized()
@@ -313,9 +286,7 @@ void ChannelStrip::resized()
 	for (int s = 0; s < StemSet::numStems; ++s)
 	{
 		const auto& row = layout.stems[(size_t) s];
-		stemFrames[(size_t) s] = surface::toJuce (row.frame);
 		knobs[s]->setBounds (surface::toJuce (row.knob));
-		stemLabels[s]->setBounds (surface::toJuce (row.label));
 		muteButtons[s]->setBounds (surface::toJuce (row.mute));
 		for (int bus = 0; bus < buses::count; ++bus)
 			busButtons[s * buses::count + bus]->setBounds (surface::toJuce (row.buses[(size_t) bus]));

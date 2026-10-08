@@ -279,7 +279,6 @@ void MainComponent::loadSet (const StemSet& set, int deckIndex)
 	thumbs[d]->setSet (set);
 	decks[d]->setSet (set);
 	waves[d]->setTitle (set.name);
-	mixer.strip (deckIndex).setStemNames (set.stemNames);
 	findSteps();
 
 	++loadGeneration[d];
@@ -1460,6 +1459,14 @@ void MainComponent::paint (juce::Graphics& g)
 	g.fillAll (Theme::background);
 	g.setColour (Theme::panel);
 	g.fillRoundedRectangle (bandArea.toFloat(), 6.0f);
+
+	// Each volume fader with its stems' meters in its deck's colour frame,
+	// as thick as the deck column's stripe; the output meters between them.
+	for (size_t d = 0; d < (size_t) numDecks; ++d)
+	{
+		g.setColour (Theme::deck ((int) d));
+		g.drawRoundedRectangle (faderFrames[d].toFloat().reduced (1.5f), 6.0f, 3.0f);
+	}
 }
 
 void MainComponent::resized()
@@ -1507,8 +1514,10 @@ void MainComponent::resized()
 	bandArea = surface::toJuce (layout.band);
 	const auto band = surface::band (layout.band);
 	for (size_t d = 0; d < (size_t) numDecks; ++d)
-		decks[d]->setBandBounds (surface::toJuce (band.overview[d]), surface::toJuce (band.pitch[d]),
-								 surface::toJuce (band.pitchValue[d]), surface::toJuce (band.range[d]));
+	{
+		decks[d]->setBandBounds (band.deck[d]);
+		faderFrames[d] = surface::toJuce (band.faderFrame[d]);
+	}
 	mixer.setBandBounds (surface::toJuce (band.fader[0]), surface::toJuce (band.fader[1]), surface::toJuce (band.meters));
 }
 

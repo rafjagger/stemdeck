@@ -85,10 +85,9 @@ namespace surface
 	namespace
 	{
 		// A deck column in thousandths of a key: the rows and the gaps between them.
-		constexpr int titleUnits = 550, stemsUnits = 400, timesUnits = 550, bpmUnits = 720, bpmInfoUnits = 330;
-		constexpr int gridUnits = 830, transportUnits = 1100, keyUnits = 1000, gapUnits = 120;
-		constexpr int deckUnits = titleUnits + stemsUnits + timesUnits + bpmUnits + bpmInfoUnits + 2 * gridUnits
-								+ transportUnits + 3 * keyUnits + 9 * gapUnits;   // 7 between rows, 2 margins
+		constexpr int timesUnits = 550, gridUnits = 830, transportUnits = 1100, keyUnits = 1000, gapUnits = 120;
+		constexpr int deckUnits = timesUnits + 2 * gridUnits + transportUnits + 3 * keyUnits
+								+ 8 * gapUnits;   // 6 between rows, 2 margins
 	}
 
 	int deckColumnHeight (int keyHeight)
@@ -134,33 +133,58 @@ namespace surface
 		return s;
 	}
 
+	namespace
+	{
+		// One deck's half of the band, from its outer edge (`outer`) to its
+		// fader frame; `mirrored` for B, whose outer edge is on the right.
+		BandDeck bandDeck (Rect side, int gap, int pitchWidth, int line, int info, bool mirrored)
+		{
+			BandDeck d;
+			const auto outer = [mirrored] (Rect& r, int w) { return mirrored ? r.removeFromRight (w) : r.removeFromLeft (w); };
+
+			auto foot = side.removeFromBottom (line);
+			side.removeFromBottom (gap);
+			d.pitch = outer (side, pitchWidth);
+			outer (side, gap);
+			auto infoArea = side.removeFromBottom (info);
+			d.title = infoArea.removeFromTop (infoArea.h * 3 / 5);
+			d.stems = infoArea;
+			side.removeFromBottom (gap);
+			d.overview = side;
+
+			d.pitchValue = outer (foot, pitchWidth);
+			outer (foot, gap);
+			d.range = outer (foot, pitchWidth);
+			outer (foot, gap);
+			d.bpm = foot.removeFromTop (foot.h * 2 / 3);   // big, the original under it
+			d.bpmInfo = foot;
+			return d;
+		}
+	}
+
 	Band band (Rect area)
 	{
 		Band b;
 		const auto gap = std::max (3, area.w / 150);
-		const auto line = share (area.h, 190);
 		const auto pitchWidth = share (area.w, 85);
 		const auto metersWidth = share (area.w, 150);
 		const auto faderWidth = share (area.w, 75);
-		const auto upperHeight = area.h - line - gap;
-		const auto lineY = area.bottom() - line;
+		const auto frameWidth = faderWidth + 2 * gap;
 
+		// The middle: the meters, a gap, each deck's fader in its colour frame.
 		b.meters = { area.x + (area.w - metersWidth) / 2, area.y, metersWidth, area.h };
-		const auto faderHeight = area.h - meterCaptionHeight (area.h);
-		b.fader[0] = { b.meters.x - faderWidth, area.y, faderWidth, faderHeight };
-		b.fader[1] = { b.meters.right(), area.y, faderWidth, faderHeight };
+		b.faderFrame[0] = { b.meters.x - gap - frameWidth, area.y, frameWidth, area.h };
+		b.faderFrame[1] = { b.meters.right() + gap, area.y, frameWidth, area.h };
+		const auto faderBottom = area.bottom() - meterCaptionHeight (area.h);
+		for (size_t d = 0; d < 2; ++d)
+			b.fader[d] = { b.faderFrame[d].x + gap, area.y + gap, faderWidth, faderBottom - area.y - gap };
 
-		b.pitch[0] = { area.x, area.y, pitchWidth, upperHeight };
-		b.pitch[1] = { area.right() - pitchWidth, area.y, pitchWidth, upperHeight };
-		b.pitchValue[0] = { area.x, lineY, pitchWidth, line };
-		b.pitchValue[1] = { area.right() - pitchWidth, lineY, pitchWidth, line };
-		b.range[0] = { b.pitchValue[0].right() + gap, lineY, pitchWidth, line };
-		b.range[1] = { b.pitchValue[1].x - gap - pitchWidth, lineY, pitchWidth, line };
-
-		const auto overviewA = b.pitch[0].right() + gap;
-		b.overview[0] = { overviewA, area.y, b.fader[0].x - gap - overviewA, upperHeight };
-		const auto overviewB = b.fader[1].right() + gap;
-		b.overview[1] = { overviewB, area.y, b.pitch[1].x - gap - overviewB, upperHeight };
+		const auto line = share (area.h, 170);
+		const auto info = share (area.h, 150);
+		const Rect sideA { area.x, area.y, b.faderFrame[0].x - gap - area.x, area.h };
+		const Rect sideB { b.faderFrame[1].right() + gap, area.y, area.right() - b.faderFrame[1].right() - gap, area.h };
+		b.deck[0] = bandDeck (sideA, gap, pitchWidth, line, info, false);
+		b.deck[1] = bandDeck (sideB, gap, pitchWidth, line, info, true);
 		return b;
 	}
 
@@ -191,23 +215,24 @@ namespace surface
 		splitPair (transport, gap, c.cue, c.play);
 		area.removeFromBottom (gap);
 
-		// Grid Adjust: its room is kept; with GRID off, times and BPM use it.
-		auto labels = area;
+		// Grid Adjust above the transport; with GRID off its room is the times'.
+		auto times = area;
 		splitRow (area.removeFromBottom (units (gridUnits)), c.gridEdit);
 		area.removeFromBottom (gap);
 		splitRow (area.removeFromBottom (units (gridUnits)), c.gridNudge);
 		area.removeFromBottom (gap);
+
 		if (gridOn)
-			labels = area;
-
-		c.bpmInfo = labels.removeFromBottom (units (bpmInfoUnits));
-		c.bpm = labels.removeFromBottom (units (bpmUnits));
-		auto times = labels.removeFromBottom (units (timesUnits));
-		c.elapsed = times.removeFromLeft (times.w / 2);
-		c.remaining = times;
-
-		c.title = labels.removeFromTop (units (titleUnits));
-		c.stems = labels.removeFromTop (units (stemsUnits));
+		{
+			times = area;
+			c.elapsed = times.removeFromLeft (times.w / 2);
+			c.remaining = times;
+		}
+		else
+		{
+			c.elapsed = times.removeFromTop (times.h / 2);
+			c.remaining = times;
+		}
 		return c;
 	}
 
@@ -219,28 +244,21 @@ namespace surface
 		const auto gap = std::max (2, area.w / 56);
 		area.removeFromTop (gap);
 
-		// [knob] beside [name] over [1 2 3 4 A  M]: the knob a seventh of the
-		// row, the six switches share the rest; the rows share the height.
-		const auto innerWidth = area.w - 2 * gap;
-		const auto knobSize = innerWidth / 7;
-		const auto switchWidth = (innerWidth - knobSize - 2 * gap) / 6;
-		const auto labelHeight = share (local.h, 40);
+		// [knob] [1 2 3 4 A  M], four rows tight under each other: a matrix.
+		// The knob a seventh of the row, the six keys share the rest and are
+		// as tall as the row, a hairline apart.
+		const auto knobSize = area.w / 7;
+		const auto switchWidth = (area.w - knobSize - 2 * gap) / 6;
 		const auto rows = (int) strip.stems.size();
-		const auto frameHeight = (area.h - (rows - 1) * gap) / rows;
+		const auto rowHeight = area.h / rows;
 
-		for (size_t s = 0; s < strip.stems.size(); ++s)
+		for (auto& row : strip.stems)
 		{
-			auto& row = strip.stems[s];
-			if (s > 0)
-				area.removeFromTop (gap);
-			row.frame = area.removeFromTop (frameHeight);
-			auto inner = row.frame.reduced (gap);
-			const auto switchHeight = std::min (inner.h - labelHeight, switchWidth * 14 / 10);
-
+			row.frame = area.removeFromTop (rowHeight);
+			auto inner = row.frame;
 			row.knob = inner.removeFromLeft (knobSize).withSizeKeepingCentre (knobSize, knobSize);
 			inner.removeFromLeft (gap);
-			inner = inner.withSizeKeepingCentre (inner.w, labelHeight + switchHeight);
-			row.label = inner.removeFromTop (labelHeight);
+			inner = inner.reduced (0, 1);
 
 			for (auto& bus : row.buses)
 				bus = inner.removeFromLeft (switchWidth).reduced (1, 0);
@@ -254,7 +272,8 @@ namespace surface
 	{
 		const auto pad = std::max (4, local.w / 50);
 		auto area = local.reduced (pad);
-		const auto stripWidth = (area.w - pad) / 2;
+		const auto gap = 2 * pad;   // the two decks' matrices clearly apart
+		const auto stripWidth = (area.w - gap) / 2;
 		return { area.removeFromLeft (stripWidth), area.removeFromRight (stripWidth) };
 	}
 

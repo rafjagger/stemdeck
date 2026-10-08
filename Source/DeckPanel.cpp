@@ -2,6 +2,7 @@
 #include "Theme.h"
 #include "SyncLabels.h"
 #include "SurfaceJuce.h"
+#include "StemNames.h"
 
 namespace
 {
@@ -26,8 +27,10 @@ DeckPanel::DeckPanel (StemDeckPlayer& p, StemThumbnails& thumbnails, int index)
 	bpmInfoLabel.setColour (juce::Label::textColourId, Theme::textDim);
 	bpmInfoLabel.setJustificationType (juce::Justification::centred);
 
-	for (auto* l : { &titleLabel, &stemsLabel, &elapsedLabel, &remainingLabel, &bpmLabel, &bpmInfoLabel })
+	for (auto* l : { &elapsedLabel, &remainingLabel })
 		addAndMakeVisible (l);
+	titleLabel.setMinimumHorizontalScale (0.6f);
+	stemsLabel.setMinimumHorizontalScale (0.6f);
 
 	// Not on the screen since 2026-09-29: at 768 px a deck column has no room
 	// for it, and the controller's jog wheels do the job. Still here, hidden:
@@ -217,6 +220,10 @@ void DeckPanel::setSet (const StemSet& set)
 		names.add (n);
 
 	stemsLabel.setText ("Stems: " + names.joinIntoString (" / "), juce::dontSendNotification);
+	std::array<juce::String, StemSet::numStems> labels;
+	for (int s = 0; s < StemSet::numStems; ++s)
+		labels[(size_t) s] = juce::String (stemLaneLabel (set.stemNames[(size_t) s].toStdString(), s));
+	overview.setStemNames (labels);
 	previewingFromCue = false;
 }
 
@@ -303,12 +310,11 @@ void DeckPanel::resized()
 	const auto layout = surface::deckColumn (surface::fromJuce (getLocalBounds()), gridButton.getToggleState());
 	const auto place = [] (juce::Component& c, const surface::Rect& r) { c.setBounds (surface::toJuce (r)); };
 
-	place (titleLabel, layout.title);
-	place (stemsLabel, layout.stems);
 	place (elapsedLabel, layout.elapsed);
 	place (remainingLabel, layout.remaining);
-	place (bpmLabel, layout.bpm);
-	place (bpmInfoLabel, layout.bpmInfo);
+	// The times a share of their height: big when GRID gives them its room.
+	for (auto* time : { &elapsedLabel, &remainingLabel })
+		time->setFont (juce::FontOptions ((float) time->getHeight() * 0.7f));
 	place (previousButton, layout.previous);
 	place (cueButton, layout.cue);
 	place (playButton, layout.play);
@@ -336,16 +342,25 @@ void DeckPanel::showPitchValue()
 
 void DeckPanel::addBandPartsTo (juce::Component& parent)
 {
-	for (auto* part : std::initializer_list<juce::Component*> { &overview, &pitchFader, &pitchValue, &rangeKey })
+	for (auto* part : std::initializer_list<juce::Component*> { &overview, &pitchFader, &pitchValue, &rangeKey,
+																&titleLabel, &stemsLabel, &bpmLabel, &bpmInfoLabel })
 		parent.addAndMakeVisible (part);
 }
 
-void DeckPanel::setBandBounds (juce::Rectangle<int> overviewArea, juce::Rectangle<int> pitchArea,
-							   juce::Rectangle<int> valueArea, juce::Rectangle<int> rangeArea)
+void DeckPanel::setBandBounds (const surface::BandDeck& parts)
 {
-	overview.setBounds (overviewArea);
-	pitchFader.setBounds (pitchArea);
-	pitchValue.setBounds (valueArea);
-	pitchValue.setFont (juce::FontOptions ((float) valueArea.getHeight() * 0.45f));
-	rangeKey.setBounds (rangeArea);
+	// Text a share of the line it stands in.
+	const auto place = [] (juce::Label& label, const surface::Rect& r, float share, bool bold)
+	{
+		label.setBounds (surface::toJuce (r));
+		label.setFont (juce::FontOptions ((float) r.h * share, bold ? juce::Font::bold : juce::Font::plain));
+	};
+	overview.setBounds (surface::toJuce (parts.overview));
+	pitchFader.setBounds (surface::toJuce (parts.pitch));
+	rangeKey.setBounds (surface::toJuce (parts.range));
+	place (pitchValue, parts.pitchValue, 0.42f, false);
+	place (titleLabel, parts.title, 0.8f, true);
+	place (stemsLabel, parts.stems, 0.8f, false);
+	place (bpmLabel, parts.bpm, 0.85f, true);
+	place (bpmInfoLabel, parts.bpmInfo, 0.85f, false);
 }

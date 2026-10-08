@@ -142,6 +142,25 @@ void OverviewWaveform::paint (juce::Graphics& g)
 
 	g.setColour (juce::Colours::white);
 	g.fillRect (playX - 1.0f, 0.0f, 2.0f, bounds.getHeight());
+
+	// The stems' names at the start of their lanes (moved here from the
+	// mixer, 2026-10-08): small, in the stem's colour, on a dark backing so
+	// they read over the waveform.
+	const auto laneHeight = bounds.getHeight() / (float) StemSet::numStems;
+	const juce::Font font (juce::FontOptions (laneHeight * 0.3f, juce::Font::bold));
+	g.setFont (font);
+	for (int s = 0; s < StemSet::numStems; ++s)
+	{
+		const auto& name = stemNames[(size_t) s];
+		if (name.isEmpty())
+			continue;
+		const auto textWidth = juce::GlyphArrangement::getStringWidth (font, name) + font.getHeight() * 0.6f;
+		const auto label = juce::Rectangle<float> (0.0f, laneHeight * (float) s, textWidth, font.getHeight() * 1.2f);
+		g.setColour (juce::Colours::black.withAlpha (0.6f));
+		g.fillRect (label);
+		g.setColour (Theme::stem (s));
+		g.drawText (name, label, juce::Justification::centred, false);
+	}
 }
 
 void OverviewWaveform::mouseDown (const juce::MouseEvent& e)

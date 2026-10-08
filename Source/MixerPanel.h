@@ -59,7 +59,9 @@ private:
 
 //==============================================================================
 // Channel strip of one deck: a knob per stem, with one switch per bus (1-4,
-// AUX -- one stem per bus, the rest on AUX, Buses.h) and mute in one row.
+// AUX -- one stem per bus, the rest on AUX, Buses.h) and mute in one row; the
+// four rows tight, a matrix of keys. The stems' names are on the overview's
+// lanes, not here.
 // Its channel fader, which shows the deck's level in its slot, stands in the
 // band under the mixer: the strip owns it, the window places it.
 class ChannelStrip : public juce::Component
@@ -67,7 +69,6 @@ class ChannelStrip : public juce::Component
 public:
 	ChannelStrip (StemDeckPlayer& player, int deckIndex);
 
-	void setStemNames (const std::array<juce::String, StemSet::numStems>& names);
 	void toggleMute (int stem);
 	void refresh(); // meters, called by the main timer
 	void setMeterParameters (MeterParameters parameters)
@@ -108,12 +109,10 @@ private:
 
 	juce::OwnedArray<juce::Slider> knobs;
 	juce::OwnedArray<juce::TextButton> muteButtons, busButtons;   // busButtons: stem * buses::count + bus
-	juce::OwnedArray<juce::Label> stemLabels;
 	juce::Slider fader { juce::Slider::LinearVertical, juce::Slider::NoTextBox };
 	juce::OwnedArray<LevelMeter> stemMeters;   // behind the fader, one per stem
 
 	juce::Rectangle<int> headerArea;
-	std::array<juce::Rectangle<int>, StemSet::numStems> stemFrames;
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ChannelStrip)
 };

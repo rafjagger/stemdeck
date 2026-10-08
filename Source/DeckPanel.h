@@ -6,12 +6,13 @@
 #include "Waveforms.h"
 #include "JogWheel.h"
 #include "Session.h"
+#include "SurfaceLayout.h"
 
-// One deck, as a column: title, times, BPM, the Grid Adjust rows, track
-// search | CUE | PLAY | track search, and the keys below (2026-10-08). Its
-// overview and pitch fader (with value and range key) stand in the band
-// under the decks and the mixer: the deck owns and drives them, the window
-// holds and places them (addBandPartsTo, setBandBounds).
+// One deck, as a column: the times, the Grid Adjust rows, track search |
+// CUE | PLAY | track search, and the keys below (2026-10-08). Its overview
+// (stem names on its lanes), title, BPM and pitch fader (with value and range
+// key) stand in the band under the decks and the mixer: the deck owns and
+// drives them, the window holds and places them (addBandPartsTo, setBandBounds).
 //
 // Cue works like Mixxx's CDJ mode: while playing it jumps back to the cue
 // point and stops; while stopped it sets the cue point, or, if already on
@@ -64,8 +65,7 @@ public:
 
 	// The parts in the band: made children of `parent`, placed by it.
 	void addBandPartsTo (juce::Component& parent);
-	void setBandBounds (juce::Rectangle<int> overviewArea, juce::Rectangle<int> pitchArea,
-						juce::Rectangle<int> valueArea, juce::Rectangle<int> rangeArea);
+	void setBandBounds (const surface::BandDeck& parts);   // window coordinates
 	std::function<void (GridAction, double seconds)> onGridEdit;
 
 	void saveState (DeckSession& state) const;

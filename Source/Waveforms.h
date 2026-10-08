@@ -35,6 +35,9 @@ public:
 	// Called by the deck's timer.
 	void refresh();
 
+	// The stems' names, each at the start of its lane, in its colour.
+	void setStemNames (const std::array<juce::String, StemSet::numStems>& names) { stemNames = names; repaint(); }
+
 	void paint (juce::Graphics& g) override;
 	void resized() override;
 	void mouseDown (const juce::MouseEvent& e) override;
@@ -55,6 +58,7 @@ private:
 
 	bool dragging = false;
 	float dragStartX = 0.0f, dragEndX = 0.0f;
+	std::array<juce::String, StemSet::numStems> stemNames;
 };
 
 //==============================================================================

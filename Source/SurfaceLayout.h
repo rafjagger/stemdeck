@@ -49,24 +49,31 @@ namespace surface
 	};
 	Sections sections (int width, int height);
 
-	// The band under the decks and the mixer, in window coordinates. From the
-	// outside in: a deck's pitch fader (its value and range key below it), its
-	// overview, its volume fader (the deck's VU in its slot); the output
-	// meters in the middle. A on the left, B mirrored on the right.
+	// The band under the decks and the mixer, in window coordinates. Per deck,
+	// from the outside in: the pitch fader beside the overview and, under the
+	// overview, the deck's title and stems line; under both the bottom line:
+	// the pitch value, the range key and the BPM (big, and the original). Then
+	// the volume fader (the stems' meters in its slot) inside the deck's colour
+	// frame; the output meters in the middle. A on the left, B mirrored.
+	struct BandDeck
+	{
+		Rect pitch, pitchValue, range, bpm, bpmInfo, title, stems, overview;
+	};
 	struct Band
 	{
-		std::array<Rect, 2> pitch, pitchValue, range, overview, fader;
+		std::array<BandDeck, 2> deck;
+		std::array<Rect, 2> fader, faderFrame;
 		Rect meters;
 	};
 	Band band (Rect area);
 
-	// A deck column above the band, in its own coordinates: title, times, BPM,
-	// the Grid Adjust rows, track search | CUE | PLAY | track search, the keys.
-	// The Grid Adjust rows have their room whether GRID is on or not, so no
-	// key moves when it toggles; with GRID off, times and BPM come down into it.
+	// A deck column above the band, in its own coordinates: the times, the
+	// Grid Adjust rows, track search | CUE | PLAY | track search, the keys.
+	// No key moves when GRID toggles: with GRID off the times take the Grid
+	// Adjust rows' room (stacked and bigger), with GRID on they share a row.
 	struct DeckColumn
 	{
-		Rect title, stems, elapsed, remaining, bpm, bpmInfo;
+		Rect elapsed, remaining;
 		Rect previous, cue, play, next;
 		Rect loopOff, repeat, sync, master, vinyl, grid;
 		std::array<Rect, 5> gridNudge;   // <1/2  <1  SET 1  1>  1/2>
@@ -77,11 +84,11 @@ namespace surface
 	// How tall a deck column is for keys `keyHeight` high.
 	int deckColumnHeight (int keyHeight);
 
-	// One stem's row in a channel strip: the knob, the name above one row of
-	// the bus switches 1 2 3 4 A and the mute.
+	// One stem's row in a channel strip: the knob, the bus switches 1 2 3 4 A
+	// and the mute. The rows lie tight under each other: a matrix of keys.
 	struct StemRow
 	{
-		Rect frame, knob, label, mute;
+		Rect frame, knob, mute;
 		std::array<Rect, buses::count> buses;
 	};
 

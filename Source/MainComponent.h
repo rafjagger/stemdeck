@@ -157,6 +157,7 @@ private:
 	juce::Label deviceStatus;
 	int statusCountdown = 0;
 	juce::Rectangle<int> bandArea;   // the decks' and the mixer's band, painted as a panel
+	std::array<juce::Rectangle<int>, numDecks> faderFrames;   // each volume fader's deck-coloured frame
 
 	// Keyboard: edge-detected so held keys don't repeat.
 	struct KeyBinding { int key; std::function<void (bool down)> action; bool wasDown = false; };

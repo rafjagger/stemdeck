@@ -404,7 +404,7 @@ void MainComponent::sendPreview()
 	}
 
 	const auto moment = preview::momentOf (states, masterDeck);
-	if (previewGate.shouldSend (moment))
+	if (previewGate.shouldSend (moment, juce::Time::getMillisecondCounterHiRes() / 1000.0))
 		remote.sendAhead (moment.ahead);
 }
 

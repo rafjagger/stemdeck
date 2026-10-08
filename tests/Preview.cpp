@@ -1,5 +1,7 @@
 #include <gtest/gtest.h>
 
+#include <cmath>
+
 #include "Preview.h"
 
 using sections::Bar;
@@ -129,7 +131,15 @@ TEST (Preview, TheMomentOfTheDeckThatIsHeard)
 	EXPECT_EQ (moment.bar, 4) << "(8.5 - 0.25) / 2";
 	EXPECT_EQ (moment.ahead.section, "build");
 	EXPECT_EQ (moment.ahead.next, "drop");
-	EXPECT_EQ (moment.speedPermille, 1000);
+	EXPECT_DOUBLE_EQ (moment.barSeconds, 2.0);
+}
+
+TEST (Preview, ABarOfDeckTimeFollowsTheTempoFader)
+{
+	auto deck = deckAt (8.5);
+	deck.speed = 1.25;
+	EXPECT_DOUBLE_EQ (preview::momentOf ({ deck, {} }, -1).barSeconds, 1.6);
+	EXPECT_DOUBLE_EQ (preview::momentOf ({ preview::DeckState {}, {} }, -1).barSeconds, 0.0) << "nothing heard";
 }
 
 TEST (Preview, TheBarTurnsOnTheDownbeat)
@@ -166,35 +176,100 @@ TEST (Preview, SentOnEveryDownbeatAndOnAChange)
 	preview::Moment moment;
 	moment.deck = 0;
 	moment.bar = 4;
+	moment.barSeconds = 2.0;
+	const auto t = 10.0;   // all within one bar of deck time
 
-	EXPECT_TRUE (gate.shouldSend (moment));
-	EXPECT_FALSE (gate.shouldSend (moment)) << "the same bar: nothing new";
+	EXPECT_TRUE (gate.shouldSend (moment, t));
+	EXPECT_FALSE (gate.shouldSend (moment, t)) << "the same bar: nothing new";
 
 	++moment.bar;
-	EXPECT_TRUE (gate.shouldSend (moment)) << "the downbeat";
-
-	moment.speedPermille = 1040;
-	EXPECT_TRUE (gate.shouldSend (moment)) << "the pitch";
+	EXPECT_TRUE (gate.shouldSend (moment, t)) << "the downbeat";
 
 	moment.deck = 1;
-	EXPECT_TRUE (gate.shouldSend (moment)) << "the other deck";
+	EXPECT_TRUE (gate.shouldSend (moment, t)) << "the other deck";
 
 	++moment.generation;
-	EXPECT_TRUE (gate.shouldSend (moment)) << "a load";
+	EXPECT_TRUE (gate.shouldSend (moment, t)) << "a load";
 
 	moment.ahead.barsUntilNext = -1;
-	EXPECT_TRUE (gate.shouldSend (moment)) << "a loop";
+	EXPECT_TRUE (gate.shouldSend (moment, t)) << "a loop";
 
 	moment.bar = 2;
-	EXPECT_TRUE (gate.shouldSend (moment)) << "a jump back";
+	EXPECT_TRUE (gate.shouldSend (moment, t)) << "a jump back";
+}
+
+// What the preview says does not depend on the tempo fader: a sweep or a
+// sync follow alone sends nothing.
+TEST (Preview, ThePitchAloneSendsNothing)
+{
+	preview::Gate gate;
+	auto deck = deckAt (8.5);
+	EXPECT_TRUE (gate.shouldSend (preview::momentOf ({ deck, {} }, -1), 0.0));
+
+	for (auto speed : { 0.92, 1.04, 1.08 })
+	{
+		deck.speed = speed;
+		EXPECT_FALSE (gate.shouldSend (preview::momentOf ({ deck, {} }, -1), 0.1)) << speed;
+	}
+}
+
+namespace
+{
+	// Deck A held in a loop of `loopBars` bars from bar 1, ticked at 32 Hz for
+	// `seconds` of wall time; the times at which the gate lets a preview out.
+	std::vector<double> sendsInALoop (double loopBars, double seconds)
+	{
+		const auto barSeconds = 2.0, loopStart = 0.25 + barSeconds;
+		const auto loopLength = loopBars * barSeconds;
+		auto deck = deckAt (loopStart);
+		deck.loopSeconds = std::make_pair (loopStart, loopStart + loopLength);
+
+		preview::Gate gate;
+		std::vector<double> sent;
+		for (int tick = 0; tick < (int) (seconds * 32.0); ++tick)
+		{
+			const auto now = tick / 32.0;
+			deck.position = loopStart + std::fmod (now, loopLength);
+			if (gate.shouldSend (preview::momentOf ({ deck, {} }, -1), now))
+				sent.push_back (now);
+		}
+		return sent;
+	}
+}
+
+// Motion counts a preview stale after a few bars without one; a loop of a
+// bar or less never turns the bar, so a bar of deck time sends again.
+TEST (Preview, AOneBarLoopKeepsSendingOnceABar)
+{
+	EXPECT_EQ (sendsInALoop (1.0, 8.0), (std::vector<double> { 0.0, 2.0, 4.0, 6.0 }));
+}
+
+TEST (Preview, AOneBeatLoopKeepsSendingOnceABar)
+{
+	EXPECT_EQ (sendsInALoop (0.25, 8.0), (std::vector<double> { 0.0, 2.0, 4.0, 6.0 }));
+}
+
+TEST (Preview, PlayingFreelySendsOnTheDownbeatsOnly)
+{
+	preview::Gate gate;
+	auto deck = deckAt (0.25);
+	std::vector<double> sent;
+	for (int tick = 0; tick < 8 * 32; ++tick)
+	{
+		const auto now = tick / 32.0;
+		deck.position = 0.25 + now;
+		if (gate.shouldSend (preview::momentOf ({ deck, {} }, -1), now))
+			sent.push_back (now);
+	}
+	EXPECT_EQ (sent, (std::vector<double> { 0.0, 2.0, 4.0, 6.0 }));
 }
 
 TEST (Preview, NoneIsSentOnceNotEveryTick)
 {
 	preview::Gate gate;
 	const preview::Moment silent;   // deck -1, "none"
-	EXPECT_TRUE (gate.shouldSend (silent));
-	EXPECT_FALSE (gate.shouldSend (silent));
+	EXPECT_TRUE (gate.shouldSend (silent, 0.0));
+	EXPECT_FALSE (gate.shouldSend (silent, 100.0)) << "no deck heard: no bar to repeat on";
 }
 
 // The one moved by hand while the deck plays.
@@ -202,11 +277,11 @@ TEST (Preview, TheOneMovedByHandSendsAtOnce)
 {
 	preview::Gate gate;
 	auto deck = deckAt (8.5);
-	EXPECT_TRUE (gate.shouldSend (preview::momentOf ({ deck, {} }, -1)));
-	EXPECT_FALSE (gate.shouldSend (preview::momentOf ({ deck, {} }, -1)));
+	EXPECT_TRUE (gate.shouldSend (preview::momentOf ({ deck, {} }, -1), 0.0));
+	EXPECT_FALSE (gate.shouldSend (preview::momentOf ({ deck, {} }, -1), 0.0));
 
 	deck.firstBeat += 0.5;   // 1>: the one a beat later
 	const auto moved = preview::momentOf ({ deck, {} }, -1);
 	EXPECT_EQ (moved.bar, 3);
-	EXPECT_TRUE (gate.shouldSend (moved)) << "not at the next downbeat: now";
+	EXPECT_TRUE (gate.shouldSend (moved, 0.0)) << "not at the next downbeat: now";
 }

@@ -57,19 +57,24 @@ namespace preview
 
 	int audibleDeck (const std::array<DeckView, 2>& decks, int masterDeck);
 
-	// When a preview goes out: on every downbeat (the bar changed) and on
-	// any change -- another deck, another load, a jump, a loop, the pitch,
-	// what the preview says. `generation` is the deck's load count.
+	// When a preview goes out: on every downbeat (the bar changed), on any
+	// change -- another deck, another load, a jump, a loop, what the preview
+	// says -- and once a bar of deck time has passed since the last one, so a
+	// loop of a bar or less, whose bar never turns, still keeps Motion fed.
+	// The tempo fader is no news: the preview does not depend on it.
+	// `generation` is the deck's load count.
 	struct Moment
 	{
 		int deck = -1, generation = 0, bar = 0;
-		long speedPermille = 1000;
 		Ahead ahead;
+
+		// Wall-clock seconds of one bar as the deck plays it now (tempo fader
+		// included); 0: no deck heard or no grid. When to repeat, not news.
+		double barSeconds = 0.0;
 
 		bool operator== (const Moment& other) const
 		{
-			return deck == other.deck && generation == other.generation && bar == other.bar
-				&& speedPermille == other.speedPermille && ahead == other.ahead;
+			return deck == other.deck && generation == other.generation && bar == other.bar && ahead == other.ahead;
 		}
 	};
 
@@ -93,10 +98,13 @@ namespace preview
 	class Gate
 	{
 	public:
-		// True when `now` differs from the moment last let through.
-		bool shouldSend (const Moment& now);
+		// True when `now` differs from the moment last let through, or when
+		// a bar of deck time has passed since then. `nowSeconds`: a
+		// monotonic wall clock.
+		bool shouldSend (const Moment& now, double nowSeconds);
 
 	private:
 		std::optional<Moment> last;
+		double lastSentAt = 0.0;
 	};
 }

@@ -64,12 +64,13 @@ namespace preview
 
 		const auto& deck = decks[(size_t) moment.deck];
 		moment.generation = deck.generation;
-		moment.speedPermille = std::lround (deck.speed * 1000.0);
 
 		if (deck.bpm <= 0.0)
 			return moment;
 
 		const auto barSeconds = 60.0 / deck.bpm * sections::beatsPerBar;
+		if (deck.speed > 0.0)
+			moment.barSeconds = barSeconds / deck.speed;
 		const auto barsAt = [&] (double seconds) { return (seconds - deck.firstBeat) / barSeconds; };
 		const auto barPosition = barsAt (deck.position);
 		moment.bar = (int) std::floor (barPosition);
@@ -82,11 +83,13 @@ namespace preview
 		return moment;
 	}
 
-	bool Gate::shouldSend (const Moment& now)
+	bool Gate::shouldSend (const Moment& now, double nowSeconds)
 	{
-		if (last && *last == now)
+		const auto aBarHasPassed = now.barSeconds > 0.0 && nowSeconds - lastSentAt >= now.barSeconds;
+		if (last && *last == now && ! aBarHasPassed)
 			return false;
 		last = now;
+		lastSentAt = nowSeconds;
 		return true;
 	}
 }

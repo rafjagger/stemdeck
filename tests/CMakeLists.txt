@@ -49,6 +49,8 @@ add_executable(stemdeck-tests
     ${CMAKE_SOURCE_DIR}/Source/DataPaths.cpp
     SectionFeatures.cpp
     Sections.cpp
+    Preview.cpp
+    ${CMAKE_SOURCE_DIR}/Source/Preview.cpp
     ${CMAKE_SOURCE_DIR}/Source/Sections.cpp)
 target_include_directories(stemdeck-tests PRIVATE ${CMAKE_SOURCE_DIR}/Source)
 

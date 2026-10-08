@@ -29,7 +29,6 @@ DeckPanel::DeckPanel (StemDeckPlayer& p, StemThumbnails& thumbnails, int index)
 	for (auto* l : { &titleLabel, &stemsLabel, &elapsedLabel, &remainingLabel, &bpmLabel, &bpmInfoLabel })
 		addAndMakeVisible (l);
 
-	addAndMakeVisible (overview);
 	// Not on the screen since 2026-09-29: at 768 px a deck column has no room
 	// for it, and the controller's jog wheels do the job. Still here, hidden:
 	// vinyl mode and grid adjust are wired through it.
@@ -66,9 +65,9 @@ DeckPanel::DeckPanel (StemDeckPlayer& p, StemThumbnails& thumbnails, int index)
 	masterButton.setTooltip (syncLabels::masterTooltip());
 	masterButton.onClick = [this] { if (onMasterPressed) onMasterPressed(); };
 
-	pitch.range.setTooltip ("Tempo-Bereich umschalten");
-	pitch.range.setMouseClickGrabsKeyboardFocus (false);
-	pitch.range.onClick = [this]
+	rangeKey.setTooltip ("Tempo-Bereich umschalten");
+	rangeKey.setMouseClickGrabsKeyboardFocus (false);
+	rangeKey.onClick = [this]
 	{
 		const auto current = std::find (std::begin (tempoRanges), std::end (tempoRanges), tempoRange);
 		const auto next = (current == std::end (tempoRanges) || current + 1 == std::end (tempoRanges)) ? tempoRanges[0] : *(current + 1);
@@ -113,20 +112,23 @@ DeckPanel::DeckPanel (StemDeckPlayer& p, StemThumbnails& thumbnails, int index)
 	gridAction (shiftButton, GridAction::shiftToLeader, "SHIFT GRID: take the beat matched by ear into the grid");
 	gridAction (resetGridButton, GridAction::reset, "Grid wie analysiert");
 
-	pitch.fader.setValue (1.0, juce::dontSendNotification);
-	pitch.fader.setDoubleClickReturnValue (true, 1.0);
-	pitch.fader.textFromValueFunction = [] (double v)
+	pitchFader.setValue (1.0, juce::dontSendNotification);
+	pitchFader.setDoubleClickReturnValue (true, 1.0);
+	pitchFader.textFromValueFunction = [] (double v)
 	{
 		const auto percent = (v - 1.0) * 100.0;
 		return (percent >= 0.0 ? "+" : "") + juce::String (percent, 2) + "%";
 	};
-	pitch.fader.valueFromTextFunction = [] (const juce::String& t) { return 1.0 + t.getDoubleValue() / 100.0; };
-	pitch.fader.setColour (juce::Slider::thumbColourId, Theme::deck (deckIndex));
-	pitch.fader.setTooltip ("Tempo (Doppelklick: 0%)");
-	pitch.fader.setMouseClickGrabsKeyboardFocus (false);
-	pitch.fader.onValueChange = [this]
+	pitchFader.valueFromTextFunction = [] (const juce::String& t) { return 1.0 + t.getDoubleValue() / 100.0; };
+	pitchFader.setColour (juce::Slider::thumbColourId, Theme::deck (deckIndex));
+	pitchFader.setTooltip ("Tempo (Doppelklick: 0%)");
+	pitchFader.setMouseClickGrabsKeyboardFocus (false);
+	pitchValue.setJustificationType (juce::Justification::centred);
+	pitchValue.setMinimumHorizontalScale (0.7f);
+	pitchFader.onValueChange = [this]
 	{
-		player.setSpeed (pitch.fader.getValue());
+		player.setSpeed (pitchFader.getValue());
+		showPitchValue();
 
 		// Moving the fader by hand takes the deck out of sync.
 		if (! settingTempoFromSync && syncButton.getToggleState())
@@ -143,9 +145,9 @@ DeckPanel::DeckPanel (StemDeckPlayer& p, StemThumbnails& thumbnails, int index)
 void DeckPanel::setTempoRange (double range)
 {
 	tempoRange = range;
-	pitch.fader.setRange (1.0 - range, 1.0 + range, 0.000001);
-	pitch.fader.updateText();
-	pitch.range.setButtonText (juce::String::fromUTF8 ("\xc2\xb1") + juce::String (juce::roundToInt (range * 100.0)) + "%");
+	pitchFader.setRange (1.0 - range, 1.0 + range, 0.000001);
+	showPitchValue();
+	rangeKey.setButtonText (juce::String::fromUTF8 ("\xc2\xb1") + juce::String (juce::roundToInt (range * 100.0)) + "%");
 }
 
 void DeckPanel::setTempoFromSync (double rate)
@@ -163,7 +165,7 @@ void DeckPanel::setTempoFromSync (double rate)
 	}
 
 	const juce::ScopedValueSetter<bool> svs (settingTempoFromSync, true);
-	pitch.fader.setValue (rate, juce::sendNotificationSync);
+	pitchFader.setValue (rate, juce::sendNotificationSync);
 }
 
 void DeckPanel::setStepsAvailable (bool previous, bool next, const juce::String& previousTip, const juce::String& nextTip)
@@ -185,7 +187,7 @@ void DeckPanel::setGridMode (bool on)
 
 void DeckPanel::saveState (DeckSession& state) const
 {
-	state.tempo = pitch.fader.getValue();
+	state.tempo = pitchFader.getValue();
 	state.tempoRange = tempoRange;
 	state.vinyl = vinylButton.getToggleState();
 	state.repeat = repeatButton.getToggleState();
@@ -199,7 +201,7 @@ void DeckPanel::restoreState (const DeckSession& state)
 	{
 		// Not a hand on the fader: SYNC is restored after it.
 		const juce::ScopedValueSetter<bool> svs (settingTempoFromSync, true);
-		pitch.fader.setValue (state.tempo, juce::sendNotificationSync);
+		pitchFader.setValue (state.tempo, juce::sendNotificationSync);
 	}
 	vinylButton.setToggleState (state.vinyl, juce::sendNotificationSync);
 	repeatButton.setToggleState (state.repeat, juce::sendNotificationSync);
@@ -303,7 +305,6 @@ void DeckPanel::resized()
 
 	place (titleLabel, layout.title);
 	place (stemsLabel, layout.stems);
-	place (overview, layout.overview);
 	place (elapsedLabel, layout.elapsed);
 	place (remainingLabel, layout.remaining);
 	place (bpmLabel, layout.bpm);
@@ -319,7 +320,7 @@ void DeckPanel::resized()
 	place (vinylButton, layout.vinyl);
 	place (gridButton, layout.grid);
 
-	// Hidden while GRID is off; their places then are the overview's.
+	// Hidden while GRID is off; their room then goes to the times and BPM.
 	const std::array<juce::Component*, 5> nudge { &halfBackButton, &oneBackButton, &downbeatButton, &oneForwardButton, &halfForwardButton };
 	const std::array<juce::Component*, 3> edit { &snapButton, &shiftButton, &resetGridButton };
 	for (size_t i = 0; i < nudge.size(); ++i)
@@ -328,11 +329,23 @@ void DeckPanel::resized()
 		place (*edit[i], layout.gridEdit[i]);
 }
 
-//==============================================================================
-void PitchColumn::resized()
+void DeckPanel::showPitchValue()
 {
-	const auto layout = surface::pitchColumn (surface::fromJuce (getLocalBounds()));
-	fader.setTextBoxStyle (juce::Slider::TextBoxBelow, false, layout.fader.w, layout.valueHeight);
-	fader.setBounds (surface::toJuce (layout.fader));
-	range.setBounds (surface::toJuce (layout.range));
+	pitchValue.setText (pitchFader.getTextFromValue (pitchFader.getValue()), juce::dontSendNotification);
+}
+
+void DeckPanel::addBandPartsTo (juce::Component& parent)
+{
+	for (auto* part : std::initializer_list<juce::Component*> { &overview, &pitchFader, &pitchValue, &rangeKey })
+		parent.addAndMakeVisible (part);
+}
+
+void DeckPanel::setBandBounds (juce::Rectangle<int> overviewArea, juce::Rectangle<int> pitchArea,
+							   juce::Rectangle<int> valueArea, juce::Rectangle<int> rangeArea)
+{
+	overview.setBounds (overviewArea);
+	pitchFader.setBounds (pitchArea);
+	pitchValue.setBounds (valueArea);
+	pitchValue.setFont (juce::FontOptions ((float) valueArea.getHeight() * 0.45f));
+	rangeKey.setBounds (rangeArea);
 }

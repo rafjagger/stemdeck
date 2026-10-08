@@ -223,8 +223,6 @@ ChannelStrip::ChannelStrip (StemDeckPlayer& p, int index) : player (p), deckInde
 	// The deck's VU in the fader's slot: the meter behind, the fader's ticks
 	// and cap drawn over it (2026-10-08, the clean surface).
 	fader.getProperties().set (DJLookAndFeel::meterInSlot, true);
-	addAndMakeVisible (meter);
-	addAndMakeVisible (fader);
 }
 
 void ChannelStrip::setStemNames (const std::array<juce::String, StemSet::numStems>& names)
@@ -315,7 +313,7 @@ void ChannelStrip::paint (juce::Graphics& g)
 
 void ChannelStrip::resized()
 {
-	const auto layout = surface::channelStrip (surface::fromJuce (getLocalBounds()), deckIndex, meterReserve);
+	const auto layout = surface::channelStrip (surface::fromJuce (getLocalBounds()));
 	headerArea = surface::toJuce (layout.header);
 
 	for (int s = 0; s < StemSet::numStems; ++s)
@@ -328,8 +326,17 @@ void ChannelStrip::resized()
 		for (int bus = 0; bus < buses::count; ++bus)
 			busButtons[s * buses::count + bus]->setBounds (surface::toJuce (row.buses[(size_t) bus]));
 	}
+}
 
-	fader.setBounds (surface::toJuce (layout.fader));
+void ChannelStrip::addFaderTo (juce::Component& parent)
+{
+	parent.addAndMakeVisible (meter);   // first: behind the fader
+	parent.addAndMakeVisible (fader);
+}
+
+void ChannelStrip::setFaderBounds (juce::Rectangle<int> area)
+{
+	fader.setBounds (area);
 
 	// The meter fills the slot over the fader's travel: from where the cap's
 	// centre stands at full level to where it stands at the bottom.
@@ -352,7 +359,20 @@ MixerPanel::MixerPanel (StemDeckPlayer& playerA, StemDeckPlayer& playerB)
 		};
 	addAndMakeVisible (stripA);
 	addAndMakeVisible (stripB);
-	addAndMakeVisible (outputMeters);   // last: over the strips' inner corners
+}
+
+void MixerPanel::addBandPartsTo (juce::Component& parent)
+{
+	stripA.addFaderTo (parent);
+	stripB.addFaderTo (parent);
+	parent.addAndMakeVisible (outputMeters);
+}
+
+void MixerPanel::setBandBounds (juce::Rectangle<int> faderA, juce::Rectangle<int> faderB, juce::Rectangle<int> meters)
+{
+	stripA.setFaderBounds (faderA);
+	stripB.setFaderBounds (faderB);
+	outputMeters.setBounds (meters);
 }
 
 void MixerPanel::setMeterParameters (MeterParameters parameters)
@@ -411,13 +431,9 @@ void MixerPanel::paint (juce::Graphics& g)
 
 void MixerPanel::resized()
 {
-	// The strips meet in the middle; below the stems, each leaves half the
-	// output meters' width free on its inner side, and the meters sit there,
-	// the volume faders directly either side of them.
-	const auto layout = surface::mixer (surface::fromJuce (getLocalBounds()));
-	for (auto* strip : { &stripA, &stripB })
-		strip->setMeterReserve (layout.meterReserve);
-	stripA.setBounds (surface::toJuce (layout.strip[0]));
-	stripB.setBounds (surface::toJuce (layout.strip[1]));
-	outputMeters.setBounds (surface::toJuce (layout.meters));
+	// The strips meet in the middle; their faders and the output meters are
+	// in the band below (MainComponent).
+	const auto strips = surface::mixerStrips (surface::fromJuce (getLocalBounds()));
+	stripA.setBounds (surface::toJuce (strips[0]));
+	stripB.setBounds (surface::toJuce (strips[1]));
 }

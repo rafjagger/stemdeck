@@ -7,10 +7,11 @@
 // Where everything on the main surface sits (the "clean surface", 2026-10-08).
 // Pure: no JUCE, so the geometry can be tested at the rig's 768 x 1024 without
 // a window. The components call these with their own bounds and apply the
-// result (SurfaceJuce.h converts); MainComponent places the sections.
+// result (SurfaceJuce.h converts); MainComponent places the sections and the
+// band, whose parts belong to the decks and the mixer.
 //
-// Sizes are shares of the container they hang on, not pixels: a key row is a
-// share of the deck's height, a switch a share of the stem row's width.
+// Sizes are shares of what they hang on, not pixels: the deck's rows are
+// shares of a key, the key a share of the window's height.
 namespace surface
 {
 	struct Rect
@@ -37,36 +38,44 @@ namespace surface
 		bool operator!= (const Rect& o) const { return ! (*this == o); }
 	};
 
-	// The window: top bar; the waveform section with a pitch column at each
-	// outer edge (A left, B right); deck A | mixer | deck B; the library.
+	// The window: top bar; the two rolling waveforms, A over B, full width;
+	// deck A | mixer | deck B; below them the band across the whole width;
+	// the library.
 	struct Sections
 	{
 		Rect topBar, waves, waveA, waveB;
-		std::array<Rect, 2> pitch, deck;
-		Rect mixer, library;
+		std::array<Rect, 2> deck;
+		Rect mixer, band, library;
 	};
 	Sections sections (int width, int height);
 
-	// A pitch column, in its own coordinates: the fader with its value box
-	// below it (the slider's text box, `valueHeight` tall), the range key under that.
-	struct PitchColumn
+	// The band under the decks and the mixer, in window coordinates. From the
+	// outside in: a deck's pitch fader (its value and range key below it), its
+	// overview, its volume fader (the deck's VU in its slot); the output
+	// meters in the middle. A on the left, B mirrored on the right.
+	struct Band
 	{
-		Rect fader, range;
-		int valueHeight = 0;
+		std::array<Rect, 2> pitch, pitchValue, range, overview, fader;
+		Rect meters;
 	};
-	PitchColumn pitchColumn (Rect local);
+	Band band (Rect area);
 
-	// A deck column, in its own coordinates. With GRID on, the Grid Adjust
-	// rows take their room from the overview: no key moves.
+	// A deck column above the band, in its own coordinates: title, times, BPM,
+	// the Grid Adjust rows, track search | CUE | PLAY | track search, the keys.
+	// The Grid Adjust rows have their room whether GRID is on or not, so no
+	// key moves when it toggles; with GRID off, times and BPM come down into it.
 	struct DeckColumn
 	{
-		Rect title, stems, overview, elapsed, remaining, bpm, bpmInfo;
+		Rect title, stems, elapsed, remaining, bpm, bpmInfo;
 		Rect previous, cue, play, next;
 		Rect loopOff, repeat, sync, master, vinyl, grid;
 		std::array<Rect, 5> gridNudge;   // <1/2  <1  SET 1  1>  1/2>
 		std::array<Rect, 3> gridEdit;    // SNAP  SHIFT  RESET
 	};
 	DeckColumn deckColumn (Rect local, bool gridOn);
+
+	// How tall a deck column is for keys `keyHeight` high.
+	int deckColumnHeight (int keyHeight);
 
 	// One stem's row in a channel strip: the knob, the name above one row of
 	// the bus switches 1 2 3 4 A and the mute.
@@ -76,28 +85,19 @@ namespace surface
 		std::array<Rect, buses::count> buses;
 	};
 
-	// A channel strip, in its own coordinates: header, stem rows, and the
-	// volume fader directly beside the meter zone (towards the mixer's middle:
-	// deck A's right, deck B's left), its VU drawn in its slot.
+	// A channel strip above the band, in its own coordinates: the header and
+	// the stem rows, which share its height.
 	struct Strip
 	{
 		Rect header;
 		std::array<StemRow, buses::stemsPerDeck> stems;
-		Rect fader, meterZone;
 	};
-	Strip channelStrip (Rect local, int deckIndex, int meterReserve);
+	Strip channelStrip (Rect local);
 
-	// The mixer, in its own coordinates: two strips meeting in the middle, the
-	// output meters over their inner corners, as tall as the faders' zone.
-	struct Mixer
-	{
-		std::array<Rect, 2> strip;
-		Rect meters;
-		int meterReserve = 0;
-	};
-	Mixer mixer (Rect local);
+	// The mixer above the band, in its own coordinates: two strips.
+	std::array<Rect, 2> mixerStrips (Rect local);
 
 	// The output meters' caption line (bus names, L/R) under the bars; the
-	// faders end where the bars do.
+	// volume faders end where the bars do.
 	int meterCaptionHeight (int metersHeight);
 }

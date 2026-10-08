@@ -56,8 +56,9 @@ private:
 
 //==============================================================================
 // Channel strip of one deck: a knob per stem, with one switch per bus (1-4,
-// AUX -- one stem per bus, the rest on AUX, Buses.h) and mute in one row,
-// above the channel fader, which shows the deck's level in its slot.
+// AUX -- one stem per bus, the rest on AUX, Buses.h) and mute in one row.
+// Its channel fader, which shows the deck's level in its slot, stands in the
+// band under the mixer: the strip owns it, the window places it.
 class ChannelStrip : public juce::Component
 {
 public:
@@ -87,9 +88,9 @@ public:
 	void saveState (DeckSession& state) const;
 	void restoreState (const DeckSession& state);
 
-	// Room left free beside the fader on the side towards the mixer's middle,
-	// for the output meters.
-	void setMeterReserve (int width) { meterReserve = width; resized(); }
+	// The fader and the meter behind it: made children of `parent`, placed by it.
+	void addFaderTo (juce::Component& parent);
+	void setFaderBounds (juce::Rectangle<int> area);
 
 	void paint (juce::Graphics& g) override;
 	void resized() override;
@@ -104,7 +105,6 @@ private:
 	juce::Slider fader { juce::Slider::LinearVertical, juce::Slider::NoTextBox };
 	LevelMeter meter;
 
-	int meterReserve = 0;
 	juce::Rectangle<int> headerArea;
 	std::array<juce::Rectangle<int>, StemSet::numStems> stemFrames;
 
@@ -129,6 +129,11 @@ public:
 	void normaliseBuses();
 	// Called for every stem a click moved, the clicked one included.
 	std::function<void (int deck, int stem)> onBusesChanged;
+
+	// The volume faders and the output meters, in the band under the mixer:
+	// made children of `parent`, placed by it.
+	void addBandPartsTo (juce::Component& parent);
+	void setBandBounds (juce::Rectangle<int> faderA, juce::Rectangle<int> faderB, juce::Rectangle<int> meters);
 
 	void setOutputLevel (int channel, float peak) { outputMeters.setLevel (channel, peak); }
 	// Every meter on it: both strips and the output meters.

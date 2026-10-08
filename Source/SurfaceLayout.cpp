@@ -82,6 +82,20 @@ namespace surface
 		}
 	}
 
+	namespace
+	{
+		// A deck column in thousandths of a key: the rows and the gaps between them.
+		constexpr int titleUnits = 550, stemsUnits = 400, timesUnits = 550, bpmUnits = 720, bpmInfoUnits = 330;
+		constexpr int gridUnits = 830, transportUnits = 1100, keyUnits = 1000, gapUnits = 120;
+		constexpr int deckUnits = titleUnits + stemsUnits + timesUnits + bpmUnits + bpmInfoUnits + 2 * gridUnits
+								+ transportUnits + 3 * keyUnits + 9 * gapUnits;   // 7 between rows, 2 margins
+	}
+
+	int deckColumnHeight (int keyHeight)
+	{
+		return keyHeight * deckUnits / 1000;
+	}
+
 	Sections sections (int width, int height)
 	{
 		Sections s;
@@ -92,65 +106,83 @@ namespace surface
 		s.topBar = area.removeFromTop (share (height, 30));
 		area.removeFromTop (margin * 2 / 3);
 
-		// The rolling waveforms, A over B, between the two pitch columns.
-		const auto waveHeight = std::clamp (height / 8, 90, 170);
+		// The rolling waveforms, A over B, the whole width.
+		const auto waveHeight = std::clamp (height / 9, 80, 170);
 		const auto waveGap = margin / 2;
 		s.waves = area.removeFromTop (waveHeight * 2 + waveGap);
 		auto waves = s.waves;
-		const auto pitchWidth = width / 12;
-		s.pitch[0] = waves.removeFromLeft (pitchWidth);
-		s.pitch[1] = waves.removeFromRight (pitchWidth);
-		waves.removeFromLeft (waveGap);
-		waves.removeFromRight (waveGap);
 		s.waveA = waves.removeFromTop (waveHeight);
 		waves.removeFromTop (waveGap);
 		s.waveB = waves;
 		area.removeFromTop (margin);
 
-		// Deck A | mixer | deck B. The mixer keeps 400 px at the least, so a
-		// deck column keeps ~180 px on the rig's 768 px screen.
-		auto middle = area.removeFromTop (std::min (share (area.h, 650), area.h - 150));
-		const auto mixerWidth = std::clamp (width / 3, 400, 560);
-		const auto deckWidth = (middle.w - mixerWidth) / 2;
-		s.deck[0] = middle.removeFromLeft (deckWidth);
-		s.deck[1] = middle.removeFromRight (deckWidth);
-		s.mixer = middle;
-		area.removeFromTop (margin);
+		s.library = area.removeFromBottom (share (area.h, 300));
+		area.removeFromBottom (margin);
 
-		s.library = area;
+		// Deck A | mixer | deck B, as tall as a deck's keys need; the band
+		// takes the rest. The mixer keeps 400 px at the least, so a deck
+		// column keeps ~180 px on the rig's 768 px screen.
+		auto upper = area.removeFromTop (deckColumnHeight (share (height, 36)));
+		area.removeFromTop (margin);
+		s.band = area;
+
+		const auto mixerWidth = std::clamp (width / 3, 400, 560);
+		const auto deckWidth = (upper.w - mixerWidth) / 2;
+		s.deck[0] = upper.removeFromLeft (deckWidth);
+		s.deck[1] = upper.removeFromRight (deckWidth);
+		s.mixer = upper;
 		return s;
 	}
 
-	PitchColumn pitchColumn (Rect local)
+	Band band (Rect area)
 	{
-		PitchColumn p;
-		const auto gap = std::max (2, local.h / 64);
-		p.range = local.removeFromBottom (share (local.h, 150));
-		local.removeFromBottom (gap);
-		p.fader = local;
-		p.valueHeight = share (p.fader.h + gap + p.range.h, 80);
-		return p;
+		Band b;
+		const auto gap = std::max (3, area.w / 150);
+		const auto line = share (area.h, 190);
+		const auto pitchWidth = share (area.w, 85);
+		const auto metersWidth = share (area.w, 150);
+		const auto faderWidth = share (area.w, 75);
+		const auto upperHeight = area.h - line - gap;
+		const auto lineY = area.bottom() - line;
+
+		b.meters = { area.x + (area.w - metersWidth) / 2, area.y, metersWidth, area.h };
+		const auto faderHeight = area.h - meterCaptionHeight (area.h);
+		b.fader[0] = { b.meters.x - faderWidth, area.y, faderWidth, faderHeight };
+		b.fader[1] = { b.meters.right(), area.y, faderWidth, faderHeight };
+
+		b.pitch[0] = { area.x, area.y, pitchWidth, upperHeight };
+		b.pitch[1] = { area.right() - pitchWidth, area.y, pitchWidth, upperHeight };
+		b.pitchValue[0] = { area.x, lineY, pitchWidth, line };
+		b.pitchValue[1] = { area.right() - pitchWidth, lineY, pitchWidth, line };
+		b.range[0] = { b.pitchValue[0].right() + gap, lineY, pitchWidth, line };
+		b.range[1] = { b.pitchValue[1].x - gap - pitchWidth, lineY, pitchWidth, line };
+
+		const auto overviewA = b.pitch[0].right() + gap;
+		b.overview[0] = { overviewA, area.y, b.fader[0].x - gap - overviewA, upperHeight };
+		const auto overviewB = b.fader[1].right() + gap;
+		b.overview[1] = { overviewB, area.y, b.pitch[1].x - gap - overviewB, upperHeight };
+		return b;
 	}
 
 	DeckColumn deckColumn (Rect local, bool gridOn)
 	{
 		DeckColumn c;
-		auto area = local.reduced (std::max (3, local.w / 30));
-		const auto gap = std::max (3, area.h / 80);
-		const auto keyHeight = share (area.h, 85);
-		const auto height = area.h;
+		const auto key = local.h * 1000 / deckUnits;
+		const auto units = [key] (int u) { return key * u / 1000; };
+		const auto gap = units (gapUnits);
+		auto area = local.reduced (std::max (3, local.w / 30), gap);
 
 		// From the foot up: the keys, which stay where they are whatever GRID does.
-		splitPair (area.removeFromBottom (keyHeight), gap, c.vinyl, c.grid);
+		splitPair (area.removeFromBottom (units (keyUnits)), gap, c.vinyl, c.grid);
 		area.removeFromBottom (gap);
-		splitPair (area.removeFromBottom (keyHeight), gap, c.sync, c.master);
+		splitPair (area.removeFromBottom (units (keyUnits)), gap, c.sync, c.master);
 		area.removeFromBottom (gap);
-		splitPair (area.removeFromBottom (keyHeight), gap, c.loopOff, c.repeat);
+		splitPair (area.removeFromBottom (units (keyUnits)), gap, c.loopOff, c.repeat);
 		area.removeFromBottom (gap);
 
 		// Track search either side of CUE | PLAY, as on a CDJ: a sixth of the
 		// row each, so the keys played in time keep most of it.
-		auto transport = area.removeFromBottom (share (height, 100));
+		auto transport = area.removeFromBottom (units (transportUnits));
 		const auto stepWidth = transport.w / 6;
 		c.previous = transport.removeFromLeft (stepWidth);
 		c.next = transport.removeFromRight (stepWidth);
@@ -159,56 +191,55 @@ namespace surface
 		splitPair (transport, gap, c.cue, c.play);
 		area.removeFromBottom (gap);
 
-		// Grid Adjust while GRID is on, its room taken from the overview.
+		// Grid Adjust: its room is kept; with GRID off, times and BPM use it.
+		auto labels = area;
+		splitRow (area.removeFromBottom (units (gridUnits)), c.gridEdit);
+		area.removeFromBottom (gap);
+		splitRow (area.removeFromBottom (units (gridUnits)), c.gridNudge);
+		area.removeFromBottom (gap);
 		if (gridOn)
-		{
-			const auto gridHeight = share (height, 70);
-			splitRow (area.removeFromBottom (gridHeight), c.gridEdit);
-			area.removeFromBottom (gap);
-			splitRow (area.removeFromBottom (gridHeight), c.gridNudge);
-			area.removeFromBottom (gap);
-		}
+			labels = area;
 
-		c.bpmInfo = area.removeFromBottom (share (height, 30));
-		c.bpm = area.removeFromBottom (share (height, 60));
-		auto times = area.removeFromBottom (share (height, 50));
+		c.bpmInfo = labels.removeFromBottom (units (bpmInfoUnits));
+		c.bpm = labels.removeFromBottom (units (bpmUnits));
+		auto times = labels.removeFromBottom (units (timesUnits));
 		c.elapsed = times.removeFromLeft (times.w / 2);
 		c.remaining = times;
-		area.removeFromBottom (gap);
 
-		c.title = area.removeFromTop (share (height, 50));
-		c.stems = area.removeFromTop (share (height, 35));
-		area.removeFromTop (gap);
-		c.overview = area;
+		c.title = labels.removeFromTop (units (titleUnits));
+		c.stems = labels.removeFromTop (units (stemsUnits));
 		return c;
 	}
 
-	Strip channelStrip (Rect local, int deckIndex, int meterReserve)
+	Strip channelStrip (Rect local)
 	{
 		Strip strip;
 		auto area = local.reduced (std::max (3, local.w / 40));
-		strip.header = area.removeFromTop (share (local.h, 50));
+		strip.header = area.removeFromTop (share (local.h, 70));
 		const auto gap = std::max (2, area.w / 56);
 		area.removeFromTop (gap);
 
-		// [knob] over [name] / [1 2 3 4 A  M]: the knob a seventh of the row,
-		// the six switches share the rest.
+		// [knob] beside [name] over [1 2 3 4 A  M]: the knob a seventh of the
+		// row, the six switches share the rest; the rows share the height.
 		const auto innerWidth = area.w - 2 * gap;
 		const auto knobSize = innerWidth / 7;
 		const auto switchWidth = (innerWidth - knobSize - 2 * gap) / 6;
-		const auto switchHeight = switchWidth * 11 / 10;
-		const auto labelHeight = share (local.h, 28);
+		const auto labelHeight = share (local.h, 40);
+		const auto rows = (int) strip.stems.size();
+		const auto frameHeight = (area.h - (rows - 1) * gap) / rows;
 
 		for (size_t s = 0; s < strip.stems.size(); ++s)
 		{
 			auto& row = strip.stems[s];
 			if (s > 0)
 				area.removeFromTop (gap);
-			row.frame = area.removeFromTop (labelHeight + switchHeight + 2 * gap);
+			row.frame = area.removeFromTop (frameHeight);
 			auto inner = row.frame.reduced (gap);
+			const auto switchHeight = std::min (inner.h - labelHeight, switchWidth * 14 / 10);
 
 			row.knob = inner.removeFromLeft (knobSize).withSizeKeepingCentre (knobSize, knobSize);
 			inner.removeFromLeft (gap);
+			inner = inner.withSizeKeepingCentre (inner.w, labelHeight + switchHeight);
 			row.label = inner.removeFromTop (labelHeight);
 
 			for (auto& bus : row.buses)
@@ -216,36 +247,15 @@ namespace surface
 			inner.removeFromLeft (gap);
 			row.mute = inner.reduced (1, 0);
 		}
-
-		// Below: the volume fader, the room the rows left; the meter zone on
-		// the side towards the mixer's middle, the fader directly beside it.
-		area.removeFromTop (2 * gap);
-		strip.meterZone = deckIndex == 0 ? area.removeFromRight (meterReserve) : area.removeFromLeft (meterReserve);
-		area.removeFromBottom (meterCaptionHeight (strip.meterZone.h));
-		// Half the strip wide, against the meters: the cap stays next to them.
-		const auto faderWidth = std::min (area.w, local.w / 2);
-		strip.fader = deckIndex == 0 ? area.removeFromRight (faderWidth) : area.removeFromLeft (faderWidth);
 		return strip;
 	}
 
-	Mixer mixer (Rect local)
+	std::array<Rect, 2> mixerStrips (Rect local)
 	{
-		Mixer m;
-		auto area = local.reduced (std::max (4, local.w / 50));
-		const auto gap = std::max (4, local.w / 50);
-		const auto metersWidth = share (area.w, 280);
-		m.meterReserve = (metersWidth - gap) / 2;
-
-		const auto stripWidth = (area.w - gap) / 2;
-		m.strip[0] = area.removeFromLeft (stripWidth);
-		m.strip[1] = area.removeFromRight (stripWidth);
-
-		const auto zoneA = channelStrip ({ 0, 0, m.strip[0].w, m.strip[0].h }, 0, m.meterReserve).meterZone
-							   .translated (m.strip[0].x, m.strip[0].y);
-		const auto zoneB = channelStrip ({ 0, 0, m.strip[1].w, m.strip[1].h }, 1, m.meterReserve).meterZone
-							   .translated (m.strip[1].x, m.strip[1].y);
-		m.meters = { zoneA.x, zoneA.y, zoneB.right() - zoneA.x, zoneA.h };
-		return m;
+		const auto pad = std::max (4, local.w / 50);
+		auto area = local.reduced (pad);
+		const auto stripWidth = (area.w - pad) / 2;
+		return { area.removeFromLeft (stripWidth), area.removeFromRight (stripWidth) };
 	}
 
 	int meterCaptionHeight (int metersHeight)

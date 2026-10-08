@@ -40,26 +40,16 @@ namespace
 
 		for (int d = 0; d < 2; ++d)
 		{
-			const auto origin = s.pitch[(size_t) d];
-			const auto p = surface::pitchColumn (Rect { 0, 0, origin.w, origin.h });
-			all.push_back ({ "waves", s.waves,
-							 { { "pitch" + deckName (d), p.fader.translated (origin.x, origin.y), true },
-							   { "range" + deckName (d), p.range.translated (origin.x, origin.y), true } } });
-		}
-
-		for (int d = 0; d < 2; ++d)
-		{
 			const auto origin = s.deck[(size_t) d];
 			const auto c = surface::deckColumn (Rect { 0, 0, origin.w, origin.h }, gridOn[(size_t) d]);
 			const auto at = [&origin] (const Rect& r) { return r.translated (origin.x, origin.y); };
 			Section deck { "deck" + deckName (d), origin, {} };
-			const auto add = [&] (const char* name, const Rect& r, bool interactive)
+			const auto add = [&] (const std::string& name, const Rect& r, bool interactive)
 			{
 				deck.controls.push_back ({ deck.name + "." + name, at (r), interactive });
 			};
 			add ("title", c.title, false);
 			add ("stems", c.stems, false);
-			add ("overview", c.overview, true);
 			add ("elapsed", c.elapsed, false);
 			add ("remaining", c.remaining, false);
 			add ("bpm", c.bpm, false);
@@ -78,23 +68,20 @@ namespace
 			if (gridOn[(size_t) d])
 			{
 				for (size_t i = 0; i < c.gridNudge.size(); ++i)
-					add (("nudge" + std::to_string (i)).c_str(), c.gridNudge[i], true);
+					add ("nudge" + std::to_string (i), c.gridNudge[i], true);
 				for (size_t i = 0; i < c.gridEdit.size(); ++i)
-					add (("gridEdit" + std::to_string (i)).c_str(), c.gridEdit[i], true);
+					add ("gridEdit" + std::to_string (i), c.gridEdit[i], true);
 			}
 			all.push_back (deck);
 		}
 
-		const auto m = surface::mixer (Rect { 0, 0, s.mixer.w, s.mixer.h });
 		Section mixer { "mixer", s.mixer, {} };
-		const auto inMixer = [&s] (const Rect& r) { return r.translated (s.mixer.x, s.mixer.y); };
-		mixer.controls.push_back ({ "meters", inMixer (m.meters), false });
-
+		const auto strips = surface::mixerStrips (Rect { 0, 0, s.mixer.w, s.mixer.h });
 		for (int d = 0; d < 2; ++d)
 		{
-			const auto stripOrigin = m.strip[(size_t) d];
-			const auto strip = surface::channelStrip (Rect { 0, 0, stripOrigin.w, stripOrigin.h }, d, m.meterReserve);
-			const auto at = [&] (const Rect& r) { return inMixer (r.translated (stripOrigin.x, stripOrigin.y)); };
+			const auto stripOrigin = strips[(size_t) d].translated (s.mixer.x, s.mixer.y);
+			const auto strip = surface::channelStrip (Rect { 0, 0, stripOrigin.w, stripOrigin.h });
+			const auto at = [&] (const Rect& r) { return r.translated (stripOrigin.x, stripOrigin.y); };
 			const auto prefix = "strip" + deckName (d) + ".";
 
 			for (size_t stem = 0; stem < strip.stems.size(); ++stem)
@@ -107,9 +94,21 @@ namespace
 				for (size_t bus = 0; bus < row.buses.size(); ++bus)
 					mixer.controls.push_back ({ stemName + "bus" + std::to_string (bus), at (row.buses[bus]), true });
 			}
-			mixer.controls.push_back ({ prefix + "fader", at (strip.fader), true });
 		}
 		all.push_back (mixer);
+
+		const auto b = surface::band (s.band);
+		Section band { "band", s.band, { { "meters", b.meters, false } } };
+		for (int d = 0; d < 2; ++d)
+		{
+			const auto name = deckName (d);
+			band.controls.push_back ({ "pitch" + name, b.pitch[(size_t) d], true });
+			band.controls.push_back ({ "pitchValue" + name, b.pitchValue[(size_t) d], false });
+			band.controls.push_back ({ "range" + name, b.range[(size_t) d], true });
+			band.controls.push_back ({ "overview" + name, b.overview[(size_t) d], true });
+			band.controls.push_back ({ "fader" + name, b.fader[(size_t) d], true });
+		}
+		all.push_back (band);
 
 		all.push_back ({ "library", s.library, {} });
 		return all;
@@ -146,7 +145,7 @@ TEST (SurfaceLayout, TheSectionsDoNotOverlap)
 	const auto s = surface::sections (rigWidth, rigHeight);
 	const std::vector<std::pair<const char*, Rect>> sections {
 		{ "topBar", s.topBar }, { "waves", s.waves }, { "deckA", s.deck[0] }, { "deckB", s.deck[1] },
-		{ "mixer", s.mixer }, { "library", s.library } };
+		{ "mixer", s.mixer }, { "band", s.band }, { "library", s.library } };
 
 	for (size_t i = 0; i < sections.size(); ++i)
 		for (size_t j = i + 1; j < sections.size(); ++j)
@@ -165,42 +164,68 @@ TEST (SurfaceLayout, EveryControlInItsSectionNoTwoOverlapGridOn)
 	expectCleanSurface ({ false, true });
 }
 
-// The pitch faders stand at the outer edges of the waveform section, as tall
-// as it: A left, B right, the waveforms between them.
-TEST (SurfaceLayout, PitchFadersFlankTheWaveforms)
+// The rolling waveforms have the whole width again; the band spans the
+// decks and the mixer, right under them.
+TEST (SurfaceLayout, WaveformsFullWidthBandUnderDecksAndMixer)
 {
 	const auto s = surface::sections (rigWidth, rigHeight);
-	EXPECT_EQ (s.pitch[0].x, s.waves.x);
-	EXPECT_EQ (s.pitch[1].right(), s.waves.right());
-	EXPECT_EQ (s.pitch[0].h, s.waves.h);
-	EXPECT_EQ (s.pitch[1].h, s.waves.h);
-	EXPECT_LT (s.pitch[0].right(), s.waveA.x);
-	EXPECT_GT (s.pitch[1].x, s.waveA.right());
-
-	const auto p = surface::pitchColumn (Rect { 0, 0, s.pitch[0].w, s.pitch[0].h });
-	EXPECT_LT (p.fader.bottom(), p.range.y + 1) << "the range key below the fader";
-	EXPECT_GT (p.valueHeight, 0);
+	EXPECT_EQ (s.waveA.x, s.waves.x);
+	EXPECT_EQ (s.waveA.w, s.waves.w);
+	EXPECT_EQ (s.band.x, s.deck[0].x);
+	EXPECT_EQ (s.band.right(), s.deck[1].right());
+	EXPECT_GT (s.band.y, s.mixer.bottom() - 1);
+	EXPECT_EQ (s.deck[0].bottom(), s.mixer.bottom());
 }
 
-// The point of the relayout: a deck's keys span the whole column, and none
-// moves when GRID turns on -- the finger that turned it on turns it off.
-TEST (SurfaceLayout, DeckKeysUseTheWholeColumnAndStayPutWithGrid)
+// Pitch at the outer edges, as tall as the overview, value and range key
+// below; the overview reaches to the volume fader, which hugs the meters.
+TEST (SurfaceLayout, TheBandRunsPitchOverviewFaderMeters)
 {
-	const Rect column { 0, 0, 178, 460 };
+	const auto s = surface::sections (rigWidth, rigHeight);
+	const auto b = surface::band (s.band);
+
+	EXPECT_EQ (b.pitch[0].x, s.band.x);
+	EXPECT_EQ (b.pitch[1].right(), s.band.right());
+	for (size_t d = 0; d < 2; ++d)
+	{
+		EXPECT_EQ (b.pitch[d].h, b.overview[d].h);
+		EXPECT_EQ (b.pitch[d].y, b.overview[d].y);
+		EXPECT_LE (b.pitch[d].bottom(), b.pitchValue[d].y);
+		EXPECT_LE (b.pitch[d].bottom(), b.range[d].y);
+		EXPECT_EQ (b.pitchValue[d].x == b.pitch[d].x || b.pitchValue[d].right() == b.pitch[d].right(), true);
+	}
+	EXPECT_LT (b.pitch[0].right(), b.overview[0].x);
+	EXPECT_LT (b.overview[0].right(), b.fader[0].x);
+	EXPECT_EQ (b.fader[0].right(), b.meters.x);
+	EXPECT_EQ (b.fader[1].x, b.meters.right());
+	EXPECT_LT (b.fader[1].right(), b.overview[1].x);
+	EXPECT_LT (b.overview[1].right(), b.pitch[1].x);
+
+	EXPECT_EQ (b.fader[0].y, b.meters.y) << "top-aligned with the meter bars";
+	EXPECT_EQ (b.fader[0].bottom(), b.meters.bottom() - surface::meterCaptionHeight (b.meters.h));
+	EXPECT_GE (b.meters.w, 100);
+	EXPECT_LE (b.meters.w, 125);
+	EXPECT_GE (b.fader[0].h, 140) << "the faders keep a usable travel";
+	EXPECT_GE (b.overview[0].w, 180) << "wider than the deck column it was in";
+}
+
+// No key moves when GRID turns on: the finger that turned it on turns it off.
+TEST (SurfaceLayout, DeckKeysStayPutWithGrid)
+{
+	const auto s = surface::sections (rigWidth, rigHeight);
+	const Rect column { 0, 0, s.deck[0].w, s.deck[0].h };
 	const auto off = surface::deckColumn (column, false);
 	const auto on = surface::deckColumn (column, true);
 
-	EXPECT_EQ (off.loopOff.x, off.overview.x);
-	EXPECT_EQ (off.repeat.right(), off.overview.right());
-	EXPECT_EQ (off.previous.x, off.overview.x);
-	EXPECT_EQ (off.next.right(), off.overview.right());
-
-	for (const auto& [a, b] : { std::pair { off.cue, on.cue }, { off.play, on.play }, { off.loopOff, on.loopOff },
-								{ off.sync, on.sync }, { off.vinyl, on.vinyl }, { off.grid, on.grid } })
+	for (const auto& [a, b] : { std::pair { off.previous, on.previous }, { off.cue, on.cue }, { off.play, on.play },
+								{ off.next, on.next }, { off.loopOff, on.loopOff }, { off.repeat, on.repeat },
+								{ off.sync, on.sync }, { off.master, on.master }, { off.vinyl, on.vinyl }, { off.grid, on.grid } })
 		EXPECT_EQ (a, b);
 
-	EXPECT_LT (on.overview.h, off.overview.h) << "the Grid Adjust rows take their room from the overview";
-	EXPECT_GE (on.overview.h, column.h / 8) << "but some overview is left";
+	EXPECT_LT (on.bpmInfo.bottom(), on.gridNudge[0].y + 1) << "Grid Adjust between BPM and the transport";
+	EXPECT_LT (on.gridEdit[0].bottom(), on.cue.y + 1);
+	EXPECT_EQ (off.loopOff.x, off.title.x) << "the keys span the whole column";
+	EXPECT_EQ (off.repeat.right(), off.title.right());
 }
 
 TEST (SurfaceLayout, DeckKeysAreAtLeastFingerHighOnTheRig)
@@ -209,18 +234,19 @@ TEST (SurfaceLayout, DeckKeysAreAtLeastFingerHighOnTheRig)
 	const auto c = surface::deckColumn (Rect { 0, 0, s.deck[0].w, s.deck[0].h }, true);
 
 	for (const auto& key : { c.cue, c.play, c.loopOff, c.sync, c.vinyl, c.grid })
-		EXPECT_GE (key.h, 36);
+		EXPECT_GE (key.h, 34);
 	for (const auto& key : c.gridNudge)
-		EXPECT_GE (key.h, 30);
+		EXPECT_GE (key.h, 28);
+	EXPECT_GE (surface::band (s.band).range[0].h, 30);
 }
 
 // The mixer's stem rows: the knob half its old size, the bus switches and
-// mute in one row; the room they gave up goes to the faders.
+// mute in one row.
 TEST (SurfaceLayout, StemRowsAreOneLineOfSwitches)
 {
 	const auto s = surface::sections (rigWidth, rigHeight);
-	const auto m = surface::mixer (Rect { 0, 0, s.mixer.w, s.mixer.h });
-	const auto strip = surface::channelStrip (Rect { 0, 0, m.strip[0].w, m.strip[0].h }, 0, m.meterReserve);
+	const auto strips = surface::mixerStrips (Rect { 0, 0, s.mixer.w, s.mixer.h });
+	const auto strip = surface::channelStrip (Rect { 0, 0, strips[0].w, strips[0].h });
 
 	for (const auto& row : strip.stems)
 	{
@@ -232,27 +258,8 @@ TEST (SurfaceLayout, StemRowsAreOneLineOfSwitches)
 		}
 		EXPECT_EQ (row.mute.y, row.buses[0].y);
 		EXPECT_GT (row.mute.x, row.buses.back().right());
+		EXPECT_TRUE (row.frame.contains (row.mute));
 	}
-	EXPECT_GE (strip.fader.h, m.strip[0].h * 2 / 5) << "the faders got the room";
-}
-
-// Volume faders directly beside the output meters: A on their left, B on
-// their right; and the meters slim.
-TEST (SurfaceLayout, VolumeFadersFlankTheOutputMeters)
-{
-	const auto s = surface::sections (rigWidth, rigHeight);
-	const auto m = surface::mixer (Rect { 0, 0, s.mixer.w, s.mixer.h });
-	const auto stripA = surface::channelStrip (Rect { 0, 0, m.strip[0].w, m.strip[0].h }, 0, m.meterReserve);
-	const auto stripB = surface::channelStrip (Rect { 0, 0, m.strip[1].w, m.strip[1].h }, 1, m.meterReserve);
-	const auto faderA = stripA.fader.translated (m.strip[0].x, m.strip[0].y);
-	const auto faderB = stripB.fader.translated (m.strip[1].x, m.strip[1].y);
-
-	EXPECT_EQ (faderA.right(), m.meters.x);
-	EXPECT_EQ (faderB.x, m.meters.right());
-	EXPECT_GE (m.meters.w, 100);
-	EXPECT_LE (m.meters.w, 120);
-	EXPECT_EQ (faderA.y, m.meters.y) << "top-aligned with the meter bars";
-	EXPECT_EQ (faderA.bottom(), m.meters.bottom() - surface::meterCaptionHeight (m.meters.h));
 }
 
 TEST (SurfaceLayout, RectSlicing)

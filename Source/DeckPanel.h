@@ -7,22 +7,11 @@
 #include "JogWheel.h"
 #include "Session.h"
 
-// A deck's pitch fader with its value below and the range key under that.
-// Owned and driven by its DeckPanel; the window places it, at the outer edge
-// of the waveform section (2026-10-08, the clean surface).
-class PitchColumn : public juce::Component
-{
-public:
-	PitchColumn() { addAndMakeVisible (fader); addAndMakeVisible (range); }
-	void resized() override;
-
-	juce::Slider fader { juce::Slider::LinearVertical, juce::Slider::TextBoxBelow };
-	juce::TextButton range;
-};
-
-//==============================================================================
-// One deck, as a column: title, the whole-track overview, times, BPM, track
-// search | CUE | PLAY | track search, and the keys below (2026-10-08).
+// One deck, as a column: title, times, BPM, the Grid Adjust rows, track
+// search | CUE | PLAY | track search, and the keys below (2026-10-08). Its
+// overview and pitch fader (with value and range key) stand in the band
+// under the decks and the mixer: the deck owns and drives them, the window
+// holds and places them (addBandPartsTo, setBandBounds).
 //
 // Cue works like Mixxx's CDJ mode: while playing it jumps back to the cue
 // point and stops; while stopped it sets the cue point, or, if already on
@@ -48,9 +37,9 @@ public:
 
 	// A controller's relative pitch slider: `steps` of 1/128 of the range's
 	// full travel, moved as by hand (so it takes the deck out of sync).
-	void moveTempo (double steps) { pitch.fader.setValue (pitch.fader.getValue() + steps * 2.0 * tempoRange / 128.0, juce::sendNotificationSync); }
+	void moveTempo (double steps) { pitchFader.setValue (pitchFader.getValue() + steps * 2.0 * tempoRange / 128.0, juce::sendNotificationSync); }
 	// -1 .. 1: where the tempo is in its range.
-	double getTempoPosition() const { return (pitch.fader.getValue() - 1.0) / tempoRange; }
+	double getTempoPosition() const { return (pitchFader.getValue() - 1.0) / tempoRange; }
 	bool isSyncEnabled() const { return syncButton.getToggleState(); }
 	// SYNC on but only the tempo followed: bent by hand (CDJ-3000), until SHIFT.
 	void setSyncBpmOnly (bool bpmOnly) { syncButton.setButtonText (bpmOnly ? "SYNC BPM" : "SYNC"); }
@@ -73,8 +62,10 @@ public:
 	// phase aligned by ear against the sync leader) RESET (as analysed) edit it.
 	enum class GridAction { shift, halfBack, halfForward, oneBack, oneForward, snapToCue, downbeatAtPlayhead, shiftToLeader, reset };
 
-	// The pitch fader, range key and value, for the window to place.
-	PitchColumn& pitchColumn() { return pitch; }
+	// The parts in the band: made children of `parent`, placed by it.
+	void addBandPartsTo (juce::Component& parent);
+	void setBandBounds (juce::Rectangle<int> overviewArea, juce::Rectangle<int> pitchArea,
+						juce::Rectangle<int> valueArea, juce::Rectangle<int> rangeArea);
 	std::function<void (GridAction, double seconds)> onGridEdit;
 
 	void saveState (DeckSession& state) const;
@@ -108,7 +99,10 @@ private:
 	juce::TextButton downbeatButton { "SET 1" };
 	juce::TextButton oneBackButton { juce::String::fromUTF8 ("\xe2\x97\x80" " 1") }, oneForwardButton { juce::String::fromUTF8 ("1 " "\xe2\x96\xb6") };
 	void setGridMode (bool on);
-	PitchColumn pitch;
+	void showPitchValue();
+	juce::Slider pitchFader { juce::Slider::LinearVertical, juce::Slider::NoTextBox };
+	juce::Label pitchValue;
+	juce::TextButton rangeKey;
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DeckPanel)
 };

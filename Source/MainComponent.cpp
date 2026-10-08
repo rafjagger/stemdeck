@@ -59,7 +59,7 @@ MainComponent::MainComponent()
 	{
 		addAndMakeVisible (waves[(size_t) d]);
 		addAndMakeVisible (decks[(size_t) d]);
-		addAndMakeVisible (decks[(size_t) d]->pitchColumn());
+		decks[(size_t) d]->addBandPartsTo (*this);
 		waves[(size_t) d]->onSetDropped = [this, d] (const juce::String& id) { loadDroppedSet (id, d); };
 		decks[(size_t) d]->onSetDropped = [this, d] (const juce::String& id) { loadDroppedSet (id, d); };
 		decks[(size_t) d]->onSyncToggled = [this, d] (bool enabled) { setSync (d, enabled); };
@@ -69,6 +69,7 @@ MainComponent::MainComponent()
 	}
 
 	addAndMakeVisible (mixer);
+	mixer.addBandPartsTo (*this);
 	addAndMakeVisible (library);
 
 	library.onLoadSet = [this] (const StemSet& set, int deckIndex) { loadSet (set, deckIndex); };
@@ -1457,6 +1458,8 @@ void MainComponent::releaseResources()
 void MainComponent::paint (juce::Graphics& g)
 {
 	g.fillAll (Theme::background);
+	g.setColour (Theme::panel);
+	g.fillRoundedRectangle (bandArea.toFloat(), 6.0f);
 }
 
 void MainComponent::resized()
@@ -1496,12 +1499,17 @@ void MainComponent::resized()
 	waveA.setBounds (surface::toJuce (layout.waveA));
 	waveB.setBounds (surface::toJuce (layout.waveB));
 	for (int d = 0; d < numDecks; ++d)
-	{
-		decks[(size_t) d]->pitchColumn().setBounds (surface::toJuce (layout.pitch[(size_t) d]));
 		decks[(size_t) d]->setBounds (surface::toJuce (layout.deck[(size_t) d]));
-	}
 	mixer.setBounds (surface::toJuce (layout.mixer));
 	library.setBounds (surface::toJuce (layout.library));
+
+	// The band under the decks and the mixer: their parts, placed here.
+	bandArea = surface::toJuce (layout.band);
+	const auto band = surface::band (layout.band);
+	for (size_t d = 0; d < (size_t) numDecks; ++d)
+		decks[d]->setBandBounds (surface::toJuce (band.overview[d]), surface::toJuce (band.pitch[d]),
+								 surface::toJuce (band.pitchValue[d]), surface::toJuce (band.range[d]));
+	mixer.setBandBounds (surface::toJuce (band.fader[0]), surface::toJuce (band.fader[1]), surface::toJuce (band.meters));
 }
 
 bool MainComponent::keyPressed (const juce::KeyPress& key)

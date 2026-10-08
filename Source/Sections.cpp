@@ -4,6 +4,7 @@
 #include <cctype>
 #include <cmath>
 #include <initializer_list>
+#include <optional>
 #include <sstream>
 
 namespace sections
@@ -258,5 +259,142 @@ namespace sections
 		}
 
 		return bars;
+	}
+
+	//==========================================================================
+	namespace
+	{
+		enum class Level { quiet, partial, full };
+
+		float reference (std::vector<float> values)
+		{
+			if (values.empty())
+				return 0.0f;
+			const auto index = (size_t) std::floor (referencePercentile * (float) (values.size() - 1));
+			std::nth_element (values.begin(), values.begin() + (long) index, values.end());
+			return values[index];
+		}
+
+		template <typename Member>
+		float referenceOf (const std::vector<BarLevels>& levels, Member member)
+		{
+			std::vector<float> values;
+			for (const auto& bar : levels)
+				values.push_back (bar.*member);
+			return reference (values);
+		}
+
+		// Stretches shorter than minRunBars take the class of the one before.
+		void smooth (std::vector<Level>& raw)
+		{
+			size_t start = 0;
+			while (start < raw.size())
+			{
+				auto end = start;
+				while (end < raw.size() && raw[end] == raw[start])
+					++end;
+				if (start > 0 && (int) (end - start) < minRunBars)
+					std::fill (raw.begin() + (long) start, raw.begin() + (long) end, raw[start - 1]);
+				start = end;
+			}
+		}
+
+		float meanOnsets (const std::vector<BarLevels>& levels, size_t from, size_t to)
+		{
+			float sum = 0.0f;
+			for (auto b = from; b < to; ++b)
+				sum += levels[b].drumOnsetsPerBeat;
+			return to > from ? sum / (float) (to - from) : 0.0f;
+		}
+
+		// The longest phrase of `partialStart`..`fullStart` that rises: its
+		// first bar, or none.
+		std::optional<size_t> buildBefore (const std::vector<BarLevels>& levels, size_t partialStart, size_t fullStart)
+		{
+			for (const auto phrase : buildPhrases)
+			{
+				if (fullStart < partialStart + (size_t) phrase)
+					continue;
+				const auto from = fullStart - (size_t) phrase;
+				const auto middle = from + (size_t) phrase / 2;
+				const auto first = meanOnsets (levels, from, middle);
+				const auto second = meanOnsets (levels, middle, fullStart);
+				if (second >= buildMinOnsetsPerBeat && second >= buildRise * first)
+					return from;
+			}
+			return std::nullopt;
+		}
+	}
+
+	std::vector<Bar> classify (const std::vector<BarLevels>& levels)
+	{
+		std::vector<Bar> bars (levels.size());
+
+		const auto drumsRef = referenceOf (levels, &BarLevels::drums);
+		const auto bassRef = referenceOf (levels, &BarLevels::bass);
+		const auto totalRef = referenceOf (levels, &BarLevels::total);
+
+		for (size_t b = 0; b < levels.size(); ++b)
+			bars[b].energy = totalRef > 0.0f ? std::clamp (levels[b].total / totalRef, 0.0f, 1.0f) : 0.0f;
+
+		// Without drums there is nothing to tell sections by: all groove.
+		if (drumsRef < silentStemRms)
+			return bars;
+
+		const bool bassPlays = bassRef >= silentStemRms;
+		std::vector<Level> raw (levels.size());
+
+		for (size_t b = 0; b < levels.size(); ++b)
+		{
+			const auto drums = levels[b].drums / drumsRef;
+			const auto bassFull = ! bassPlays || levels[b].bass / bassRef >= fullFrom;
+			raw[b] = drums < drumsGoneBelow ? Level::quiet
+				   : drums >= fullFrom && bassFull ? Level::full
+				   : Level::partial;
+		}
+
+		smooth (raw);
+
+		for (size_t b = 0; b < raw.size(); ++b)
+			bars[b].section = raw[b] == Level::quiet ? Section::breakdown : Section::groove;
+
+		for (size_t fullStart = 1; fullStart < raw.size(); ++fullStart)
+		{
+			if (raw[fullStart] != Level::full || raw[fullStart - 1] == Level::full)
+				continue;
+
+			auto partialStart = fullStart;
+			while (partialStart > 0 && raw[partialStart - 1] == Level::partial)
+				--partialStart;
+			auto quietStart = partialStart;
+			while (quietStart > 0 && raw[quietStart - 1] == Level::quiet)
+				--quietStart;
+
+			const auto build = buildBefore (levels, partialStart, fullStart);
+			if (build)
+				for (auto b = *build; b < fullStart; ++b)
+					bars[b].section = Section::build;
+
+			const auto breakdownBars = (int) (partialStart - quietStart);
+			if (! build && breakdownBars < breakdownBeforeDropBars)
+				continue;
+
+			for (auto b = fullStart; b < raw.size() && b < fullStart + (size_t) dropLastsBars && raw[b] == Level::full; ++b)
+				bars[b].section = Section::drop;
+		}
+
+		return bars;
+	}
+
+	const char* nameOf (Section section)
+	{
+		switch (section)
+		{
+			case Section::groove:    return "groove";
+			case Section::build:     return "build";
+			case Section::drop:      return "drop";
+			case Section::breakdown: return "breakdown";
+		}
+		return "groove";
 	}
 }

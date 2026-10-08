@@ -91,4 +91,42 @@ namespace sections
 	// belongs to the bar its middle falls in. What lies before the downbeat
 	// (a pickup) is in no bar. No grid (bpm 0): no bars.
 	std::vector<BarLevels> barLevels (const Features& features, double bpm, double firstBeat, StemRoles roles);
+
+	enum class Section { groove, build, drop, breakdown };
+
+	struct Bar
+	{
+		Section section = Section::groove;
+		float energy = 0.0f;   // 0-1, against the set's loud bars
+	};
+
+	// The rules, each level against the set's own loud bars (its
+	// referencePercentile), so a quiet master and a loud one read alike:
+	//   - drums gone (below drumsGoneBelow) is a breakdown;
+	//   - drums and bass both at full (fullFrom) is the set at full;
+	//   - full after a build, or after breakdownBeforeDropBars of breakdown,
+	//     is a drop, for dropLastsBars; full otherwise -- and anything in
+	//     between -- is groove;
+	//   - the bars just before a full stretch, with drums but not at full,
+	//     whose drum attacks rise over a phrase (buildPhrases: the second
+	//     half of the phrase buildRise times the first, and at least
+	//     buildMinOnsetsPerBeat) are a build.
+	// A stretch shorter than minRunBars is a fill, not a change: it takes the
+	// class of the stretch before it. A set without drums is all groove.
+	// First guesses, proven on synthetic stems; tuned by ear on real sets.
+	constexpr float referencePercentile = 0.9f;
+	constexpr float silentStemRms = 1.0e-3f;   // a stem this quiet throughout plays no part
+	constexpr float drumsGoneBelow = 0.15f;
+	constexpr float fullFrom = 0.6f;
+	constexpr int minRunBars = 2;
+	constexpr int dropLastsBars = 16;
+	constexpr int breakdownBeforeDropBars = 4;
+	constexpr std::array<int, 3> buildPhrases { 16, 8, 4 };
+	constexpr float buildRise = 1.5f;
+	constexpr float buildMinOnsetsPerBeat = 1.0f;
+
+	std::vector<Bar> classify (const std::vector<BarLevels>& levels);
+
+	// "groove", "build", "drop", "breakdown": the words on the wire.
+	const char* nameOf (Section section);
 }

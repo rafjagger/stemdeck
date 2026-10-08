@@ -23,6 +23,8 @@ add_executable(stemdeck-tests
     ${CMAKE_SOURCE_DIR}/Source/FollowLeader.cpp
     MasterDeck.cpp
     ${CMAKE_SOURCE_DIR}/Source/MasterDeck.cpp
+    SyncLabels.cpp
+    ${CMAKE_SOURCE_DIR}/Source/SyncLabels.cpp
     BeatScheduler.cpp
     ${CMAKE_SOURCE_DIR}/Source/BeatScheduler.cpp
     LibraryPath.cpp

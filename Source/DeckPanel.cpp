@@ -1,5 +1,6 @@
 #include "DeckPanel.h"
 #include "Theme.h"
+#include "SyncLabels.h"
 
 namespace
 {
@@ -61,7 +62,7 @@ DeckPanel::DeckPanel (StemDeckPlayer& p, StemThumbnails& thumbnails, int index)
 	syncButton.setTooltip ("Lock tempo and beats to the other deck");
 	syncButton.onClick = [this] { if (onSyncToggled) onSyncToggled (syncButton.getToggleState()); };
 	masterButton.setColour (juce::TextButton::buttonOnColourId, Theme::deck (deckIndex));
-	masterButton.setTooltip ("This deck gives the beat to the Pioneer network (like MASTER on a CDJ)");
+	masterButton.setTooltip (syncLabels::masterTooltip());
 	masterButton.onClick = [this] { if (onMasterPressed) onMasterPressed(); };
 
 	rangeButton.setTooltip ("Tempo-Bereich umschalten");
@@ -86,7 +87,7 @@ DeckPanel::DeckPanel (StemDeckPlayer& p, StemThumbnails& thumbnails, int index)
 
 	gridButton.setClickingTogglesState (true);
 	gridButton.setColour (juce::TextButton::buttonOnColourId, Theme::loop);
-	gridButton.setTooltip ("Grid Adjust: the controller's jog wheel moves the beat grid (like a CDJ-3000)");
+	gridButton.setTooltip (syncLabels::gridTooltip());
 	gridButton.onClick = [this] { setGridMode (gridButton.getToggleState()); };
 	jog.onGridShift = [this] (double seconds) { if (onGridEdit) onGridEdit (GridAction::shift, seconds); };
 

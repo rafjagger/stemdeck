@@ -60,4 +60,30 @@ public:
 	// Smaller where a label would not fit its button: on the rig's 768 px
 	// screen a deck's keys stand two to a row and MASTER came out "MAST...".
 	juce::Font getTextButtonFont (juce::TextButton&, int buttonHeight) override;
+	// JUCE's own text indents leave a narrow key (a mixer's M, a deck's track
+	// search) no room and draw "..."; ours are a share of the key.
+	void drawButtonText (juce::Graphics&, juce::TextButton&, bool isHighlighted, bool isDown) override;
+
+	// The library's header: the column it is sorted by lit, with a clear arrow.
+	void drawTableHeaderColumn (juce::Graphics&, juce::TableHeaderComponent&, const juce::String& columnName, int columnId,
+								int width, int height, bool isMouseOver, bool isMouseDown, int columnFlags) override;
+
+	// A vertical fader's cap and slot, as shares of the fader: the cap's height
+	// of its height, the slot's width of the cap's. JUCE keeps half a cap free
+	// at each end of the travel (getSliderThumbRadius), so the cap reaches both.
+	static float faderCapHeight (const juce::Component& fader) { return (float) fader.getHeight() * 0.11f; }
+	static float faderCapWidth (const juce::Component& fader, juce::Rectangle<float> track)
+	{
+		return juce::jmin (faderCapHeight (fader) * 2.2f, track.getWidth() * 0.8f);
+	}
+	// A fader with this property set has meters behind its slot (the mixer's
+	// volume faders: one per stem): the slot is as wide as the cap and left
+	// open for them.
+	static constexpr const char* meterInSlot = "meterInSlot";
+	static juce::Rectangle<float> faderSlot (const juce::Component& fader, juce::Rectangle<float> track)
+	{
+		const auto share = fader.getProperties().getWithDefault (meterInSlot, false) ? 1.0f : 0.3f;
+		return track.withSizeKeepingCentre (faderCapWidth (fader, track) * share, track.getHeight());
+	}
+	int getSliderThumbRadius (juce::Slider&) override;
 };

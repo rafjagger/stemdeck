@@ -84,9 +84,9 @@ public:
 	void setCuePoint (double seconds) { cuePoint = seconds; }
 	double getCuePoint() const { return cuePoint.load(); }
 
-	// The strip's meter since the last call: the peak the stem leaves
-	// StemDeck with on a bus, after knob, mute, fader and the bus trim -- the
-	// same level as popDeskLevel, so the screen and the desk read alike.
+	// The screen's stem meter since the last call: the stem's peak after knob
+	// and mute, before the deck fader, with the bus trim (remote::beforeFader)
+	// -- at the fader's top the same level as popDeskLevel.
 	float popStemPeak (int stem);
 
 	// The desk's meter for a stem since the last call (spec stemdeck-remote):

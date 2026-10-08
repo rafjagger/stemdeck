@@ -40,6 +40,8 @@ std::unique_ptr<juce::XmlElement> Session::toXml() const
 	lib->setAttribute ("sortForwards", library.sortForwards);
 	lib->setAttribute ("search", library.search);
 	lib->setAttribute ("selected", library.selectedSetId);
+	lib->setAttribute ("folder", library.folder);
+	lib->setAttribute ("showFolders", library.showFolders);
 
 	auto* jobs = xml->createNewChildElement ("StemJobs");
 	for (const auto& job : stemJobs)
@@ -98,6 +100,8 @@ Session Session::fromXml (const juce::XmlElement& xml)
 		session.library.sortForwards = lib->getBoolAttribute ("sortForwards", true);
 		session.library.search = lib->getStringAttribute ("search");
 		session.library.selectedSetId = lib->getStringAttribute ("selected");
+		session.library.folder = lib->getStringAttribute ("folder");
+		session.library.showFolders = lib->getBoolAttribute ("showFolders", true);
 	}
 
 	if (auto* jobs = xml.getChildByName ("StemJobs"))

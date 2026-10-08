@@ -349,3 +349,14 @@ TEST (Remote, AStemMeterReadsWhatItsBusCarries)
 		EXPECT_NEAR (sent.squares, bus.squares, 1.0e-6) << fader;
 	}
 }
+
+// The screen's stem meters behind a deck's volume fader read before it, as a
+// DJ mixer's channel meter does; with the bus trim, so at the top of the
+// fader they read what the desk's stem bar reads.
+TEST (Remote, TheScreensStemMeterReadsBeforeTheDeckFader)
+{
+	const auto raw = remote::measure (stemAfterKnob, stemSamples);
+	EXPECT_FLOAT_EQ (remote::beforeFader (raw).peak, remote::sentToBus (raw, 1.0f).peak);
+	EXPECT_NEAR (remote::beforeFader (raw).squares, remote::sentToBus (raw, 1.0f).squares, 1.0e-9);
+	EXPECT_GT (remote::beforeFader (raw).peak, remote::sentToBus (raw, fromDecibels (-10.0f)).peak) << "the fader down leaves it alone";
+}

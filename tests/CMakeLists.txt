@@ -51,7 +51,11 @@ add_executable(stemdeck-tests
     Sections.cpp
     Preview.cpp
     ${CMAKE_SOURCE_DIR}/Source/Preview.cpp
-    ${CMAKE_SOURCE_DIR}/Source/Sections.cpp)
+    ${CMAKE_SOURCE_DIR}/Source/Sections.cpp
+    SurfaceLayout.cpp
+    ${CMAKE_SOURCE_DIR}/Source/SurfaceLayout.cpp
+    LibraryFolders.cpp
+    ${CMAKE_SOURCE_DIR}/Source/LibraryFolders.cpp)
 target_include_directories(stemdeck-tests PRIVATE ${CMAKE_SOURCE_DIR}/Source)
 
 # Debian keeps upstream file times, so make cannot see that libgtest-dev was

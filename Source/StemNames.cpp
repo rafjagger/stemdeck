@@ -1,6 +1,7 @@
 #include "StemNames.h"
 
 #include <array>
+#include <cctype>
 
 namespace
 {
@@ -72,4 +73,14 @@ std::string sanitiseName (const std::string& name, const std::string& fallback)
 	clean = trimEnd (clean, separators);
 
 	return clean.find_first_not_of ("_ ") == std::string::npos ? fallback : clean;
+}
+
+std::string stemLaneLabel (const std::string& name, int stem)
+{
+	const auto number = std::to_string (stem + 1);
+	if (name.empty())
+		return number;
+	if (std::isdigit ((unsigned char) name[0]))
+		return name;
+	return number + " " + name;
 }

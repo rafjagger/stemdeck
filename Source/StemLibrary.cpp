@@ -3,6 +3,109 @@
 #include "Waveforms.h"
 #include "StemJob.h"
 #include "FolderStep.h"
+#include "LibraryFolders.h"
+
+#include <map>
+
+namespace
+{
+	double nowMs() { return juce::Time::getMillisecondCounterHiRes(); }
+}
+
+//==============================================================================
+// The table's header for a finger (2026-10-08). JUCE's lets columns be
+// dragged and resized, counts a press that moved 4 px as a drag (and then
+// does not sort), and keeps 3 px either side of every edge for resizing; on
+// the rig the finger's twin (touch and emulated mouse) sorted twice, i.e.
+// not at all. Here the whole cell is the key: a tap sorts, a second one
+// reverses, wherever the finger lifts within the same column.
+class StemLibrary::TapHeader : public juce::TableHeaderComponent
+{
+public:
+	TapHeader() { setPopupMenuActive (false); }
+
+	void mouseDown (const juce::MouseEvent& e) override { pressedColumn = getColumnIdAtX (e.x); }
+	void mouseDrag (const juce::MouseEvent&) override {}
+
+	void mouseUp (const juce::MouseEvent& e) override
+	{
+		const auto column = getColumnIdAtX (e.x);
+		if (column == 0 || column != pressedColumn || ! taps.accept (nowMs()))
+			return;
+		const auto next = sortAfterTap ({ getSortColumnId(), isSortedForwards() }, column);
+		setSortColumnId (next.column, next.forwards);
+	}
+
+private:
+	int pressedColumn = 0;
+	TapFilter taps;
+};
+
+//==============================================================================
+// A folder in the tree: its name and how many sets lie in and below it. A
+// tap chooses it and opens or closes it; a drag scrolls the tree. The tap is
+// taken on release, from a transparent component over the row, so a drag
+// that began on a row neither chooses nor opens it. JUCE's own handling acts
+// on the press (and its triangles toggle there, so a touch's twin closed what
+// the touch had opened).
+class StemLibrary::FolderItem : public juce::TreeViewItem
+{
+public:
+	FolderItem (StemLibrary& library, const juce::String& relativePath, const juce::String& name, int numSets)
+		: path (relativePath), owner (library), label (name + "  " + juce::String (numSets))
+	{
+	}
+
+	std::unique_ptr<juce::Component> createItemComponent() override { return std::make_unique<TapArea> (*this); }
+
+	bool mightContainSubItems() override { return getNumSubItems() > 0; }
+	juce::String getUniqueName() const override { return path.isEmpty() ? juce::String ("/") : path; }
+	int getItemHeight() const override { return owner.table.getRowHeight() * 6 / 5; }
+	void itemDoubleClicked (const juce::MouseEvent&) override {}
+
+	void paintItem (juce::Graphics& g, int width, int height) override
+	{
+		const auto chosen = owner.chosenFolder == path;
+		auto area = juce::Rectangle<int> (width, height);
+
+		if (chosen)
+		{
+			g.setColour (Theme::loop.withAlpha (0.3f));
+			g.fillRoundedRectangle (area.toFloat().reduced (1.0f), 4.0f);
+		}
+
+		auto marker = area.removeFromLeft (height * 2 / 3);
+		g.setFont (juce::FontOptions ((float) height * 0.55f));
+		g.setColour (Theme::textDim);
+		if (mightContainSubItems())
+			g.drawText (juce::String::fromUTF8 (isOpen() ? "\xe2\x96\xbe" : "\xe2\x96\xb8"), marker, juce::Justification::centred);
+
+		g.setColour (chosen ? Theme::text : Theme::textDim);
+		g.drawText (label, area, juce::Justification::centredLeft, true);
+	}
+
+	const juce::String path;
+
+private:
+	struct TapArea : public juce::Component
+	{
+		explicit TapArea (FolderItem& i) : item (i) {}
+		// On the screen, not in the row: a drag scrolls the row along with the
+		// finger, and in its own coordinates the finger has not moved at all.
+		void mouseUp (const juce::MouseEvent& e) override
+		{
+			const auto moved = e.getScreenPosition().getDistanceFrom (e.getMouseDownScreenPosition());
+			if (touchlist::isTap ((float) moved, getHeight()))
+				item.owner.folderTapped (item);
+		}
+		FolderItem& item;
+	};
+
+	StemLibrary& owner;
+	const juce::String label;
+};
+
+//==============================================================================
 
 StemLibrary::StemLibrary (juce::AudioFormatManager& fm) : formatManager (fm)
 {
@@ -37,33 +140,58 @@ StemLibrary::StemLibrary (juce::AudioFormatManager& fm) : formatManager (fm)
 	searchBox.onEscapeKey = [this] { searchBox.clear(); applyFilter(); };
 	addAndMakeVisible (searchBox);
 
+	table.setHeader (std::make_unique<TapHeader>());
 	auto& header = table.getHeader();
 	// stems/Artist/Album/<sets>: the folders are the first two columns, and
-	// the table is sorted artist, album, set to begin with.
-	header.addColumn ("Artist", artistColumn, 180, 80);
-	header.addColumn ("Album", albumColumn, 180, 80);
-	header.addColumn ("Set", nameColumn, 280, 120);
-	header.addColumn ("BPM", bpmColumn, 70, 50);
-	header.addColumn ("Stems", stemsColumn, 200, 80);
-	header.addColumn (juce::String ("Length"), lengthColumn, 70, 50);
+	// the table is sorted artist, album, set to begin with. Not movable, not
+	// resizable: a finger on the header sorts, nothing else.
+	constexpr auto columnFlags = juce::TableHeaderComponent::visible | juce::TableHeaderComponent::sortable;
+	header.addColumn ("Artist", artistColumn, 180, 80, -1, columnFlags);
+	header.addColumn ("Album", albumColumn, 180, 80, -1, columnFlags);
+	header.addColumn ("Set", nameColumn, 280, 120, -1, columnFlags);
+	header.addColumn ("BPM", bpmColumn, 70, 50, -1, columnFlags);
+	header.addColumn ("Stems", stemsColumn, 200, 80, -1, columnFlags);
+	header.addColumn (juce::String ("Length"), lengthColumn, 70, 50, -1, columnFlags);
 	// Into the window's width rather than past its right edge (768 px on the rig).
 	header.setStretchToFitActive (true);
 	header.setSortColumnId (artistColumn, true);
 	header.setColour (juce::TableHeaderComponent::backgroundColourId, Theme::panelRaised);
 	header.setColour (juce::TableHeaderComponent::textColourId, Theme::textDim);
 
-	table.setRowHeight (24);
 	table.setMultipleSelectionEnabled (false);
+	// Touch lists: a finger's drag scrolls (a held press drags a set, see
+	// getDragSourceDescription); a tap selects, on release.
+	table.getViewport()->setScrollOnDragMode (juce::Viewport::ScrollOnDragMode::all);
+	table.addMouseListener (this, true);
 	table.setColour (juce::ListBox::backgroundColourId, Theme::background);
 	addAndMakeVisible (table);
+
+	folderTree.setOpenCloseButtonsVisible (false);
+	folderTree.getViewport()->setScrollOnDragMode (juce::Viewport::ScrollOnDragMode::all);
+	folderTree.setRootItemVisible (true);
+	folderTree.setColour (juce::TreeView::backgroundColourId, Theme::background);
+	folderTree.setColour (juce::TreeView::selectedItemBackgroundColourId, juce::Colours::transparentBlack);
+	addAndMakeVisible (folderTree);
+
+	foldersButton.setClickingTogglesState (true);
+	foldersButton.setToggleState (true, juce::dontSendNotification);
+	foldersButton.setColour (juce::TextButton::buttonOnColourId, Theme::panelRaised.brighter (0.3f));
+	foldersButton.setTooltip ("Show or hide the folder tree");
+	foldersButton.setMouseClickGrabsKeyboardFocus (false);
+	foldersButton.onClick = [this] { showFolders (foldersButton.getToggleState()); };
+	addAndMakeVisible (foldersButton);
+}
+
+StemLibrary::~StemLibrary()
+{
+	folderTree.setRootItem (nullptr);   // the tree does not own its items
 }
 
 void StemLibrary::setFolder (const juce::File& newFolder)
 {
 	folder = newFolder;
 	allSets = folder.isDirectory() ? StemSet::scanFolder (folder, formatManager) : std::vector<StemSet>();
-	folderLabel.setText (folder.getFullPathName() + "  -  " + juce::String ((int) allSets.size()) + " sets",
-						 juce::dontSendNotification);
+	rebuildFolderTree();
 	applyFilter();
 
 	if (onFolderChanged)
@@ -91,8 +219,11 @@ void StemLibrary::applyFilter()
 	const auto words = juce::StringArray::fromTokens (searchBox.getText(), true);
 	visibleSets.clear();
 
+	const auto chosen = chosenFolder.toStdString();
+
 	for (const auto* set : orderedSets)
-		if (std::all_of (words.begin(), words.end(), [set] (const juce::String& w)
+		if (libraryfolders::isWithin (set->folder.toStdString(), chosen)
+			&& std::all_of (words.begin(), words.end(), [set] (const juce::String& w)
 			{
 				return set->name.containsIgnoreCase (w) || set->artist.containsIgnoreCase (w) || set->album.containsIgnoreCase (w);
 			}))
@@ -101,9 +232,76 @@ void StemLibrary::applyFilter()
 	table.updateContent();
 	table.selectRow (0);
 	table.repaint();
+	updateFolderLabel();
 
 	if (onOrderChanged)
 		onOrderChanged();
+}
+
+void StemLibrary::rebuildFolderTree()
+{
+	std::vector<std::string> setFolders;
+	for (const auto& set : allSets)
+		setFolders.push_back (set.folder.toStdString());
+	const auto folders = libraryfolders::folderTree (setFolders);
+	chosenFolder = libraryfolders::validChoice (chosenFolder.toStdString(), folders);
+
+	// Open as they were, across a rescan.
+	const auto openness = folderTree.getOpennessState (false);
+	folderTree.setRootItem (nullptr);
+
+	auto root = std::make_unique<FolderItem> (*this, juce::String(), folder.getFileName(), (int) allSets.size());
+	std::map<std::string, FolderItem*> items { { std::string(), root.get() } };
+	for (const auto& path : folders)   // parents first
+	{
+		auto* item = new FolderItem (*this, path, libraryfolders::nameOf (path),
+									 (int) libraryfolders::countWithin (setFolders, path));
+		items.at (libraryfolders::parentOf (path))->addSubItem (item);
+		items[path] = item;
+	}
+
+	rootFolderItem = std::move (root);
+	folderTree.setRootItem (rootFolderItem.get());
+	if (openness != nullptr)
+		folderTree.restoreOpennessState (*openness, false);
+	rootFolderItem->setOpen (true);
+	for (auto f = chosenFolder.toStdString(); ! f.empty(); f = libraryfolders::parentOf (f))
+		items.at (f)->setOpen (true);
+}
+
+void StemLibrary::folderTapped (FolderItem& item)
+{
+	if (! folderTaps.accept (nowMs()))
+		return;
+
+	if (item.mightContainSubItems())
+		item.setOpen (! item.isOpen());
+	if (item.path != chosenFolder)
+		chooseFolder (item.path);
+	else
+		folderTree.repaint();
+}
+
+void StemLibrary::chooseFolder (const juce::String& relativeFolder)
+{
+	chosenFolder = relativeFolder;
+	applyFilter();
+	folderTree.repaint();
+}
+
+void StemLibrary::showFolders (bool show)
+{
+	foldersButton.setToggleState (show, juce::dontSendNotification);
+	folderTree.setVisible (show);
+	resized();
+}
+
+void StemLibrary::updateFolderLabel()
+{
+	const auto where = chosenFolder.isEmpty() ? folder.getFullPathName() : folder.getFileName() + "/" + chosenFolder;
+	const auto count = chosenFolder.isEmpty() ? juce::String ((int) allSets.size())
+											  : juce::String ((int) visibleSets.size()) + " of " + juce::String ((int) allSets.size());
+	folderLabel.setText (where + "  -  " + count + " sets", juce::dontSendNotification);
 }
 
 bool StemLibrary::listsBefore (const StemSet& a, const StemSet& b) const
@@ -203,10 +401,16 @@ void StemLibrary::saveState (LibrarySession& state) const
 	state.search = searchBox.getText();
 	const auto row = table.getSelectedRow();
 	state.selectedSetId = row >= 0 && row < (int) visibleSets.size() ? storedId (idFor (*visibleSets[(size_t) row])) : juce::String();
+	state.folder = chosenFolder;
+	state.showFolders = foldersButton.getToggleState();
 }
 
 void StemLibrary::restoreState (const LibrarySession& state)
 {
+	showFolders (state.showFolders);
+	chosenFolder = state.folder;
+	rebuildFolderTree();                                                             // drops a folder that is gone
+	applyFilter();
 	if (state.sortColumn > 0)
 		table.getHeader().setSortColumnId (state.sortColumn, state.sortForwards);   // sorts through sortOrderChanged
 	searchBox.setText (state.search, true);                                          // filters through onTextChange
@@ -269,7 +473,7 @@ void StemLibrary::paintCell (juce::Graphics& g, int row, int columnId, int width
 	}
 
 	g.setColour (columnId == nameColumn ? Theme::text : Theme::textDim);
-	g.setFont (juce::FontOptions (14.0f));
+	g.setFont (juce::FontOptions ((float) height * 0.6f));
 	g.drawText (text, 6, 0, width - 12, height, juce::Justification::centredLeft, true);
 }
 
@@ -284,12 +488,33 @@ void StemLibrary::returnKeyPressed (int)
 	loadSelected (-1);
 }
 
+// A row is dragged onto a deck only after a press held still (touchlist):
+// a quick swipe scrolls the table instead. While a set is dragged the table
+// stays put; the next release frees it again (mouseUp).
 juce::var StemLibrary::getDragSourceDescription (const juce::SparseSet<int>& rows)
 {
-	if (rows.size() == 1 && juce::isPositiveAndBelow (rows[0], (int) visibleSets.size()))
-		return juce::String (StemSetDropTarget::prefix) + idFor (*visibleSets[(size_t) rows[0]]);
+	if (rows.size() != 1 || ! juce::isPositiveAndBelow (rows[0], (int) visibleSets.size()) || ! pressHeldStill())
+		return {};
 
-	return {};
+	if (auto* content = table.getViewport()->getViewedComponent())
+		content->setViewportIgnoreDragFlag (true);
+	return juce::String (StemSetDropTarget::prefix) + idFor (*visibleSets[(size_t) rows[0]]);
+}
+
+bool StemLibrary::pressHeldStill() const
+{
+	auto& desktop = juce::Desktop::getInstance();
+	for (int i = 0; i < desktop.getNumDraggingMouseSources(); ++i)
+		if (auto* source = desktop.getDraggingMouseSource (i))
+			if (touchlist::isLongPress ((juce::Time::getCurrentTime() - source->getLastMouseDownTime()).inMilliseconds()))
+				return true;
+	return false;
+}
+
+void StemLibrary::mouseUp (const juce::MouseEvent&)
+{
+	if (auto* content = table.getViewport()->getViewedComponent())
+		content->setViewportIgnoreDragFlag (false);
 }
 
 //==============================================================================
@@ -326,6 +551,8 @@ void StemLibrary::resized()
 	if (! twoRows)
 		folderBar = bar;
 
+	foldersButton.setBounds (folderBar.removeFromLeft (100));
+	folderBar.removeFromLeft (10);
 	rescanButton.setBounds (folderBar.removeFromRight (110));
 	folderBar.removeFromRight (6);
 	createButton.setBounds (folderBar.removeFromRight (130));
@@ -342,6 +569,17 @@ void StemLibrary::resized()
 	}
 
 	area.removeFromTop (8);
+
+	// The tree a third of the width, when shown; the header as high as a key.
+	if (folderTree.isVisible())
+	{
+		folderTree.setBounds (area.removeFromLeft (area.getWidth() * 3 / 10));
+		area.removeFromLeft (8);
+	}
+	// Rows a share of the library's height, so more fit; the header a little
+	// higher, as a row of keys.
+	table.setRowHeight (juce::jmax (1, getHeight() / 11));
+	table.setHeaderHeight (table.getRowHeight() * 3 / 2);
 	table.setBounds (area);
 }
 

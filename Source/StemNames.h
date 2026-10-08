@@ -24,3 +24,7 @@ std::string stemFileName (const std::string& track, int stem, const std::string&
 // no '/', '\\' or NUL, no leading '.', no trailing space, '-' or '_'.
 // Empty after cleaning: `fallback`.
 std::string sanitiseName (const std::string& name, const std::string& fallback);
+
+// The label on stem `stem`'s lane: the name, numbered unless it already
+// starts with its number ("1 - drums" stays, "DUB" becomes "1 DUB").
+std::string stemLaneLabel (const std::string& name, int stem);

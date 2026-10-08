@@ -171,6 +171,11 @@ namespace remote
 		return { afterKnob.peak * gain, afterKnob.squares * gain * gain, afterKnob.samples };
 	}
 
+	Block beforeFader (const Block& afterKnob)
+	{
+		return sentToBus (afterKnob, 1.0f);
+	}
+
 	std::vector<Meter> levelBundle (const Words& words, const std::array<Level, stemMeters>& stems,
 									const std::array<Level, 2>& aux)
 	{

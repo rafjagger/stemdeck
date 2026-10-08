@@ -64,6 +64,11 @@ namespace remote
 	// deck fader and the bus trim on it (Buses.h). The meters /vu 41-48.
 	Block sentToBus (const Block& afterKnob, float fader);
 
+	// The same block before the deck fader, with the bus trim: the screen's
+	// stem meters behind the volume fader (a DJ mixer's channel meter reads
+	// pre-fader); at the top of the fader it equals sentToBus.
+	Block beforeFader (const Block& afterKnob);
+
 	// The stem meters, deck by deck and stem by stem: /vu/41-48.
 	constexpr int stemMeters = 8;
 

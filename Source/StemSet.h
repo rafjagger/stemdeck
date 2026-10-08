@@ -17,6 +17,8 @@ struct StemSet
 	juce::String name;
 	// Where it sits in the library: stems/Artist/Album/<files> (LibraryPath.h).
 	juce::String artist, album;
+	// Its folder below the library folder, '/'-separated; "" straight in it.
+	juce::String folder;
 	std::array<juce::File, numStems> files;
 	std::array<juce::String, numStems> stemNames;
 	double lengthSeconds = 0.0; // from the first stem's header

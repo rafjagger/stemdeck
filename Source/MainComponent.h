@@ -9,6 +9,7 @@
 #include "Workspaces.h"
 #include "WorkspacePanel.h"
 #include "DeckPanel.h"
+#include "SurfaceLayout.h"
 #include "MixerPanel.h"
 #include "RemoteLink.h"
 #include "TruthKeeperLink.h"
@@ -31,8 +32,9 @@
 #include "OnScreenKeyboard.h"
 
 //==============================================================================
-// Two stem decks and a mixer, laid out like Mixxx: scrolling waveforms on top,
-// deck A | mixer | deck B in the middle, library at the bottom.
+// Two stem decks and a mixer: scrolling waveforms on top, deck A | mixer |
+// deck B in the middle with the band below them (pitch faders, overviews,
+// volume faders, output meters; SurfaceLayout.h), library at the bottom.
 //
 // Output is 10 channels, five stereo buses (Buses.h): 1-4 and AUX, post
 // fader. Each stem of each deck is on any of them by its bus switches. With a
@@ -155,6 +157,8 @@ private:
 	WorkspacePanel workspacePanel;
 	juce::Label deviceStatus;
 	int statusCountdown = 0;
+	juce::Rectangle<int> bandArea;   // the decks' and the mixer's band, painted as a panel
+	std::array<surface::DeckLine, numDecks> deckLines;   // each deck's colour line around its volume fader
 
 	// Keyboard: edge-detected so held keys don't repeat.
 	struct KeyBinding { int key; std::function<void (bool down)> action; bool wasDown = false; };

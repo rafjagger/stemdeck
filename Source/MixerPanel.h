@@ -15,6 +15,8 @@ public:
 	void setLevel (float newPeak);
 	void setParameters (MeterParameters parameters) { ballistics.setParameters (parameters); }
 	void setShowsClip (bool shows) { showsClip = shows; repaint(); }
+	// The bar's normal range in this colour (a stem's) instead of the LEDs' green.
+	void setBarColour (juce::Colour colour) { barColour = colour; repaint(); }
 	void paint (juce::Graphics& g) override;
 
 private:
@@ -24,6 +26,7 @@ private:
 	double lastFeedMs = 0.0;
 	int litSegments = 0, heldSegment = 0;
 	bool showsClip = false;
+	std::optional<juce::Colour> barColour;
 	ClipHold clipHold;
 	bool clipping = false;
 };
@@ -55,20 +58,24 @@ private:
 };
 
 //==============================================================================
-// Channel strip of one deck: a knob per stem, with mute and one switch per
-// bus (1-4, AUX -- one stem per bus, the rest on AUX, Buses.h), above the
-// channel fader.
+// Channel strip of one deck: a knob per stem, with one switch per bus (1-4,
+// AUX -- one stem per bus, the rest on AUX, Buses.h) and mute in one row; the
+// four rows tight, a matrix of keys. The stems' names are on the overview's
+// lanes, not here.
+// Its channel fader, which shows the deck's level in its slot, stands in the
+// band under the mixer: the strip owns it, the window places it.
 class ChannelStrip : public juce::Component
 {
 public:
-	// Where its volume fader stands, for the deck beside it to line up with.
-	juce::Rectangle<int> faderBounds() const { return fader.getBounds(); }
 	ChannelStrip (StemDeckPlayer& player, int deckIndex);
 
-	void setStemNames (const std::array<juce::String, StemSet::numStems>& names);
 	void toggleMute (int stem);
 	void refresh(); // meters, called by the main timer
-	void setMeterParameters (MeterParameters parameters) { meter.setParameters (parameters); }
+	void setMeterParameters (MeterParameters parameters)
+	{
+		for (auto* meter : stemMeters)
+			meter->setParameters (parameters);
+	}
 
 	// The bus switches as the player has them, after a change from elsewhere
 	// (the rule, or Core, spec stemdeck-remote); nothing is sent back from here.
@@ -89,10 +96,9 @@ public:
 	void saveState (DeckSession& state) const;
 	void restoreState (const DeckSession& state);
 
-	// Room left free beside the fader on the side towards the mixer's middle,
-	// for the output meters; where that room is, in this strip's coordinates.
-	void setMeterReserve (int width) { meterReserve = width; resized(); }
-	juce::Rectangle<int> getMeterZone() const { return meterZone; }
+	// The fader and the stem meters behind it: made children of `parent`, placed by it.
+	void addFaderTo (juce::Component& parent);
+	void setFaderBounds (juce::Rectangle<int> area);
 
 	void paint (juce::Graphics& g) override;
 	void resized() override;
@@ -103,13 +109,10 @@ private:
 
 	juce::OwnedArray<juce::Slider> knobs;
 	juce::OwnedArray<juce::TextButton> muteButtons, busButtons;   // busButtons: stem * buses::count + bus
-	juce::OwnedArray<juce::Label> stemLabels;
 	juce::Slider fader { juce::Slider::LinearVertical, juce::Slider::NoTextBox };
-	LevelMeter meter;
+	juce::OwnedArray<LevelMeter> stemMeters;   // behind the fader, one per stem
 
-	int meterReserve = 0;
-	juce::Rectangle<int> meterZone;
-	std::array<juce::Rectangle<int>, StemSet::numStems> stemFrames;
+	juce::Rectangle<int> headerArea;
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ChannelStrip)
 };
@@ -122,11 +125,6 @@ public:
 
 	ChannelStrip& strip (int deckIndex) { return deckIndex == 0 ? stripA : stripB; }
 	const ChannelStrip& strip (int deckIndex) const { return deckIndex == 0 ? stripA : stripB; }
-	// A deck's volume fader in this panel's coordinates.
-	juce::Rectangle<int> faderArea (int deckIndex) const
-	{
-		return strip (deckIndex).faderBounds() + strip (deckIndex).getPosition();
-	}
 	void refresh();
 
 	// One bus switch under the one-stem-per-bus rule (Buses.h), across both
@@ -137,6 +135,11 @@ public:
 	void normaliseBuses();
 	// Called for every stem a click moved, the clicked one included.
 	std::function<void (int deck, int stem)> onBusesChanged;
+
+	// The volume faders and the output meters, in the band under the mixer:
+	// made children of `parent`, placed by it.
+	void addBandPartsTo (juce::Component& parent);
+	void setBandBounds (juce::Rectangle<int> faderA, juce::Rectangle<int> faderB, juce::Rectangle<int> meters);
 
 	void setOutputLevel (int channel, float peak) { outputMeters.setLevel (channel, peak); }
 	// Every meter on it: both strips and the output meters.

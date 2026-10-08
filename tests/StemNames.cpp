@@ -72,3 +72,13 @@ TEST (StemNames, NamesAreSanitised)
 	EXPECT_EQ (sanitiseName ("Sigur R\xc3\xb3s", "x"), "Sigur R\xc3\xb3s") << "unicode kept";
 	EXPECT_EQ (sanitiseName (std::string ("a\0b", 3), "x"), "a_b");
 }
+
+// The label on a stem's lane: "1 - drums" already carries its number, "DUB"
+// gets one.
+TEST (StemNames, ALaneLabelCarriesTheStemsNumber)
+{
+	EXPECT_EQ (stemLaneLabel ("1 - drums", 0), "1 - drums");
+	EXPECT_EQ (stemLaneLabel ("DUB", 0), "1 DUB");
+	EXPECT_EQ (stemLaneLabel ("Vox", 3), "4 Vox");
+	EXPECT_EQ (stemLaneLabel ("", 2), "3");
+}

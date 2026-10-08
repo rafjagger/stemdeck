@@ -4,6 +4,7 @@
 #include "GridEdit.h"
 #include "OscTruthFile.h"
 #include "SyncLabels.h"
+#include "SurfaceJuce.h"
 
 #include <cstdlib>
 #include <iostream>
@@ -58,6 +59,7 @@ MainComponent::MainComponent()
 	{
 		addAndMakeVisible (waves[(size_t) d]);
 		addAndMakeVisible (decks[(size_t) d]);
+		decks[(size_t) d]->addBandPartsTo (*this);
 		waves[(size_t) d]->onSetDropped = [this, d] (const juce::String& id) { loadDroppedSet (id, d); };
 		decks[(size_t) d]->onSetDropped = [this, d] (const juce::String& id) { loadDroppedSet (id, d); };
 		decks[(size_t) d]->onSyncToggled = [this, d] (bool enabled) { setSync (d, enabled); };
@@ -67,6 +69,7 @@ MainComponent::MainComponent()
 	}
 
 	addAndMakeVisible (mixer);
+	mixer.addBandPartsTo (*this);
 	addAndMakeVisible (library);
 
 	library.onLoadSet = [this] (const StemSet& set, int deckIndex) { loadSet (set, deckIndex); };
@@ -276,7 +279,6 @@ void MainComponent::loadSet (const StemSet& set, int deckIndex)
 	thumbs[d]->setSet (set);
 	decks[d]->setSet (set);
 	waves[d]->setTitle (set.name);
-	mixer.strip (deckIndex).setStemNames (set.stemNames);
 	findSteps();
 
 	++loadGeneration[d];
@@ -1455,13 +1457,27 @@ void MainComponent::releaseResources()
 void MainComponent::paint (juce::Graphics& g)
 {
 	g.fillAll (Theme::background);
+	g.setColour (Theme::panel);
+	g.fillRoundedRectangle (bandArea.toFloat(), 6.0f);
+
+	// Each deck's line, from its column's stripe (the column paints that)
+	// down, along the gap and down beside its volume fader, the meters'
+	// side: the output meters stand between the two decks' lines.
+	for (size_t d = 0; d < (size_t) numDecks; ++d)
+	{
+		g.setColour (Theme::deck ((int) d));
+		for (const auto& piece : { deckLines[d].drop, deckLines[d].top, deckLines[d].side })
+			g.fillRect (surface::toJuce (piece));
+	}
 }
 
 void MainComponent::resized()
 {
-	auto area = getLocalBounds().reduced (6);
+	// The sections (SurfaceLayout.h): the top bar; the waveforms with a deck's
+	// pitch column at each outer edge; deck A | mixer | deck B; the library.
+	const auto layout = surface::sections (getWidth(), getHeight());
 
-	auto topBar = area.removeFromTop (30);
+	auto topBar = surface::toJuce (layout.topBar);
 	// The switch at the very right, where A3 Motion has it: the key under the
 	// finger stays put when the workspace changes.
 	const auto switcher = switcherGeometry (getWidth());
@@ -1488,34 +1504,23 @@ void MainComponent::resized()
 	pioPlayer.setBounds (topBar.removeFromRight (90));
 	pioStatus.setBounds (topBar.removeFromRight (220));
 	deviceStatus.setBounds (topBar);
-	area.removeFromTop (4);
 
-	const auto waveHeight = juce::jlimit (90, 170, getHeight() / 8);
-	auto waves = area.removeFromTop (waveHeight * 2 + 3);
-	waveA.setBounds (waves.removeFromTop (waveHeight));
-	waves.removeFromTop (3);
-	waveB.setBounds (waves);
-	area.removeFromTop (6);
-
-	auto middle = area.removeFromTop (juce::jmin (460, area.getHeight() - 150));
-	// 400 at the least, so a deck column keeps ~180 px on the rig's 768 px
-	// screen; it was 460, which left them 154 and cut their right half off.
-	const auto mixerWidth = juce::jlimit (400, 560, getWidth() / 3);
-	const auto deckWidth = (middle.getWidth() - mixerWidth) / 2;
-	deckA.setBounds (middle.removeFromLeft (deckWidth));
-	deckB.setBounds (middle.removeFromRight (deckWidth));
-	mixer.setBounds (middle);
-
-	// The pitch faders line up with the mixer's volume faders.
+	waveA.setBounds (surface::toJuce (layout.waveA));
+	waveB.setBounds (surface::toJuce (layout.waveB));
 	for (int d = 0; d < numDecks; ++d)
-	{
-		const auto fader = getLocalArea (&mixer, mixer.faderArea (d));
-		auto& deck = *decks[(size_t) d];
-		deck.setTempoSpan (fader.getY() - deck.getY(), fader.getBottom() - deck.getY());
-	}
-	area.removeFromTop (6);
+		decks[(size_t) d]->setBounds (surface::toJuce (layout.deck[(size_t) d]));
+	mixer.setBounds (surface::toJuce (layout.mixer));
+	library.setBounds (surface::toJuce (layout.library));
 
-	library.setBounds (area);
+	// The band under the decks and the mixer: their parts, placed here.
+	bandArea = surface::toJuce (layout.band);
+	const auto band = surface::band (layout.band);
+	for (size_t d = 0; d < (size_t) numDecks; ++d)
+	{
+		decks[d]->setBandBounds (band.deck[d]);
+		deckLines[d] = surface::deckLine (layout, band, (int) d);
+	}
+	mixer.setBandBounds (surface::toJuce (band.fader[0]), surface::toJuce (band.fader[1]), surface::toJuce (band.meters));
 }
 
 bool MainComponent::keyPressed (const juce::KeyPress& key)

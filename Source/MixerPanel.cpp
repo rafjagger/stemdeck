@@ -1,5 +1,6 @@
 #include "MixerPanel.h"
 #include "Theme.h"
+#include "SurfaceJuce.h"
 
 namespace
 {
@@ -69,13 +70,13 @@ void LevelMeter::paint (juce::Graphics& g)
 		return juce::Rectangle<float> (bounds.getX() + 1.0f, bounds.getBottom() - segmentHeight * (float) (i + 1),
 									   bounds.getWidth() - 2.0f, segmentHeight - 1.0f);
 	};
-	const auto colourOf = [barSegments] (int i)
+	const auto colourOf = [this, barSegments] (int i)
 	{
 		switch (zoneOfSegment (i, barSegments))
 		{
 			case MeterZone::red:    return clipColour;
 			case MeterZone::yellow: return juce::Colour (0xffe8c33d);
-			case MeterZone::green:  return juce::Colour (0xff3ec46d);
+			case MeterZone::green:  return barColour.value_or (juce::Colour (0xff3ec46d));
 		}
 		return juce::Colour (0xff3ec46d);
 	};
@@ -118,19 +119,15 @@ void OutputMeters::paint (juce::Graphics& g)
 	g.setColour (Theme::panelRaised);
 	g.fillRoundedRectangle (getLocalBounds().toFloat(), 6.0f);
 
-	g.setFont (juce::FontOptions (10.0f, juce::Font::bold));
+	// The bus names under their pairs, a share of the caption line.
+	g.setFont (juce::FontOptions ((float) labelArea.getHeight() * 0.6f, juce::Font::bold));
 
 	for (int bus = 0; bus < numBuses; ++bus)
 	{
-		const auto left = meters[bus * 2]->getBounds();
-		const auto right = meters[bus * 2 + 1]->getBounds();
-		const auto pair = left.getUnion (right);
-
+		const auto pair = meters[bus * 2]->getBounds().getUnion (meters[bus * 2 + 1]->getBounds());
 		g.setColour (bus < buses::aux ? Theme::text : busColour (bus, 0));
-		g.drawText (busName (bus), pair.withY (labelArea.getY()).withHeight (14).expanded (6, 0), juce::Justification::centred);
-		g.setColour (Theme::textDim);
-		g.drawText ("L", left.withY (labelArea.getY() + 14).withHeight (12), juce::Justification::centred);
-		g.drawText ("R", right.withY (labelArea.getY() + 14).withHeight (12), juce::Justification::centred);
+		g.drawText (busName (bus), pair.withY (labelArea.getY()).withHeight (labelArea.getHeight()).expanded (6, 0),
+					juce::Justification::centred);
 	}
 }
 
@@ -139,9 +136,9 @@ void OutputMeters::resized()
 	// Bars top-aligned with the faders; captions below them, level with the
 	// strips' empty bottom line.
 	auto area = getLocalBounds().withTrimmedLeft (4).withTrimmedRight (4);
-	labelArea = area.removeFromBottom (28);
+	labelArea = area.removeFromBottom (surface::meterCaptionHeight (getHeight()));
 
-	const auto pairGap = 5;
+	const auto pairGap = juce::jmax (2, area.getWidth() / 25);
 	const auto meterWidth = (area.getWidth() - pairGap * (numBuses - 1)) / numChannels;
 	auto x = area.getX() + (area.getWidth() - (meterWidth * numChannels + pairGap * (numBuses - 1))) / 2;
 
@@ -199,12 +196,7 @@ ChannelStrip::ChannelStrip (StemDeckPlayer& p, int index) : player (p), deckInde
 			addAndMakeVisible (button);
 		}
 
-		auto* label = stemLabels.add (new juce::Label ({}, "Stem " + juce::String (s + 1)));
-		label->setFont (juce::FontOptions (10.0f, juce::Font::bold));
-		label->setColour (juce::Label::textColourId, Theme::stem (s));
-		label->setJustificationType (juce::Justification::centredLeft);
-		label->setMinimumHorizontalScale (0.45f);   // "3 vocals" in the 400 px mixer
-		addAndMakeVisible (label);
+		stemMeters.add (new LevelMeter())->setBarColour (Theme::stem (s));
 	}
 
 	fader.setRange (minDb, 0.0, 0.1);
@@ -219,20 +211,9 @@ ChannelStrip::ChannelStrip (StemDeckPlayer& p, int index) : player (p), deckInde
 	{
 		player.setDeckGain (juce::Decibels::decibelsToGain ((float) fader.getValue(), minDb));
 	};
-	addAndMakeVisible (fader);
-	addAndMakeVisible (meter);
-}
-
-void ChannelStrip::setStemNames (const std::array<juce::String, StemSet::numStems>& names)
-{
-	for (int s = 0; s < StemSet::numStems; ++s)
-	{
-		// "1 - drums" already carries its number; "DUB" or "Vox" gets one.
-		const auto& name = names[(size_t) s];
-		const auto numbered = juce::CharacterFunctions::isDigit (name[0]);
-		stemLabels[s]->setText (numbered ? name : juce::String (s + 1) + " " + name, juce::dontSendNotification);
-		stemLabels[s]->setTooltip (names[(size_t) s]);
-	}
+	// The deck's four stems metered in the fader's slot, pre-fader: the meters
+	// behind, the fader's ticks and cap drawn over them (2026-10-08).
+	fader.getProperties().set (DJLookAndFeel::meterInSlot, true);
 }
 
 void ChannelStrip::saveState (DeckSession& state) const
@@ -279,12 +260,8 @@ void ChannelStrip::toggleMute (int stem)
 
 void ChannelStrip::refresh()
 {
-	float peak = 0.0f;
-
 	for (int s = 0; s < StemSet::numStems; ++s)
-		peak = juce::jmax (peak, player.popStemPeak (s));
-
-	meter.setLevel (peak);
+		stemMeters[s]->setLevel (player.popStemPeak (s));
 }
 
 void ChannelStrip::paint (juce::Graphics& g)
@@ -293,77 +270,49 @@ void ChannelStrip::paint (juce::Graphics& g)
 	g.setColour (Theme::panelRaised);
 	g.fillRoundedRectangle (bounds, 6.0f);
 
-	auto header = bounds.withHeight (24.0f);
+	// The deck's bar with its name inside, the text a share of the bar.
+	const auto bar = headerArea.toFloat().reduced (headerArea.getHeight() * 0.3f, headerArea.getHeight() * 0.1f);
 	g.setColour (Theme::deck (deckIndex));
-	g.fillRoundedRectangle (header.reduced (6.0f, 4.0f), 3.0f);
+	g.fillRoundedRectangle (bar, bar.getHeight() * 0.2f);
 	g.setColour (juce::Colours::black);
-	g.setFont (juce::FontOptions (14.0f, juce::Font::bold));
-	g.drawText ("DECK " + Theme::deckName (deckIndex), header, juce::Justification::centred);
-
-	for (const auto& frame : stemFrames)
-	{
-		g.setColour (Theme::panel);
-		g.fillRoundedRectangle (frame.toFloat(), 4.0f);
-		g.setColour (Theme::outline);
-		g.drawRoundedRectangle (frame.toFloat().reduced (0.5f), 4.0f, 1.0f);
-	}
+	g.setFont (juce::FontOptions (bar.getHeight() * 0.75f, juce::Font::bold));
+	g.drawText ("DECK " + Theme::deckName (deckIndex), bar, juce::Justification::centred);
 }
 
 void ChannelStrip::resized()
 {
-	auto area = getLocalBounds().reduced (8);
-	area.removeFromTop (24);
-
-	// Four stem rows, each in a frame: [knob][name / mute][bus switches 1 2 3 / 4 A, right-aligned]
-	const auto rowHeight = 52;
-	const auto rowGap = 6;
-	const auto columns = 3;
-	const auto rows = (buses::count + columns - 1) / columns;
-	const auto switchSize = rowHeight / rows;   // square, as big as the row allows
+	const auto layout = surface::channelStrip (surface::fromJuce (getLocalBounds()));
+	headerArea = surface::toJuce (layout.header);
 
 	for (int s = 0; s < StemSet::numStems; ++s)
 	{
-		if (s > 0)
-			area.removeFromTop (rowGap);
-		stemFrames[(size_t) s] = area.removeFromTop (rowHeight + 8);
-		auto row = stemFrames[(size_t) s].reduced (4);
-
-		knobs[s]->setBounds (row.removeFromLeft (rowHeight).withSizeKeepingCentre (rowHeight - 4, rowHeight - 4));
-		row.removeFromLeft (4);
-
-		auto grid = row.removeFromRight (switchSize * columns);
+		const auto& row = layout.stems[(size_t) s];
+		knobs[s]->setBounds (surface::toJuce (row.knob));
+		muteButtons[s]->setBounds (surface::toJuce (row.mute));
 		for (int bus = 0; bus < buses::count; ++bus)
-			busButtons[s * buses::count + bus]->setBounds (juce::Rectangle<int> (grid.getX() + (bus % columns) * switchSize,
-																				 grid.getY() + (bus / columns) * switchSize,
-																				 switchSize, switchSize).reduced (1));
+			busButtons[s * buses::count + bus]->setBounds (surface::toJuce (row.buses[(size_t) bus]));
+	}
+}
 
-		row.removeFromRight (4);
-		// One line high, so a narrow mixer squeezes the name instead of
-		// breaking it ("Ste / m 1" at 400 px).
-		const auto labelRow = row.removeFromTop (row.getHeight() / 2);
-		stemLabels[s]->setBounds (labelRow.withSizeKeepingCentre (labelRow.getWidth(), juce::jmin (labelRow.getHeight(), 16)));
-		muteButtons[s]->setBounds (row.removeFromLeft (28).reduced (0, 2));
-	}
+void ChannelStrip::addFaderTo (juce::Component& parent)
+{
+	for (auto* meter : stemMeters)
+		parent.addAndMakeVisible (meter);   // first: behind the fader
+	parent.addAndMakeVisible (fader);
+}
 
-	// Below: fader and deck meter; the output meters take the side towards
-	// the middle (deck A: right, deck B: left). The bottom line stays free,
-	// where the output meters have their captions, so the fader ends where
-	// the meter bars do.
-	area.removeFromTop (8);
-	meterZone = deckIndex == 0 ? area.removeFromRight (meterReserve) : area.removeFromLeft (meterReserve);
-	area.removeFromBottom (28);
-	// Deck meter on the outer side, mirrored: A left of its fader, B right.
-	if (deckIndex == 0)
-	{
-		meter.setBounds (area.removeFromLeft (10).reduced (0, 4));
-		area.removeFromLeft (4);
-	}
-	else
-	{
-		meter.setBounds (area.removeFromRight (10).reduced (0, 4));
-		area.removeFromRight (4);
-	}
+void ChannelStrip::setFaderBounds (juce::Rectangle<int> area)
+{
 	fader.setBounds (area);
+
+	// The meters fill the slot over the fader's travel: from where the cap's
+	// centre stands at full level to where it stands at the bottom.
+	const auto travel = fader.getLocalBounds().toFloat().reduced (0.0f, DJLookAndFeel::faderCapHeight (fader) / 2.0f);
+	// The four stem meters side by side in the slot, a hairline apart.
+	auto slot = DJLookAndFeel::faderSlot (fader, travel).getSmallestIntegerContainer() + fader.getPosition();
+	const auto width = slot.getWidth() / stemMeters.size();
+	for (auto* meter : stemMeters)
+		meter->setBounds (slot.removeFromLeft (width).withTrimmedRight (1));
 }
 
 //==============================================================================
@@ -381,7 +330,20 @@ MixerPanel::MixerPanel (StemDeckPlayer& playerA, StemDeckPlayer& playerB)
 		};
 	addAndMakeVisible (stripA);
 	addAndMakeVisible (stripB);
-	addAndMakeVisible (outputMeters);   // last: over the strips' inner corners
+}
+
+void MixerPanel::addBandPartsTo (juce::Component& parent)
+{
+	stripA.addFaderTo (parent);
+	stripB.addFaderTo (parent);
+	parent.addAndMakeVisible (outputMeters);
+}
+
+void MixerPanel::setBandBounds (juce::Rectangle<int> faderA, juce::Rectangle<int> faderB, juce::Rectangle<int> meters)
+{
+	stripA.setFaderBounds (faderA);
+	stripB.setFaderBounds (faderB);
+	outputMeters.setBounds (meters);
 }
 
 void MixerPanel::setMeterParameters (MeterParameters parameters)
@@ -440,18 +402,9 @@ void MixerPanel::paint (juce::Graphics& g)
 
 void MixerPanel::resized()
 {
-	auto area = getLocalBounds().reduced (8);
-	const auto gap = 8;
-	const auto metersWidth = 170;
-
-	// The strips meet in the middle; below the stems, each leaves half the
-	// output meters' width free on its inner side, and the meters sit there,
-	// as tall as the faders.
-	const auto width = (area.getWidth() - gap) / 2;
-	for (auto* strip : { &stripA, &stripB })
-		strip->setMeterReserve ((metersWidth - gap) / 2);
-	stripA.setBounds (area.removeFromLeft (width));
-	stripB.setBounds (area.removeFromRight (width));
-	outputMeters.setBounds (stripA.getMeterZone().translated (stripA.getX(), stripA.getY())
-								.getUnion (stripB.getMeterZone().translated (stripB.getX(), stripB.getY())));
+	// The strips meet in the middle; their faders and the output meters are
+	// in the band below (MainComponent).
+	const auto strips = surface::mixerStrips (surface::fromJuce (getLocalBounds()));
+	stripA.setBounds (surface::toJuce (strips[0]));
+	stripB.setBounds (surface::toJuce (strips[1]));
 }

@@ -1,6 +1,7 @@
 find_package(GTest REQUIRED)
 add_executable(stemdeck-tests
     Smoke.cpp
+    WaveformScale.cpp
     Buses.cpp
     Outputs.cpp
     GridEdit.cpp

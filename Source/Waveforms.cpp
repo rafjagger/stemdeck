@@ -1,5 +1,6 @@
 #include "Waveforms.h"
 #include "Theme.h"
+#include "WaveformScale.h"
 
 namespace
 {
@@ -203,9 +204,10 @@ void ScrollingWaveform::paint (juce::Graphics& g)
 	g.fillAll (Theme::background);
 
 	const auto position = player.getPosition();
-	const auto startTime = position - visibleSeconds / 2.0;
-	const auto endTime = position + visibleSeconds / 2.0;
-	const auto pixelsPerSecond = (double) bounds.getWidth() / visibleSeconds;
+	const auto trackSpan = waveformScale::trackSpan (visibleSeconds, player.getEffectiveRate());
+	const auto startTime = position - trackSpan / 2.0;
+	const auto endTime = position + trackSpan / 2.0;
+	const auto pixelsPerSecond = (double) bounds.getWidth() / trackSpan;
 	const auto timeToX = [&] (double t) { return (float) ((t - startTime) * pixelsPerSecond); };
 
 	// Lane separators
@@ -288,7 +290,7 @@ void ScrollingWaveform::mouseDrag (const juce::MouseEvent& e)
 	if (! player.isLoaded())
 		return;
 
-	const auto secondsPerPixel = visibleSeconds / juce::jmax (1, getWidth());
+	const auto secondsPerPixel = waveformScale::trackSpan (visibleSeconds, player.getEffectiveRate()) / juce::jmax (1, getWidth());
 	player.setPosition (dragStartPosition - e.getDistanceFromDragStartX() * secondsPerPixel);
 	repaint();
 }

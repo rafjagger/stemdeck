@@ -83,6 +83,6 @@ private:
 	const int deckIndex;
 	juce::String title;
 
-	double visibleSeconds = 8.0;
+	double visibleSeconds = 8.0;   // wall-clock seconds; see WaveformScale.h
 	double dragStartPosition = 0.0;
 };

@@ -52,6 +52,17 @@ namespace buses
 		return bus == aux ? "AUX" : std::to_string (bus + 1);
 	}
 
+	// A deck's switches left to right, on the screen and on the A³ Motion
+	// panel alike: AUX on the deck's outer side -- the left for A, the right
+	// for B -- so the two decks' matrices mirror each other where AUX is and
+	// a hand finds a stem's channels in the same order on both.
+	inline std::array<int, count> columnOrder (int deck)
+	{
+		if (deck == 0)
+			return { aux, 0, 1, 2, 3 };
+		return { 0, 1, 2, 3, aux };
+	}
+
 	// JACK port base names: deck1 .. deck4 (kept from the four-bus days), aux.
 	inline std::string portName (int bus)
 	{

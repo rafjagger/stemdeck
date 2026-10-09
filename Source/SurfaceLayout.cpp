@@ -287,7 +287,7 @@ namespace surface
 		return c;
 	}
 
-	Strip channelStrip (Rect local)
+	Strip channelStrip (Rect local, int deckIndex)
 	{
 		Strip strip;
 		auto area = local.reduced (local.w / 40);
@@ -295,7 +295,7 @@ namespace surface
 		const auto gap = area.w / 56;
 		area.removeFromTop (gap);
 
-		// [knob] [1 2 3 4 A  M], four rows tight under each other: a matrix.
+		// [knob] [the five switches  M], four rows tight under each other: a matrix.
 		// The knob a seventh of the row, the six keys share the rest and are
 		// as tall as the row, a hairline apart.
 		const auto knobSize = area.w / 7;
@@ -311,8 +311,8 @@ namespace surface
 			inner.removeFromLeft (gap);
 			inner = inner.reduced (0, hairline (rowHeight));
 
-			for (auto& bus : row.buses)
-				bus = inner.removeFromLeft (switchWidth).reduced (hairline (switchWidth), 0);
+			for (const auto bus : buses::columnOrder (deckIndex))
+				row.buses[(size_t) bus] = inner.removeFromLeft (switchWidth).reduced (hairline (switchWidth), 0);
 			inner.removeFromLeft (gap);
 			row.mute = inner.reduced (hairline (switchWidth), 0);
 		}

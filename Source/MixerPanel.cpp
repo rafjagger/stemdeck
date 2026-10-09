@@ -283,7 +283,7 @@ void ChannelStrip::paint (juce::Graphics& g)
 
 void ChannelStrip::resized()
 {
-	const auto layout = surface::channelStrip (surface::fromJuce (getLocalBounds()));
+	const auto layout = surface::channelStrip (surface::fromJuce (getLocalBounds()), deckIndex);
 	headerArea = surface::toJuce (layout.header);
 
 	for (int s = 0; s < StemSet::numStems; ++s)

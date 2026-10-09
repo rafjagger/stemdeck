@@ -82,7 +82,7 @@ namespace
 		for (int d = 0; d < 2; ++d)
 		{
 			const auto stripOrigin = strips[(size_t) d].translated (s.mixer.x, s.mixer.y);
-			const auto strip = surface::channelStrip (Rect { 0, 0, stripOrigin.w, stripOrigin.h });
+			const auto strip = surface::channelStrip (Rect { 0, 0, stripOrigin.w, stripOrigin.h }, d);
 			const auto at = [&] (const Rect& r) { return r.translated (stripOrigin.x, stripOrigin.y); };
 			const auto prefix = "strip" + deckName (d) + ".";
 
@@ -378,7 +378,7 @@ TEST (SurfaceLayout, StemRowsFormAMatrix)
 	{
 		const auto s = surface::sections (w, h);
 		const auto strips = surface::mixerStrips (Rect { 0, 0, s.mixer.w, s.mixer.h });
-		const auto strip = surface::channelStrip (Rect { 0, 0, strips[0].w, strips[0].h });
+		const auto strip = surface::channelStrip (Rect { 0, 0, strips[0].w, strips[0].h }, 0);
 
 		for (size_t r = 0; r < strip.stems.size(); ++r)
 		{
@@ -404,9 +404,34 @@ TEST (SurfaceLayout, StemRowsFormAMatrix)
 
 	const auto s = surface::sections (rigWidth, rigHeight);
 	const auto strips = surface::mixerStrips (Rect { 0, 0, s.mixer.w, s.mixer.h });
-	const auto strip = surface::channelStrip (Rect { 0, 0, strips[0].w, strips[0].h });
+	const auto strip = surface::channelStrip (Rect { 0, 0, strips[0].w, strips[0].h }, 0);
 	EXPECT_LE (strip.stems[0].knob.w, 28) << "half the 48 px knob";
 	EXPECT_GE (strip.stems[0].buses[0].h, 30) << "the keys grew into the freed height";
+}
+
+// The keys in the same order as the panel's pads: deck A [knob] AUX 1 2 3 4
+// M, deck B [knob] 1 2 3 4 AUX M -- AUX on the deck's outer side, mute last.
+TEST (SurfaceLayout, StemRowsPutAuxOnTheOuterSide)
+{
+	for (const auto& [w, h] : windows)
+	{
+		const auto s = surface::sections (w, h);
+		const auto strips = surface::mixerStrips (Rect { 0, 0, s.mixer.w, s.mixer.h });
+		for (int d = 0; d < 2; ++d)
+		{
+			const auto strip = surface::channelStrip (Rect { 0, 0, strips[(size_t) d].w, strips[(size_t) d].h }, d);
+			for (const auto& row : strip.stems)
+			{
+				const std::array<int, 5> leftToRight = d == 0 ? std::array<int, 5> { buses::aux, 0, 1, 2, 3 }
+															  : std::array<int, 5> { 0, 1, 2, 3, buses::aux };
+				for (size_t k = 0; k + 1 < leftToRight.size(); ++k)
+					EXPECT_LE (row.buses[(size_t) leftToRight[k]].right(), row.buses[(size_t) leftToRight[k + 1]].x)
+						<< "deck " << d << ": column " << k << " left of column " << k + 1;
+				EXPECT_LE (row.knob.right(), row.buses[(size_t) leftToRight.front()].x);
+				EXPECT_GE (row.mute.x, row.buses[(size_t) leftToRight.back()].right());
+			}
+		}
+	}
 }
 
 TEST (SurfaceLayout, RectSlicing)

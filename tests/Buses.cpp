@@ -269,3 +269,11 @@ TEST (Buses, AStemLeavesThroughFaderAndTrim)
 	EXPECT_NEAR (20.0f * std::log10 (buses::sendGain (std::pow (10.0f, -10.0f / 20.0f))), -16.02f, 0.01f);
 	EXPECT_FLOAT_EQ (buses::sendGain (0.0f), 0.0f) << "fader closed";
 }
+
+// A deck's switches left to right, on the screen and on the A³ Motion panel
+// alike: AUX on the deck's outer side, the channels in their order inside it.
+TEST (Buses, AuxStandsOnTheDecksOuterSide)
+{
+	EXPECT_EQ (buses::columnOrder (0), (std::array<int, buses::count> { buses::aux, 0, 1, 2, 3 }));
+	EXPECT_EQ (buses::columnOrder (1), (std::array<int, buses::count> { 0, 1, 2, 3, buses::aux }));
+}

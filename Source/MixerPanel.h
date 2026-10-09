@@ -70,6 +70,8 @@ public:
 	ChannelStrip (StemDeckPlayer& player, int deckIndex);
 
 	void toggleMute (int stem);
+	// As a click on the stem's mute button would (the Auto-DJ's handover).
+	void setMuted (int stem, bool muted);
 	void refresh(); // meters, called by the main timer
 	void setMeterParameters (MeterParameters parameters)
 	{
@@ -84,7 +86,7 @@ public:
 	// applies it under the rule; the strip does not touch the player itself.
 	std::function<void (int stem, int bus, bool on)> onBusSwitch;
 
-	// The channel fader, moved as by hand (the Auto-DJ's crossfade).
+	// The channel fader, moved as by hand (the Auto-DJ: unity on a load).
 	void setFaderDb (double db) { fader.setValue (db, juce::sendNotificationSync); }
 	// ... and as a controller's slider does: 0..1 of its travel, with the
 	// on-screen fader's own curve.

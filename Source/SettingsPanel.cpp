@@ -5,6 +5,7 @@ namespace
 {
 	const int barChoices[] = { 4, 8, 16, 32 };
 	const int secondChoices[] = { 5, 10, 15, 20, 30 };
+	constexpr int aboutTwentySecondsItem = 10000;   // a combo box item id must not be 0
 
 	// The choices, and the stored value among them even when it is none of
 	// them (set by hand in the settings file): shown, not lost on OK.
@@ -12,7 +13,7 @@ namespace
 	void fill (juce::ComboBox& box, const int (&choices)[n], int current)
 	{
 		std::vector<int> values (std::begin (choices), std::end (choices));
-		if (std::find (values.begin(), values.end(), current) == values.end())
+		if (current > 0 && std::find (values.begin(), values.end(), current) == values.end())
 			values.push_back (current);
 		std::sort (values.begin(), values.end());
 		for (auto v : values)
@@ -44,10 +45,14 @@ SettingsPanel::SettingsPanel (const Values& values, Actions a)
 	libraryNote.setText ("Artist / Album / sets below it. StemDeck remembers it.", juce::dontSendNotification);
 	addAndMakeVisible (libraryNote);
 
+	fadeBars.addItem (juce::String::fromUTF8 ("\xe2\x89\x88 20 s"), aboutTwentySecondsItem);
 	fill (fadeBars, barChoices, values.autoDjFade.bars);
+	if (values.autoDjFade.bars == AutoDj::aboutTwentySeconds)
+		fadeBars.setSelectedId (aboutTwentySecondsItem, juce::dontSendNotification);
 	fill (fadeSeconds, secondChoices, juce::roundToInt (values.autoDjFade.noGridSeconds));
-	fadeBars.setTooltip ("Auto DJ mixes over this many bars of the playing track; applies to the next mix");
-	fadeSeconds.setTooltip ("Tracks without a beat grid mix over this many seconds; applies to the next mix");
+	fadeBars.setTooltip ("Auto DJ overlaps the tracks for this many bars of the playing track -- or the whole bars "
+						 "nearest 20 s, at least 4 -- and hands the stems over within them; applies to the next mix");
+	fadeSeconds.setTooltip ("Tracks without a beat grid hand over in four steps over this many seconds; applies to the next mix");
 	for (auto* c : { &fadeBars, &fadeSeconds })
 		addAndMakeVisible (c);
 	for (auto* unit : { &fadeBarsUnit, &fadeSecondsUnit })
@@ -118,7 +123,9 @@ void SettingsPanel::ok()
 	if (const auto folder = choice.toApply(); folder && actions.onLibraryFolder)
 		actions.onLibraryFolder (juce::File (juce::String (*folder)));
 
-	const AutoDj::MixLength fade { fadeBars.getSelectedId(), (double) fadeSeconds.getSelectedId() };
+	const auto barsItem = fadeBars.getSelectedId();
+	const AutoDj::MixLength fade { barsItem == aboutTwentySecondsItem ? AutoDj::aboutTwentySeconds : barsItem,
+								   (double) fadeSeconds.getSelectedId() };
 	const auto changed = fade.bars != fadeShown.bars || ! juce::approximatelyEqual (fade.noGridSeconds, fadeShown.noGridSeconds);
 	if (changed && actions.onAutoDjFade)
 		actions.onAutoDjFade (fade);

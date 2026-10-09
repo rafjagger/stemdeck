@@ -16,6 +16,7 @@
 #include "Buses.h"
 #include "Session.h"
 #include "AutoDj.h"
+#include "StemLevels.h"
 #include "Recorder.h"
 #include "Scs3dDevice.h"
 #include "Waveforms.h"
@@ -190,8 +191,15 @@ private:
 	void setAutoDj (bool on);
 	void runAutoDj();
 	const StemSet* autoDjPick (AutoDj::Pick pick, int loadDeck);
-	// The fade, kept in the settings (autoDjMixBars, autoDjMixSeconds).
+	// The mix length, kept in the settings (autoDjOverlapBars, autoDjMixSeconds).
 	void setAutoDjFade (AutoDj::MixLength length);
+	// The stems' envelopes the handover is placed by (StemLevels.h): read in
+	// the background for a deck's set while Auto DJ is on, once per load --
+	// not kept across loads or sessions: the analysis cache is one XML file
+	// rewritten whole, too big a home for thousands of values per set.
+	std::array<std::shared_ptr<const StemHandover::Envelopes>, numDecks> deckLevels;
+	std::array<int, numDecks> levelsGeneration { -1, -1 };
+	void readLevels (int deckIndex);
 
 	// Next / Prev on a deck: the track beside the loaded one in its folder,
 	// loaded straight on; under Auto DJ, on the deck it plays, the mix to it

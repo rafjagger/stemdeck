@@ -44,7 +44,7 @@ private:
 	juce::TextButton chooseButton { juce::String::fromUTF8 ("Choose\xe2\x80\xa6") };
 	juce::Label libraryNote;
 
-	juce::Label fadeLabel { {}, "AutoDJ fade" };
+	juce::Label fadeLabel { {}, "AutoDJ overlap" };
 	juce::ComboBox fadeBars, fadeSeconds;
 	juce::Label fadeBarsUnit { {}, "bars" }, fadeSecondsUnit { {}, "s without beat grid" };
 	AutoDj::MixLength fadeShown;

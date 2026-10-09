@@ -143,7 +143,7 @@ MainComponent::MainComponent()
 	autoDjButton.setClickingTogglesState (true);
 	autoDjButton.setMouseClickGrabsKeyboardFocus (false);
 	autoDjButton.setColour (juce::TextButton::buttonOnColourId, Theme::play);
-	setAutoDjFade ({ settings().getIntValue ("autoDjMixBars", AutoDj::defaultMixBars),
+	setAutoDjFade ({ settings().getIntValue ("autoDjOverlapBars", AutoDj::defaultMixBars),
 					 settings().getDoubleValue ("autoDjMixSeconds", AutoDj::defaultNoGridMixSeconds) });
 	autoDjButton.onClick = [this] { setAutoDj (autoDjButton.getToggleState()); };
 	addAndMakeVisible (autoDjButton);
@@ -862,11 +862,38 @@ void MainComponent::setAutoDjFade (AutoDj::MixLength length)
 {
 	autoDj.setMixLength (length);
 	const auto applied = autoDj.mixLength();
-	settings().setValue ("autoDjMixBars", applied.bars);
+	// The fade's bar count was written on every start whether chosen or not,
+	// so it says nothing about a choice: the overlap starts from its default.
+	settings().removeValue ("autoDjMixBars");
+	settings().setValue ("autoDjOverlapBars", applied.bars);
 	settings().setValue ("autoDjMixSeconds", applied.noGridSeconds);
-	autoDjButton.setTooltip ("Auto DJ: plays at random from the library as searched/filtered and mixes on the beat over "
-							 + juce::String (applied.bars) + " bars (" + juce::String (applied.noGridSeconds, 0)
+	const auto overlap = applied.bars == AutoDj::aboutTwentySeconds ? juce::String ("about 20 s")
+																	: juce::String (applied.bars) + " bars";
+	autoDjButton.setTooltip ("Auto DJ: plays at random from the library as searched/filtered and hands each track to the "
+							 "next stem by stem on the beat, over " + overlap + " (" + juce::String (applied.noGridSeconds, 0)
 							 + " s without a beat grid)");
+}
+
+void MainComponent::readLevels (int deckIndex)
+{
+	const auto d = (size_t) deckIndex;
+	const auto generation = loadGeneration[d];
+	if (levelsGeneration[d] == generation || ! loadedSets[d])
+		return;
+	levelsGeneration[d] = generation;
+	deckLevels[d].reset();
+
+	juce::Component::SafePointer<MainComponent> safeThis (this);
+	analysisPool.addJob ([this, safeThis, set = *loadedSets[d], deckIndex, generation]
+	{
+		auto* job = juce::ThreadPoolJob::getCurrentThreadPoolJob();
+		auto levels = StemLevels::read (set, formatManager, [job] { return job != nullptr && job->shouldExit(); });
+		juce::MessageManager::callAsync ([safeThis, deckIndex, generation, levels]
+		{
+			if (safeThis != nullptr && safeThis->loadGeneration[(size_t) deckIndex] == generation)
+				safeThis->deckLevels[(size_t) deckIndex] = levels;
+		});
+	});
 }
 
 void MainComponent::stepDeck (int deckIndex, int direction)
@@ -921,6 +948,7 @@ void MainComponent::runAutoDj()
 	std::array<AutoDj::DeckView, numDecks> views;
 	for (int d = 0; d < numDecks; ++d)
 	{
+		readLevels (d);
 		const auto& player = *players[(size_t) d];
 		auto& view = views[(size_t) d];
 		const auto grid = player.getBeatGrid();
@@ -932,6 +960,9 @@ void MainComponent::runAutoDj()
 		view.firstBeat = grid.firstBeat;
 		view.rate = player.getEffectiveRate();
 		view.looping = player.hasLoop();
+		for (int s = 0; s < AutoDj::numStems; ++s)
+			view.muted[(size_t) s] = player.isStemMuted (s);
+		view.levels = deckLevels[(size_t) d].get();
 	}
 
 	const auto c = autoDj.update (views);
@@ -956,8 +987,15 @@ void MainComponent::runAutoDj()
 	}
 
 	for (int d = 0; d < numDecks; ++d)
+	{
 		if (const auto db = c.faderDb[(size_t) d])
 			mixer.strip (d).setFaderDb (*db);
+		// Through the mute buttons, as a click: the player, the screen, the
+		// controller's lights and the session all see it as a DJ's mute.
+		for (int s = 0; s < AutoDj::numStems; ++s)
+			if (const auto muted = c.mute[(size_t) d][(size_t) s])
+				mixer.strip (d).setMuted (s, *muted);
+	}
 
 	if (c.syncOn >= 0)
 	{

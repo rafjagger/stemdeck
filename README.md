@@ -54,6 +54,16 @@ ctest --test-dir build
 `ctest` runs what was built; it does not build. The Python tools have their own tests:
 `python3 -m unittest discover -s tools/tests`.
 
+How often the analysis finds the bar's one where a DJ put it by hand: with the tests configured,
+`cmake --build build --target stemdeck-downbeat-eval` builds a measuring tool (not part of `ctest`,
+it needs real tracks) that reads the corrected grids from an `analysis.xml` and analyses the sets
+it finds under a stems folder again:
+
+```sh
+build/tools/downbeat-eval/stemdeck-downbeat-eval_artefacts/Release/stemdeck-downbeat-eval \
+    ~/.config/StemDeck/analysis.xml ~/stems [folder for decoded audio] [-v]
+```
+
 ## Controller, GRID, AUTO DJ, session
 
 The Stanton SCS.3d mapping, GRID, AUTO DJ, the MASTER handover and the session restore are in

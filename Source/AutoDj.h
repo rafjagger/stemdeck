@@ -32,6 +32,15 @@
 //     thirds in, vocals at the end as the old deck stops.
 //   - The old deck stops on no bus. Turning AutoDJ off leaves the routing as
 //     it is, the DJ's to carry on from.
+//   - A track is where it is heard (StemHandover::audibleSpan), once its
+//     levels are read: the old one ends at its audible end -- the vocals
+//     change over, and the deck stops, on the downbeat closing the bar it
+//     ends in -- and the load ahead counts from there. The new one starts on
+//     the first downbeat of its sound: the downbeat it starts on (within a
+//     tenth of a second), the one before when it starts in a bar's last beat
+//     (a pickup, heard whole), else the next one. Without a grid, at its
+//     audible start. Until the levels are there, the file's start and end;
+//     a mix waits up to a few seconds for the new track's.
 // Next / Prev on the playing deck mixes now: the track beside it onto the
 // other deck and the same handover from the next downbeat, not waiting for
 // the end; the vocals change over and the old deck stops at the overlap's end.
@@ -52,6 +61,8 @@ public:
 		double firstBeat = 0.0;
 		double rate = 1.0;       // track seconds per second (tempo fader and sync)
 		bool looping = false;
+		std::optional<double> audibleStart, audibleEnd;   // track seconds, once known
+		bool levelsPending = false;                       // being read
 		const StemHandover::Envelopes* levels = nullptr;   // the loaded track's, once analysed
 	};
 
@@ -68,7 +79,8 @@ public:
 	{
 		int load = -1;               // a new track onto this deck
 		Pick loadPick = Pick::random;
-		int start = -1;              // play this deck from its first downbeat (or the start)
+		int start = -1;              // play this deck from `startAt`
+		double startAt = 0.0;        // track seconds
 		int stop = -1;
 		int syncOn = -1, syncOff = -1;
 		std::array<std::optional<double>, 2> faderDb;
@@ -89,6 +101,8 @@ public:
 	static constexpr double overlapSeconds = 20.0;
 	static constexpr double defaultNoGridMixSeconds = 10.0;
 	static constexpr double loadAheadSeconds = 30.0;
+	static constexpr double maxLevelsWait = 6.0;    // seconds a mix waits for the new track's levels
+	static constexpr double onTheDownbeat = 0.1;    // a sound this soon after a downbeat starts on it
 
 	void setEnabled (bool on);
 	bool isEnabled() const { return enabled; }
@@ -121,9 +135,12 @@ private:
 		// Unsynced: the old track's seconds.
 		double start = 0.0, length = 0.0;
 		std::array<bool, numStems> handedOver {};
+		double incomingStart = 0.0;   // where the new track started, a downbeat on its grid
 	};
 
 	static int overlapBars (const DeckView& deck, MixLength length);
+	static double audibleEnd (const DeckView& deck);
+	static double startPosition (const DeckView& deck);
 	// The mix in the playing track's own seconds.
 	static double mixSeconds (const DeckView& deck, bool synced, MixLength length);
 	bool takeRequest (Commands& out);
@@ -147,4 +164,5 @@ private:
 	bool otherLoops = false;         // seen at the last update
 	Mix mix;
 	double lastIncomingPosition = 0.0;
+	double levelsWaitFrom = -1.0;     // the playing track's position when the wait began
 };

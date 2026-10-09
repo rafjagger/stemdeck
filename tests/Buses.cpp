@@ -336,13 +336,13 @@ TEST (Buses, AManualSwitchNeverPutsAStemOff)
 TEST (Buses, WhileTheAutoDjPlaysTheSparePlaceIsOff)
 {
 	const auto masks = autoDjDeckAOn14();
-	const auto displaced = buses::applySwitch (masks, 6, 0, true, buses::Spare::off);
+	const auto displaced = buses::applySwitch (masks, 6, 0, true, buses::Spare::toOff);
 	EXPECT_EQ (displaced[6], onBus (0));
 	EXPECT_EQ (displaced[0], buses::offMask) << "A's drums, displaced, go off";
 
-	const auto takenOff = buses::applySwitch (masks, 1, 1, false, buses::Spare::off);
+	const auto takenOff = buses::applySwitch (masks, 1, 1, false, buses::Spare::toOff);
 	EXPECT_EQ (takenOff[1], buses::offMask);
 
-	EXPECT_EQ (buses::applySwitch (masks, 4, buses::aux, true, buses::Spare::off), masks) << "AUX on is refused";
-	EXPECT_EQ (stemsOn (buses::applySwitch (masks, 2, buses::aux, true, buses::Spare::off), buses::aux), 0);
+	EXPECT_EQ (buses::applySwitch (masks, 4, buses::aux, true, buses::Spare::toOff), masks) << "AUX on is refused";
+	EXPECT_EQ (stemsOn (buses::applySwitch (masks, 2, buses::aux, true, buses::Spare::toOff), buses::aux), 0);
 }

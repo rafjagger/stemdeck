@@ -31,7 +31,7 @@ namespace buses
 
 	// Where a switch sends a stem it takes off its channel: AUX, or, while
 	// the Auto-DJ plays, off.
-	enum class Spare { aux, off };
+	enum class Spare { toAux, toOff };
 
 	// Which buses a stem starts on: the aux return only.
 	constexpr unsigned defaultMask (int) { return 1u << aux; }
@@ -77,13 +77,13 @@ namespace buses
 
 	using Masks = std::array<unsigned, stemCount>;
 
-	constexpr unsigned spareMask (Spare spare) { return spare == Spare::aux ? 1u << aux : offMask; }
+	constexpr unsigned spareMask (Spare spare) { return spare == Spare::toAux ? 1u << aux : offMask; }
 
 	// Any state brought into the rule. In stem order (deck A stems 1-4, then
 	// deck B stems 1-4) the first stem on a bus keeps it; a stem on several
 	// keeps the lowest one still free; an off stem stays off; every other
 	// stem goes to the spare place.
-	inline Masks normalise (const Masks& masks, Spare spare = Spare::aux)
+	inline Masks normalise (const Masks& masks, Spare spare = Spare::toAux)
 	{
 		Masks result {};
 		unsigned taken = 0;
@@ -110,7 +110,7 @@ namespace buses
 	// since a switch never puts a stem off. While the Auto-DJ plays (spare
 	// off), AUX on is refused instead and AUX off puts the stem off. A switch
 	// out of range changes nothing.
-	inline Masks applySwitch (const Masks& masks, int stem, int bus, bool on, Spare spare = Spare::aux)
+	inline Masks applySwitch (const Masks& masks, int stem, int bus, bool on, Spare spare = Spare::toAux)
 	{
 		if (stem < 0 || stem >= stemCount || bus < 0 || bus >= count)
 			return masks;
@@ -121,9 +121,9 @@ namespace buses
 
 		if (bus == aux)
 		{
-			if (spare == Spare::aux && on)
+			if (spare == Spare::toAux && on)
 				mask = bit;
-			if (spare == Spare::off && ! on && mask == bit)
+			if (spare == Spare::toOff && ! on && mask == bit)
 				mask = offMask;
 			return result;
 		}

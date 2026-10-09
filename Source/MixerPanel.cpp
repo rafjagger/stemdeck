@@ -386,6 +386,8 @@ std::vector<int> MixerPanel::switchBus (int deck, int stem, int bus, bool on)
 	// Every strip re-shown, also when nothing changed: a refused click (AUX
 	// off) has already toggled its button and must toggle back.
 	setBusMasks (after);
+	if (onDjSwitch)
+		onDjSwitch (deck, stem, bus, on);
 	return buses::toReport (before, after, switched);
 }
 

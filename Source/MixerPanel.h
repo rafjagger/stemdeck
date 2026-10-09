@@ -142,6 +142,9 @@ public:
 	void normaliseBuses();
 	// Called for every stem a click moved, the clicked one included.
 	std::function<void (int deck, int stem)> onBusesChanged;
+	// Called for every switch a DJ made (switchBus: a click, the desk, the
+	// panel), after it was applied -- not for the Auto-DJ's route().
+	std::function<void (int deck, int stem, int bus, bool on)> onDjSwitch;
 
 	// The volume faders and the output meters, in the band under the mixer:
 	// made children of `parent`, placed by it.

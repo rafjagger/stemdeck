@@ -884,16 +884,21 @@ void MainComponent::readLevels (int deckIndex)
 		return;
 	levelsGeneration[d] = generation;
 	deckLevels[d].reset();
+	deckSpans[d].reset();
 
 	juce::Component::SafePointer<MainComponent> safeThis (this);
 	analysisPool.addJob ([this, safeThis, set = *loadedSets[d], deckIndex, generation]
 	{
 		auto* job = juce::ThreadPoolJob::getCurrentThreadPoolJob();
 		auto levels = StemLevels::read (set, formatManager, [job] { return job != nullptr && job->shouldExit(); });
-		juce::MessageManager::callAsync ([safeThis, deckIndex, generation, levels]
+		const auto span = levels != nullptr ? StemHandover::audibleSpan (*levels) : std::nullopt;
+		juce::MessageManager::callAsync ([safeThis, deckIndex, generation, levels, span]
 		{
-			if (safeThis != nullptr && safeThis->loadGeneration[(size_t) deckIndex] == generation)
-				safeThis->deckLevels[(size_t) deckIndex] = levels;
+			if (safeThis == nullptr || safeThis->loadGeneration[(size_t) deckIndex] != generation)
+				return;
+			safeThis->deckLevels[(size_t) deckIndex] = levels;
+			safeThis->deckSpans[(size_t) deckIndex] = span;
+			safeThis->levelsRead[(size_t) deckIndex] = generation;
 		});
 	});
 }
@@ -963,6 +968,13 @@ void MainComponent::runAutoDj()
 		view.rate = player.getEffectiveRate();
 		view.looping = player.hasLoop();
 		view.levels = deckLevels[(size_t) d].get();
+		if (const auto& span = deckSpans[(size_t) d])
+		{
+			view.audibleStart = span->start;
+			view.audibleEnd = span->end;
+		}
+		view.levelsPending = levelsGeneration[(size_t) d] == loadGeneration[(size_t) d]
+						  && levelsRead[(size_t) d] != loadGeneration[(size_t) d];
 	}
 
 	const auto c = autoDj.update (views);
@@ -1009,8 +1021,7 @@ void MainComponent::runAutoDj()
 	if (c.start >= 0)
 	{
 		auto& player = *players[(size_t) c.start];
-		const auto grid = player.getBeatGrid();
-		player.setPosition (grid.isValid() ? grid.firstBeat : 0.0);
+		player.setPosition (c.startAt);
 		player.play();
 	}
 

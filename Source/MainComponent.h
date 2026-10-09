@@ -198,7 +198,8 @@ private:
 	// not kept across loads or sessions: the analysis cache is one XML file
 	// rewritten whole, too big a home for thousands of values per set.
 	std::array<std::shared_ptr<const StemHandover::Envelopes>, numDecks> deckLevels;
-	std::array<int, numDecks> levelsGeneration { -1, -1 };
+	std::array<std::optional<StemHandover::Span>, numDecks> deckSpans;   // where each is heard
+	std::array<int, numDecks> levelsGeneration { -1, -1 }, levelsRead { -1, -1 };
 	void readLevels (int deckIndex);
 
 	// Next / Prev on a deck: the track beside the loaded one in its folder,

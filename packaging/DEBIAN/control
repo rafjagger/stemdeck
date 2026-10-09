@@ -4,7 +4,7 @@ Architecture: amd64
 Maintainer: Rafjagger
 Section: sound
 Priority: optional
-Depends: ${shlibs:Depends}, jack-example-tools, xdotool, x11-xserver-utils, x11-utils, python3, onboard
+Depends: ${shlibs:Depends}, librubberband3, jack-example-tools, xdotool, x11-xserver-utils, x11-utils, python3, onboard
 Recommends: i3
 Description: StemDeck, the stem player of the A3 system
  Four decks of stems over JACK, a FLAC recorder on the JACK inputs

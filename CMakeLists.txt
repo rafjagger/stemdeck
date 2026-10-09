@@ -26,6 +26,8 @@ find_package(JUCE CONFIG REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(AUDIO_CODECS REQUIRED IMPORTED_TARGET flac vorbisenc vorbisfile vorbis ogg)
 pkg_check_modules(JACK REQUIRED IMPORTED_TARGET jack)
+# Key lock: Rubber Band's real-time stretcher (librubberband-dev; at run time librubberband3).
+pkg_check_modules(RUBBERBAND REQUIRED IMPORTED_TARGET rubberband)
 
 juce_add_gui_app(StemDeck
     PRODUCT_NAME "StemDeck")
@@ -58,6 +60,8 @@ target_sources(StemDeck PRIVATE
     Source/Theme.cpp
     Source/StemSet.cpp
     Source/StemDeckPlayer.cpp
+    Source/KeyLock.cpp
+    Source/KeyLockStretcher.cpp
     Source/Waveforms.cpp
     Source/DeckPanel.cpp
     Source/JogWheel.cpp
@@ -112,6 +116,7 @@ target_link_libraries(StemDeck
         juce::juce_dsp
         PkgConfig::AUDIO_CODECS
         PkgConfig::JACK
+        PkgConfig::RUBBERBAND
     PUBLIC
         juce::juce_recommended_config_flags
         juce::juce_recommended_lto_flags

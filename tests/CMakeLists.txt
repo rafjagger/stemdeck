@@ -50,7 +50,11 @@ add_executable(stemdeck-tests
     SurfaceLayout.cpp
     ${CMAKE_SOURCE_DIR}/Source/SurfaceLayout.cpp
     LibraryFolders.cpp
-    ${CMAKE_SOURCE_DIR}/Source/LibraryFolders.cpp)
+    ${CMAKE_SOURCE_DIR}/Source/LibraryFolders.cpp
+    KeyLock.cpp
+    ${CMAKE_SOURCE_DIR}/Source/KeyLock.cpp
+    KeyLockStretcher.cpp
+    ${CMAKE_SOURCE_DIR}/Source/KeyLockStretcher.cpp)
 target_include_directories(stemdeck-tests PRIVATE ${CMAKE_SOURCE_DIR}/Source)
 
 # Debian keeps upstream file times, so make cannot see that libgtest-dev was
@@ -69,6 +73,6 @@ add_custom_target(stemdeck-gtest-stamp
 add_dependencies(stemdeck-tests stemdeck-gtest-stamp)
 target_compile_options(stemdeck-tests PRIVATE -include ${gtest_stamp_header})
 target_compile_features(stemdeck-tests PRIVATE cxx_std_17)
-target_link_libraries(stemdeck-tests PRIVATE GTest::gtest GTest::gtest_main)
+target_link_libraries(stemdeck-tests PRIVATE GTest::gtest GTest::gtest_main PkgConfig::RUBBERBAND)
 include(GoogleTest)
 gtest_discover_tests(stemdeck-tests)

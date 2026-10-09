@@ -15,7 +15,7 @@ DEBIAN = REPO / "packaging/DEBIAN"
 STAGE = REPO / "packaging/stage"
 UNIT = REPO / ".config/systemd/user/stemdeck.service"
 EXTRA_DEPENDS = ("jack-example-tools", "xdotool", "x11-xserver-utils", "x11-utils",
-                 "python3", "onboard")
+                 "python3", "onboard", "librubberband3")
 TOOLS = ("a3-wait-for-the-screen", "rig-keep-the-screen.sh", "setup-separator.sh",
          "zita-from-truth.py", "stemdeck-seed")
 

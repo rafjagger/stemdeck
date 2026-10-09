@@ -222,3 +222,15 @@ TEST (BarPhase, KeptBeatsAreNeverMoved)
 	const auto beatsFromGrid = (result.firstDownbeat - offBeat) / beat;
 	EXPECT_NEAR (beatsFromGrid, std::round (beatsFromGrid), 1e-9);
 }
+
+TEST (BarPhase, ACachedGridOnTheOffBeatMovesOntoTheKick)
+{
+	const auto found = BarPhase::foundAgain (fourToTheFloor(), bpm, firstGridBeat + beat / 2);
+	EXPECT_NEAR (found, firstDownbeat, 1e-6) << "half a beat onto the kick, then the one";
+}
+
+TEST (BarPhase, ACachedGridOnTheKickKeepsItsBeats)
+{
+	const auto found = BarPhase::foundAgain (fourToTheFloor(), bpm, firstGridBeat);
+	EXPECT_NEAR (found, firstDownbeat, 1e-6);
+}

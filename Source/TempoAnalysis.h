@@ -28,8 +28,9 @@ namespace TempoAnalysis
 	BeatGrid analyse (const StemSet& set, juce::AudioFormatManager& formatManager,
 					  const std::function<bool()>& shouldAbort = [] { return false; });
 
-	// The bar's one found anew for a grid whose beats are kept: tempo and beat
-	// phase stay, the first beat moves by whole beats. Invalid if aborted.
+	// A cached grid's one found anew: the tempo stays, the beats move half a
+	// beat onto the kick if they were between, the first beat onto the one.
+	// Invalid if aborted.
 	BeatGrid redetectDownbeat (const StemSet& set, juce::AudioFormatManager& formatManager, const BeatGrid& grid,
 							   const std::function<bool()>& shouldAbort = [] { return false; });
 
@@ -72,7 +73,8 @@ public:
 	// A grid analysed before the one was found from the stems, never
 	// corrected by hand: its one is to be found again (CachedGrid.h).
 	bool needsNewDownbeat (const StemSet& set) const;
-	// The analysed grid's one, found again; a correction made meanwhile wins.
+	// The analysed grid's first beat, found again -- the one, and the beats
+	// moved onto the kick with it; a correction made meanwhile wins.
 	void storeNewDownbeat (const StemSet& set, double firstBeat);
 	// Corrections are many small steps (the jog): kept in memory, written here.
 	void flush();

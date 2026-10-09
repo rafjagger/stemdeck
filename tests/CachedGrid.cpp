@@ -53,3 +53,10 @@ TEST (CachedGrid, ACorrectionMadeMeanwhileWins)
 	EXPECT_DOUBLE_EQ (after.firstBeat, 0.31);
 	EXPECT_EQ (after.version, 1) << "found again should the correction be reset";
 }
+
+TEST (CachedGrid, TheNewFirstBeatCarriesBeatsMovedOntoTheKick)
+{
+	// 126 BPM: a beat is 0.476 s; 0.31 + 2.5 beats is off the old beats.
+	const auto moved = 0.31 + 2.5 * 60.0 / 126.0;
+	EXPECT_DOUBLE_EQ (CachedGrid::withNewDownbeat (analysedBefore(), moved).firstBeat, moved);
+}

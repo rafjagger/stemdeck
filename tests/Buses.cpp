@@ -99,7 +99,7 @@ namespace
 		{
 			const auto mask = masks[stem];
 			EXPECT_EQ (mask & ~buses::allMask, 0u) << "stem " << stem;
-			EXPECT_EQ (__builtin_popcount (mask), 1) << "stem " << stem << " is on exactly one bus";
+			EXPECT_LE (__builtin_popcount (mask), 1) << "stem " << stem << " is on one bus at most";
 		}
 	}
 }
@@ -196,21 +196,21 @@ TEST (Buses, AnythingOutOfRangeChangesNothing)
 // A session saved before 2026-10-07 could have several stems on one bus, one
 // stem on several buses, a stem on a channel and AUX, or a stem on nothing.
 // It loads into the rule: in the order A1-A4, B1-B4, the first stem on a bus
-// keeps it; a stem on several keeps the lowest one still free; everything
-// else goes to AUX.
+// keeps it; a stem on several keeps the lowest one still free; a stem on
+// nothing stays on nothing (the Auto-DJ's "off"); everything else goes to AUX.
 TEST (Buses, ALegacySessionLoadsIntoTheRule)
 {
 	const buses::Masks legacy {
 		onBus (0) | onAux,           // A1: bus 1 and AUX -> bus 1
 		onBus (0),                   // A2: bus 1, taken -> AUX
 		onBus (1) | onBus (2),       // A3: buses 2 and 3 -> bus 2
-		0u,                          // A4: nowhere -> AUX
+		0u,                          // A4: nowhere -> stays nowhere
 		onBus (1) | onBus (2),       // B1: 2 taken, 3 free -> bus 3
 		onBus (3) | (1u << 5),       // B2: bus 4 plus the old CUE bit -> bus 4
 		onAux,                       // B3: AUX stays
 		onBus (3),                   // B4: bus 4, taken -> AUX
 	};
-	const buses::Masks expected { onBus (0), onAux, onBus (1), onAux, onBus (2), onBus (3), onAux, onAux };
+	const buses::Masks expected { onBus (0), onAux, onBus (1), buses::offMask, onBus (2), onBus (3), onAux, onAux };
 
 	const auto after = buses::normalise (legacy);
 	EXPECT_EQ (after, expected);
@@ -268,4 +268,81 @@ TEST (Buses, AStemLeavesThroughFaderAndTrim)
 	EXPECT_FLOAT_EQ (buses::sendGain (1.0f), 0.5f) << "top of the fader: the trim alone";
 	EXPECT_NEAR (20.0f * std::log10 (buses::sendGain (std::pow (10.0f, -10.0f / 20.0f))), -16.02f, 0.01f);
 	EXPECT_FLOAT_EQ (buses::sendGain (0.0f), 0.0f) << "fader closed";
+}
+
+// Off: on no bus at all, silent -- the Auto-DJ's place for a stem not yet (or
+// no longer) playing. A manual switch never puts a stem there, but leaves one
+// that is there alone.
+namespace
+{
+	buses::Masks autoDjDeckAOn14()
+	{
+		auto masks = allOnAux();
+		masks = buses::route (masks, { { 0, 0 }, { 1, 1 }, { 2, 2 }, { 3, 3 },
+									   { 4, buses::off }, { 5, buses::off }, { 6, buses::off }, { 7, buses::off } });
+		return masks;
+	}
+}
+
+TEST (Buses, TheAutoDjRoutesADecksStemsOntoTheirBusesAndTheOtherOff)
+{
+	const auto masks = autoDjDeckAOn14();
+	for (int s = 0; s < 4; ++s)
+	{
+		EXPECT_EQ (masks[(size_t) s], onBus (s));
+		EXPECT_EQ (masks[(size_t) (4 + s)], buses::offMask);
+	}
+	EXPECT_EQ (stemsOn (masks, buses::aux), 0);
+	expectTheRule (masks);
+}
+
+TEST (Buses, AHandoverTakesTheOldStemOffNotToAux)
+{
+	// B's bass onto bus 2 first: A's bass, displaced, goes off.
+	const auto masks = buses::route (autoDjDeckAOn14(), { { 5, 1 }, { 1, buses::off } });
+	EXPECT_EQ (masks[5], onBus (1));
+	EXPECT_EQ (masks[1], buses::offMask);
+	EXPECT_EQ (stemsOn (masks, buses::aux), 0);
+	const auto otherOrder = buses::route (autoDjDeckAOn14(), { { 1, buses::off }, { 5, 1 } });
+	EXPECT_EQ (otherOrder, masks) << "the order inside one handover does not matter";
+}
+
+TEST (Buses, ARouteOutOfRangeChangesNothing)
+{
+	const auto masks = autoDjDeckAOn14();
+	EXPECT_EQ (buses::route (masks, { { -1, 0 }, { 8, 0 }, { 0, buses::aux }, { 0, 7 } }), masks);
+}
+
+TEST (Buses, AnOffStemSurvivesAManualSwitchElsewhere)
+{
+	auto masks = autoDjDeckAOn14();
+	masks = buses::applySwitch (masks, 0, buses::aux, true);   // the DJ sends A's drums to AUX
+	EXPECT_EQ (masks[0], onAux);
+	EXPECT_EQ (masks[4], buses::offMask) << "B's drums stay off";
+	EXPECT_EQ (buses::normalise (masks), masks);
+}
+
+TEST (Buses, AManualSwitchNeverPutsAStemOff)
+{
+	auto masks = buses::applySwitch (allOnAux(), 2, 1, true);
+	masks = buses::applySwitch (masks, 2, 1, false);
+	EXPECT_EQ (masks[2], onAux);
+	EXPECT_EQ (buses::applySwitch (allOnAux(), 2, buses::aux, false), allOnAux()) << "AUX off is still refused";
+	// An off stem switched onto AUX by hand plays there, as before.
+	EXPECT_EQ (buses::applySwitch (autoDjDeckAOn14(), 6, buses::aux, true)[6], onAux);
+}
+
+// While the Auto-DJ plays, nothing goes to AUX: the spare place is off.
+TEST (Buses, WhileTheAutoDjPlaysTheSparePlaceIsOff)
+{
+	const auto masks = autoDjDeckAOn14();
+	const auto displaced = buses::applySwitch (masks, 6, 0, true, buses::Spare::off);
+	EXPECT_EQ (displaced[6], onBus (0));
+	EXPECT_EQ (displaced[0], buses::offMask) << "A's drums, displaced, go off";
+
+	const auto takenOff = buses::applySwitch (masks, 1, 1, false, buses::Spare::off);
+	EXPECT_EQ (takenOff[1], buses::offMask);
+
+	EXPECT_EQ (buses::applySwitch (masks, 4, buses::aux, true, buses::Spare::off), masks) << "AUX on is refused";
+	EXPECT_EQ (stemsOn (buses::applySwitch (masks, 2, buses::aux, true, buses::Spare::off), buses::aux), 0);
 }

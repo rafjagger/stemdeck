@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstddef>
+#include <optional>
 #include <vector>
 
 // Where the Auto-DJ hands a stem over from the old track to the new one.
@@ -82,6 +83,20 @@ namespace StemHandover
 	{
 		int bass = 0, other = 0;
 	};
+	// Where a track is heard, in its own seconds: from the first sound of all
+	// four stems together to the last, the silence around it left out.
+	// "Heard" is less than 50 dB under the track's loud parts (the level 95 %
+	// of it stays under) -- a fade-out counts until it is that far down -- and
+	// sustained: at least 0.3 s of the following (or, for the end, the
+	// preceding) second, so a click in the silence is not the track. Nothing
+	// when there is nothing to hear.
+	struct Span
+	{
+		double start = 0.0, end = 0.0;
+	};
+	constexpr double audibleBelowLoudDb = 50.0;
+	std::optional<Span> audibleSpan (const Envelopes& stems);
+
 	Pair chooseBassAndOther (const Envelopes& oldStems, const Envelopes& newStems,
 							 const std::vector<Downbeat>& downbeats, int endBar, double windowSeconds);
 }

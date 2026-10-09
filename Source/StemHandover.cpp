@@ -117,6 +117,53 @@ namespace StemHandover
 		return candidates[(std::size_t) (best - costs.begin())].bar;
 	}
 
+	std::optional<Span> audibleSpan (const Envelopes& stems)
+	{
+		const auto hop = stems[0].hop;
+		std::size_t length = 0;
+		for (const auto& e : stems)
+			length = std::max (length, e.rms.size());
+		if (length == 0 || hop <= 0.0)
+			return std::nullopt;
+
+		std::vector<float> summed (length, 0.0f);
+		for (std::size_t i = 0; i < length; ++i)
+		{
+			double squares = 0.0;
+			for (const auto& e : stems)
+				if (i < e.rms.size())
+					squares += (double) e.rms[i] * e.rms[i];
+			summed[i] = (float) std::sqrt (squares);
+		}
+
+		auto sorted = summed;
+		const auto loudIndex = (std::size_t) (0.95 * (double) (length - 1));
+		std::nth_element (sorted.begin(), sorted.begin() + (std::ptrdiff_t) loudIndex, sorted.end());
+		const auto loud = sorted[loudIndex];
+		if (loud <= 1.0e-6f)
+			return std::nullopt;
+		const auto threshold = loud * (float) std::pow (10.0, -audibleBelowLoudDb / 20.0);
+
+		// heard[i]: hops above the threshold before hop i.
+		std::vector<std::size_t> heard (length + 1, 0);
+		for (std::size_t i = 0; i < length; ++i)
+			heard[i + 1] = heard[i] + (summed[i] > threshold ? 1 : 0);
+
+		const auto second = (std::size_t) std::max (1L, std::lround (1.0 / hop));
+		const auto sustained = (std::size_t) std::max (1L, std::lround (0.3 / hop));
+
+		std::optional<std::size_t> first, last;
+		for (std::size_t i = 0; i < length && ! first; ++i)
+			if (summed[i] > threshold && heard[std::min (length, i + second)] - heard[i] >= sustained)
+				first = i;
+		for (std::size_t j = length; j-- > 0 && ! last;)
+			if (summed[j] > threshold && heard[j + 1] - heard[j + 1 >= second ? j + 1 - second : 0] >= sustained)
+				last = j;
+		if (! first || ! last || *last < *first)
+			return std::nullopt;
+		return Span { (double) *first * hop, (double) (*last + 1) * hop };
+	}
+
 	Pair chooseBassAndOther (const Envelopes& oldStems, const Envelopes& newStems,
 							 const std::vector<Downbeat>& downbeats, int endBar, double windowSeconds)
 	{

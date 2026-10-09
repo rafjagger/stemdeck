@@ -153,3 +153,88 @@ TEST (StemHandover, AShortOverlapStillGivesTwoDownbeats)
 	EXPECT_LE (one.bass, 1);
 	EXPECT_EQ (one.other, 1);
 }
+
+// Where a track is heard: from the first sustained sound to the last, the
+// silence around it left out.
+namespace
+{
+	Envelopes onlyDrums (const Envelope& drums)
+	{
+		Envelopes stems;
+		stems[0] = drums;
+		for (size_t s = 1; s < stems.size(); ++s)
+			stems[s].rms.assign (drums.rms.size(), 0.0f);
+		return stems;
+	}
+
+	void setLevel (Envelope& e, double from, double to, float level)
+	{
+		for (auto i = (size_t) std::lround (from / e.hop); i < (size_t) std::lround (to / e.hop) && i < e.rms.size(); ++i)
+			e.rms[i] = level;
+	}
+
+	float db (double decibels) { return (float) std::pow (10.0, decibels / 20.0); }
+}
+
+TEST (StemHandover, LeadingAndTrailingSilenceAreNotTheTrack)
+{
+	auto drums = steady (100.0);
+	silence (drums, 0.0, 5.0);
+	silence (drums, 90.0, 100.0);
+	const auto span = audibleSpan (onlyDrums (drums));
+	ASSERT_TRUE (span);
+	EXPECT_NEAR (span->start, 5.0, 0.06);
+	EXPECT_NEAR (span->end, 90.0, 0.06);
+}
+
+TEST (StemHandover, AFadeOutIsHeardUntilFiftyDecibelsDown)
+{
+	// Steady to 60 s, then a fade of 80 dB over 20 s: 50 dB down at 72.5 s.
+	auto drums = steady (100.0, 0.5f);
+	for (auto i = (size_t) std::lround (60.0 / drums.hop); i < drums.rms.size(); ++i)
+	{
+		const auto t = i * drums.hop - 60.0;
+		drums.rms[i] = t < 20.0 ? 0.5f * db (-80.0 * t / 20.0) : 0.0f;
+	}
+	const auto span = audibleSpan (onlyDrums (drums));
+	ASSERT_TRUE (span);
+	EXPECT_NEAR (span->end, 72.5, 0.2);
+}
+
+TEST (StemHandover, AQuietIntroIsNotSilence)
+{
+	auto drums = steady (100.0, 0.5f);
+	setLevel (drums, 0.0, 10.0, 0.5f * db (-30.0));
+	const auto span = audibleSpan (onlyDrums (drums));
+	ASSERT_TRUE (span);
+	EXPECT_NEAR (span->start, 0.0, 0.06);
+}
+
+TEST (StemHandover, AClickInTheSilenceDoesNotCount)
+{
+	auto drums = steady (100.0, 0.5f);
+	silence (drums, 0.0, 5.0);
+	silence (drums, 90.0, 100.0);
+	setLevel (drums, 2.0, 2.05, 0.5f);    // a click before the music
+	setLevel (drums, 95.0, 95.1, 0.5f);   // and one after it
+	const auto span = audibleSpan (onlyDrums (drums));
+	ASSERT_TRUE (span);
+	EXPECT_NEAR (span->start, 5.0, 0.06);
+	EXPECT_NEAR (span->end, 90.0, 0.06);
+}
+
+TEST (StemHandover, AnyStemMakesTheTrackHeard)
+{
+	auto stems = onlyDrums (steady (100.0));
+	silence (stems[0], 0.0, 8.0);
+	setLevel (stems[3], 3.0, 100.0, 0.3f);   // the vocals start first
+	const auto span = audibleSpan (stems);
+	ASSERT_TRUE (span);
+	EXPECT_NEAR (span->start, 3.0, 0.06);
+}
+
+TEST (StemHandover, SilenceOrNothingHasNoSpan)
+{
+	EXPECT_FALSE (audibleSpan (Envelopes {}));
+	EXPECT_FALSE (audibleSpan (onlyDrums (steady (10.0, 0.0f))));
+}

@@ -65,6 +65,8 @@ target_sources(StemDeck PRIVATE
     Source/Sections.cpp
     Source/Preview.cpp
     Source/SectionAnalysis.cpp
+    Source/BarPhase.cpp
+    Source/CachedGrid.cpp
     Source/MixerPanel.cpp
     Source/StemLibrary.cpp
     Source/SettingsPanel.cpp
@@ -127,4 +129,5 @@ option(STEMDECK_TESTS "Build the unit tests" OFF)
 if(STEMDECK_TESTS)
     enable_testing()
     add_subdirectory(tests)
+    add_subdirectory(tools/downbeat-eval)
 endif()

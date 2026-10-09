@@ -87,3 +87,29 @@ TEST (BeatScheduler, AStoppedDeckSendsNothing)
 	BeatScheduler scheduler;
 	EXPECT_FALSE (scheduler.step (10.0, 1.499, 1.0, 0.0, 120.0, false).send.has_value());
 }
+
+TEST (BeatScheduler, StartingOnABeatBeforeTheFirstDownbeatSendsIt)
+{
+	BeatScheduler scheduler;
+	const auto s = scheduler.step (10.0, 0.5, 1.0, 1.5, 120.0, true); // a cue on beat 3 of the lead-in
+	ASSERT_TRUE (s.send.has_value());
+	EXPECT_DOUBLE_EQ (s.sleepBefore, 0.0);
+	EXPECT_NEAR (s.send->trackSeconds, 0.5, 1e-9);
+	EXPECT_EQ (s.send->beatInBar, 3);
+}
+
+TEST (BeatScheduler, TheLeadInIsCountedIntoTheBar)
+{
+	BeatScheduler scheduler;
+	std::vector<int> bar;
+	double t = 0.05;
+	while (t < 2.1)
+	{
+		const auto s = scheduler.step (t, t, 1.0, 1.5, 120.0, true);
+		t += s.sleepBefore + 0.0003;
+		if (s.send)
+			bar.push_back (s.send->beatInBar);
+		t += 0.0001;
+	}
+	EXPECT_EQ (bar, (std::vector<int> { 3, 4, 1, 2 })) << "beats at 0.5, 1.0, 1.5, 2.0";
+}

@@ -25,7 +25,7 @@ namespace GridEdit
 	Grid shiftHalfBeat (Grid grid, bool forwards);
 
 	// 1< / >1: the bar's one a whole beat earlier or later, the beats where
-	// they are -- the analysis finds the beats but rarely the one.
+	// they are -- for when the analysis picked the wrong one.
 	Grid moveOne (Grid grid, bool later);
 
 	// SNAP GRID (CUE): the downbeat onto the cue point.

@@ -102,13 +102,13 @@ void ProLinkSender::run()
 		if (t - lastStatus >= statusEvery)
 		{
 			// Where we are in the bar: the beat last passed.
+			// The lead-in before the first downbeat counts into the bar, not the beat number.
 			uint32_t beatNumber = 0;
 			int beatInBar = 1;
-			if (position >= grid.firstBeat)
+			if (const auto passed = beatPassed (grid.firstBeat, grid.bpm, position))
 			{
-				const auto passed = (long long) std::floor ((position - grid.firstBeat) / grid.beatLength());
-				beatNumber = (uint32_t) (passed + 1);
-				beatInBar = 1 + (int) (passed % 4);
+				beatNumber = passed->index >= 0 ? (uint32_t) (passed->index + 1) : 0;
+				beatInBar = passed->beatInBar;
 			}
 			send (prolink::statusPacket (deviceNumber, name, grid.bpm, player->getSpeed(), true, moving,
 										 beatNumber, beatInBar),

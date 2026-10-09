@@ -216,3 +216,37 @@ TEST (FollowLeader, AJumpBackIsNotABurst)
 	EXPECT_NEAR (before->trackSeconds, 4.0, 1e-9);
 	EXPECT_NEAR (after->trackSeconds, 1.5, 1e-9) << "just the next one after the jump";
 }
+
+// The first downbeat can be up to a bar into the track; the beats before it
+// are the end of a bar, counted back from it.
+TEST (FollowLeader, TheBeatsBeforeTheFirstDownbeatAreCounted)
+{
+	const auto next = nextBeat (1.5, 120.0, 0.1); // beats at 0.0, 0.5, 1.0 lead to the one at 1.5
+	ASSERT_TRUE (next.has_value());
+	EXPECT_NEAR (next->trackSeconds, 0.5, 1e-9);
+	EXPECT_EQ (next->beatInBar, 3);
+}
+
+TEST (FollowLeader, NoBeatBeforeTheTrack)
+{
+	const auto next = nextBeat (1.5, 120.0, -0.2);
+	ASSERT_TRUE (next.has_value());
+	EXPECT_NEAR (next->trackSeconds, 0.0, 1e-9);
+	EXPECT_EQ (next->beatInBar, 2);
+}
+
+TEST (FollowLeader, TheBeatPassedCountsFromTheFirstDownbeat)
+{
+	const auto passed = beatPassed (1.5, 120.0, 2.2);
+	ASSERT_TRUE (passed.has_value());
+	EXPECT_EQ (passed->index, 1);
+	EXPECT_EQ (passed->beatInBar, 2);
+
+	const auto leadIn = beatPassed (1.5, 120.0, 0.7);
+	ASSERT_TRUE (leadIn.has_value());
+	EXPECT_EQ (leadIn->index, -2);
+	EXPECT_EQ (leadIn->beatInBar, 3);
+
+	EXPECT_FALSE (beatPassed (1.5, 120.0, -0.1).has_value()) << "before the track's first beat";
+	EXPECT_FALSE (beatPassed (1.5, 0.0, 2.0).has_value());
+}

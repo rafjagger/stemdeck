@@ -298,6 +298,8 @@ void MainComponent::loadSet (const StemSet& set, int deckIndex)
 			rebuildSections (deckIndex);
 		else
 			startSectionAnalysis (set, deckIndex, *cached);
+		if (analysisCache->needsNewDownbeat (set))
+			startDownbeatAnalysis (set, deckIndex);
 	}
 	else
 	{
@@ -364,6 +366,42 @@ void MainComponent::startSectionAnalysis (const StemSet& set, int deckIndex, con
 
 			safeThis->sectionFeatures[(size_t) deckIndex] = features;
 			safeThis->rebuildSections (deckIndex);
+		});
+	});
+}
+
+// A grid from before the one was found from the stems: its beats are
+// played with at once, its one follows a few seconds later.
+void MainComponent::startDownbeatAnalysis (const StemSet& set, int deckIndex)
+{
+	const auto analysed = analysisCache->findAnalysed (set);
+	if (! analysed)
+		return;
+
+	const auto generation = loadGeneration[(size_t) deckIndex];
+	juce::Component::SafePointer<MainComponent> safeThis (this);
+
+	analysisPool.addJob ([this, safeThis, set, deckIndex, generation, grid = *analysed]
+	{
+		auto* job = juce::ThreadPoolJob::getCurrentThreadPoolJob();
+		const auto found = TempoAnalysis::redetectDownbeat (set, formatManager, grid, [job] { return job != nullptr && job->shouldExit(); });
+
+		juce::MessageManager::callAsync ([safeThis, set, deckIndex, generation, found]
+		{
+			if (safeThis == nullptr || ! found.isValid())
+				return;
+
+			safeThis->analysisCache->storeNewDownbeat (set, found.firstBeat);
+			safeThis->library.analysisChanged();
+
+			// A correction made meanwhile is what find() returns, and stays.
+			if (safeThis->loadGeneration[(size_t) deckIndex] == generation)
+				if (const auto current = safeThis->analysisCache->find (set))
+				{
+					safeThis->players[(size_t) deckIndex]->setBeatGrid (*current);
+					// The sections are counted in bars from the one.
+					safeThis->rebuildSections (deckIndex);
+				}
 		});
 	});
 }

@@ -230,7 +230,8 @@ BeatGrid TempoAnalysis::analyseMono (const std::vector<float>& samples, double s
 	return grid;
 }
 
-BeatGrid TempoAnalysis::analyse (const StemSet& set, juce::AudioFormatManager& formatManager, const std::function<bool()>& shouldAbort)
+std::optional<BarPhase::Stems> TempoAnalysis::readStems (const StemSet& set, juce::AudioFormatManager& formatManager,
+														const std::function<bool()>& shouldAbort)
 {
 	std::array<std::unique_ptr<juce::AudioFormatReader>, StemSet::numStems> readers;
 	juce::int64 length = 0;
@@ -241,15 +242,18 @@ BeatGrid TempoAnalysis::analyse (const StemSet& set, juce::AudioFormatManager& f
 		readers[(size_t) i].reset (formatManager.createReaderFor (set.files[(size_t) i]));
 
 		if (readers[(size_t) i] == nullptr)
-			return {};
+			return std::nullopt;
 
 		sampleRate = readers[(size_t) i]->sampleRate;
 		length = juce::jmax (length, readers[(size_t) i]->lengthInSamples);
 	}
 
-	// Sum all stems to mono and decimate to ~11 kHz (averaging as a crude low-pass).
+	// Each stem to mono, decimated to ~11 kHz (averaging as a crude low-pass).
 	const auto decimation = juce::jmax (1, juce::roundToInt (sampleRate / analysisRate));
-	std::vector<float> mono ((size_t) (length / decimation), 0.0f);
+	BarPhase::Stems stems;
+	stems.sampleRate = sampleRate / decimation;
+	for (auto& mono : stems.mono)
+		mono.assign ((size_t) (length / decimation), 0.0f);
 
 	const int chunk = 65536 - (65536 % decimation);
 	juce::AudioBuffer<float> buffer (2, chunk);
@@ -257,12 +261,14 @@ BeatGrid TempoAnalysis::analyse (const StemSet& set, juce::AudioFormatManager& f
 	for (juce::int64 start = 0; start < length; start += chunk)
 	{
 		if (shouldAbort())
-			return {};
+			return std::nullopt;
 
 		const auto numSamples = (int) juce::jmin ((juce::int64) chunk, length - start);
 
-		for (auto& reader : readers)
+		for (size_t s = 0; s < readers.size(); ++s)
 		{
+			auto& reader = readers[s];
+			auto& mono = stems.mono[s];
 			reader->read (&buffer, 0, numSamples, start, true, true);
 			const auto* left = buffer.getReadPointer (0);
 			const auto* right = buffer.getReadPointer (reader->numChannels > 1 ? 1 : 0);
@@ -278,12 +284,59 @@ BeatGrid TempoAnalysis::analyse (const StemSet& set, juce::AudioFormatManager& f
 				for (int j = 0; j < decimation; ++j)
 					sum += left[i + j] + right[i + j];
 
-				mono[index] += sum / (float) (2 * decimation);
+				mono[index] = sum / (float) (2 * decimation);
 			}
 		}
 	}
 
-	return analyseMono (mono, sampleRate / decimation, shouldAbort);
+	return stems;
+}
+
+BeatGrid TempoAnalysis::analyseBeats (const BarPhase::Stems& stems, const std::function<bool()>& shouldAbort)
+{
+	// All four stems summed, so drums on any stem count.
+	std::vector<float> mix;
+	for (const auto& mono : stems.mono)
+	{
+		mix.resize (juce::jmax (mix.size(), mono.size()), 0.0f);
+		for (size_t i = 0; i < mono.size(); ++i)
+			mix[i] += mono[i];
+	}
+
+	return analyseMono (mix, stems.sampleRate, shouldAbort);
+}
+
+BeatGrid TempoAnalysis::findDownbeat (const BarPhase::Stems& stems, BeatGrid grid, BarPhase::Beats beats,
+									  const std::function<bool()>& shouldAbort)
+{
+	if (! grid.isValid())
+		return grid;
+
+	grid.firstBeat = BarPhase::find (stems, grid.bpm, grid.firstBeat, beats, shouldAbort).firstDownbeat;
+	return grid;
+}
+
+BeatGrid TempoAnalysis::analyse (const StemSet& set, juce::AudioFormatManager& formatManager, const std::function<bool()>& shouldAbort)
+{
+	const auto stems = readStems (set, formatManager, shouldAbort);
+	if (! stems)
+		return {};
+
+	const auto beats = analyseBeats (*stems, shouldAbort);
+	if (shouldAbort())
+		return {};
+
+	return findDownbeat (*stems, beats, BarPhase::Beats::ontoTheKick, shouldAbort);
+}
+
+BeatGrid TempoAnalysis::redetectDownbeat (const StemSet& set, juce::AudioFormatManager& formatManager, const BeatGrid& grid,
+										  const std::function<bool()>& shouldAbort)
+{
+	const auto stems = readStems (set, formatManager, shouldAbort);
+	if (! stems || shouldAbort())
+		return {};
+
+	return findDownbeat (*stems, grid, BarPhase::Beats::keep, shouldAbort);
 }
 
 //==============================================================================
@@ -333,6 +386,39 @@ std::optional<BeatGrid> AnalysisCache::findAnalysed (const StemSet& set) const
 	return std::nullopt;
 }
 
+CachedGrid::Entry AnalysisCache::entryOf (const juce::XmlElement& element)
+{
+	CachedGrid::Entry entry;
+	entry.bpm = element.getDoubleAttribute ("bpm");
+	entry.firstBeat = element.getDoubleAttribute ("firstBeat");
+	entry.version = element.getIntAttribute ("version", 1);
+	entry.corrected = element.hasAttribute ("correctedBpm");
+	return entry;
+}
+
+bool AnalysisCache::needsNewDownbeat (const StemSet& set) const
+{
+	const auto* element = xml->getChildByAttribute ("key", keyFor (set));
+	return element != nullptr && CachedGrid::needsNewDownbeat (entryOf (*element));
+}
+
+void AnalysisCache::storeNewDownbeat (const StemSet& set, double firstBeat)
+{
+	auto* element = xml->getChildByAttribute ("key", keyFor (set));
+	if (element == nullptr)
+		return;
+
+	const auto before = entryOf (*element);
+	if (! CachedGrid::needsNewDownbeat (before))
+		return;   // corrected by hand or analysed anew meanwhile
+
+	const auto after = CachedGrid::withNewDownbeat (before, firstBeat);
+
+	element->setAttribute ("firstBeat", after.firstBeat);
+	element->setAttribute ("version", after.version);
+	write();
+}
+
 void AnalysisCache::storeCorrected (const StemSet& set, const BeatGrid& grid)
 {
 	if (auto* entry = xml->getChildByAttribute ("key", keyFor (set)))
@@ -373,9 +459,15 @@ void AnalysisCache::store (const StemSet& set, const BeatGrid& grid)
 	entry->setAttribute ("name", set.name);
 	entry->setAttribute ("bpm", grid.bpm);
 	entry->setAttribute ("firstBeat", grid.firstBeat);
+	entry->setAttribute ("version", CachedGrid::currentVersion);
+	write();
+}
 
+void AnalysisCache::write()
+{
 	file.getParentDirectory().createDirectory();
-	xml->writeTo (file);
+	if (xml->writeTo (file))
+		unwritten = false;
 }
 
 juce::File AnalysisCache::featuresFileFor (const StemSet& set) const

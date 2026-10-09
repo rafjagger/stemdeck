@@ -19,6 +19,7 @@
 #include "StemLevels.h"
 #include "Recorder.h"
 #include "Scs3dDevice.h"
+#include "PanelDevice.h"
 #include "Waveforms.h"
 #include "JackOutput.h"
 #include "Theme.h"
@@ -267,6 +268,13 @@ private:
 	void handleController (int deckIndex, const scs3d::Event& event);
 	void showControllers();
 	void pressMaster (int deckIndex);
+
+	// The A³ Motion panel PCB (PanelMap.h), where A³ Motion does not run:
+	// both decks' routing matrices on its pads, CUE and PLAY at its ends.
+	// Made after the session is restored, so a press reports like a click.
+	std::unique_ptr<PanelDevice> motionPanel;
+	void handlePanel (const panel::Event& event);
+	void showPanel();
 
 	Recorder recorder;
 	juce::TextButton recButton { "REC" };

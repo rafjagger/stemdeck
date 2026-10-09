@@ -254,6 +254,17 @@ void ChannelStrip::showBuses (int stem)
 		busButtons[stem * buses::count + bus]->setToggleState (player.isStemOnBus (stem, bus), juce::dontSendNotification);
 }
 
+void ChannelStrip::nudgeStemGain (int stem, double detents)
+{
+	// Some two turns of an encoder from silence to the top.
+	constexpr double detentShare = 1.0 / 48.0;
+	if (auto* knob = knobs[stem])
+	{
+		const auto travel = knob->valueToProportionOfLength (knob->getValue()) + detents * detentShare;
+		knob->setValue (knob->proportionOfLengthToValue (juce::jlimit (0.0, 1.0, travel)), juce::sendNotificationSync);
+	}
+}
+
 void ChannelStrip::toggleMute (int stem)
 {
 	if (auto* b = muteButtons[stem])
@@ -283,7 +294,7 @@ void ChannelStrip::paint (juce::Graphics& g)
 
 void ChannelStrip::resized()
 {
-	const auto layout = surface::channelStrip (surface::fromJuce (getLocalBounds()));
+	const auto layout = surface::channelStrip (surface::fromJuce (getLocalBounds()), deckIndex);
 	headerArea = surface::toJuce (layout.header);
 
 	for (int s = 0; s < StemSet::numStems; ++s)
@@ -324,14 +335,23 @@ MixerPanel::MixerPanel (StemDeckPlayer& playerA, StemDeckPlayer& playerB)
 	: players { &playerA, &playerB }, stripA (playerA, 0), stripB (playerB, 1)
 {
 	for (int d = 0; d < buses::decks; ++d)
-		strip (d).onBusSwitch = [this, d] (int stem, int bus, bool on)
-		{
-			for (const auto index : switchBus (d, stem, bus, on))
-				if (onBusesChanged)
-					onBusesChanged (index / buses::stemsPerDeck, index % buses::stemsPerDeck);
-		};
+		strip (d).onBusSwitch = [this, d] (int stem, int bus, bool on) { busSwitched (d, stem, bus, on); };
 	addAndMakeVisible (stripA);
 	addAndMakeVisible (stripB);
+}
+
+void MixerPanel::busSwitched (int deck, int stem, int bus, bool on)
+{
+	for (const auto index : switchBus (deck, stem, bus, on))
+		if (onBusesChanged)
+			onBusesChanged (index / buses::stemsPerDeck, index % buses::stemsPerDeck);
+}
+
+void MixerPanel::pressBus (int deck, int stem, int bus)
+{
+	if (deck < 0 || deck >= buses::decks || stem < 0 || stem >= buses::stemsPerDeck || bus < 0 || bus >= buses::count)
+		return;
+	busSwitched (deck, stem, bus, ! players[(size_t) deck]->isStemOnBus (stem, bus));
 }
 
 void MixerPanel::addBandPartsTo (juce::Component& parent)

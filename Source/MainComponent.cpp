@@ -201,6 +201,9 @@ MainComponent::MainComponent()
 	mixer.onBusesChanged = [this] (int deck, int stem) { remote.report (deck, stem); };
 	remote.start (truthPath, truthHash);
 
+	motionPanel = std::make_unique<PanelDevice>();
+	motionPanel->onEvent = [this] (const panel::Event& e) { handlePanel (e); };
+
 	// Following Core's truth: with $A3_OSC_TRUTH set, that file wins at every
 	// start, and following would restart StemDeck into it forever.
 	if (truthkeeper::followsCore (std::getenv ("A3_OSC_TRUTH")))
@@ -238,6 +241,7 @@ MainComponent::MainComponent()
 MainComponent::~MainComponent()
 {
 	stopTimer();
+	motionPanel.reset();   // dark, and no more presses
 	saveSession();
 	jack.close();        // no more input blocks ...
 	recorder.stop();     // ... then the file is closed complete
@@ -927,6 +931,57 @@ void MainComponent::showControllers()
 	}
 }
 
+namespace
+{
+	panel::Rgb toRgb (juce::Colour c) { return { c.getRed(), c.getGreen(), c.getBlue() }; }
+}
+
+void MainComponent::handlePanel (const panel::Event& e)
+{
+	if (e.deck < 0 || e.deck >= numDecks)
+		return;
+	auto& deck = *decks[(size_t) e.deck];
+	auto& strip = mixer.strip (e.deck);
+	using Type = panel::Event::Type;
+
+	switch (e.type)
+	{
+		case Type::route:   mixer.pressBus (e.deck, e.stem, e.bus); break;
+		case Type::cueDown: deck.cuePressed(); break;
+		case Type::cueUp:   deck.cueReleased(); break;
+		case Type::play:    deck.togglePlay(); break;
+		case Type::gain:    strip.nudgeStemGain (e.stem, e.value); break;
+		case Type::mute:    strip.toggleMute (e.stem); break;
+		case Type::fader:   strip.setFaderTravel (e.value); break;
+	}
+}
+
+void MainComponent::showPanel()
+{
+	if (motionPanel == nullptr)
+		return;
+
+	panel::LedState state;
+	for (int d = 0; d < numDecks; ++d)
+	{
+		const auto& player = *players[(size_t) d];
+		for (int s = 0; s < StemSet::numStems; ++s)
+		{
+			const auto index = (size_t) buses::stemIndex (d, s);
+			state.masks[index] = player.getStemBuses (s);
+			state.muted[index] = mixer.strip (d).isMuted (s);
+		}
+		state.playing[(size_t) d] = player.isPlaying();
+		state.atCue[(size_t) d] = player.isLoaded() && ! player.isPlaying()
+								  && std::abs (player.getPosition() - player.getCuePoint()) < 0.01;
+	}
+	for (int s = 0; s < StemSet::numStems; ++s)
+		state.stemColours[(size_t) s] = toRgb (Theme::stem (s));
+	state.playColour = toRgb (Theme::play);
+	state.cueColour = toRgb (Theme::cue);
+	motionPanel->show (state);
+}
+
 void MainComponent::toggleRecording()
 {
 	if (recorder.isRecording())
@@ -1523,6 +1578,7 @@ void MainComponent::timerCallback()
 		scanControllers();
 	}
 	showControllers();
+	showPanel();
 
 	if (--sessionCountdown <= 0)
 	{

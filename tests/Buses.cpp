@@ -346,3 +346,11 @@ TEST (Buses, WhileTheAutoDjPlaysTheSparePlaceIsOff)
 	EXPECT_EQ (buses::applySwitch (masks, 4, buses::aux, true, buses::Spare::toOff), masks) << "AUX on is refused";
 	EXPECT_EQ (stemsOn (buses::applySwitch (masks, 2, buses::aux, true, buses::Spare::toOff), buses::aux), 0);
 }
+
+// A deck's switches left to right, on the screen and on the A³ Motion panel
+// alike: AUX on the deck's outer side, the channels in their order inside it.
+TEST (Buses, AuxStandsOnTheDecksOuterSide)
+{
+	EXPECT_EQ (buses::columnOrder (0), (std::array<int, buses::count> { buses::aux, 0, 1, 2, 3 }));
+	EXPECT_EQ (buses::columnOrder (1), (std::array<int, buses::count> { 0, 1, 2, 3, buses::aux }));
+}

@@ -95,6 +95,9 @@ public:
 	void setFaderTravel (double t) { fader.setValue (fader.proportionOfLengthToValue (juce::jlimit (0.0, 1.0, t)), juce::sendNotificationSync); }
 	double getFaderTravel() { return fader.valueToProportionOfLength (fader.getValue()); }
 	bool isMuted (int stem) const { return muteButtons[stem]->getToggleState(); }
+	// A controller's encoder on a stem's knob: `detents` steps of a fixed
+	// share of its travel, on the knob's own curve.
+	void nudgeStemGain (int stem, double detents);
 
 	// Knobs, mutes, bus switches and fader, for the session.
 	void saveState (DeckSession& state) const;
@@ -142,6 +145,9 @@ public:
 	// players and the screen follow, and every stem it moved is reported
 	// through onBusesChanged, as after a click.
 	void route (const std::vector<buses::Route>& routes);
+	// A controller's key for one bus switch: exactly what a click on the
+	// screen key does -- the switch toggles, the rule decides, Core hears.
+	void pressBus (int deck, int stem, int bus);
 	// After a session load: brings both decks' switches into the rule.
 	void normaliseBuses();
 	// Called for every stem a click moved, the clicked one included.
@@ -161,6 +167,7 @@ public:
 	void resized() override;
 
 private:
+	void busSwitched (int deck, int stem, int bus, bool on);
 	buses::Masks busMasks() const;
 	void setBusMasks (const buses::Masks& masks);
 

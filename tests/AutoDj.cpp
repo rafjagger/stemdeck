@@ -40,10 +40,24 @@ namespace
 		int loads = 0;
 		AutoDj::Pick lastPick = AutoDj::Pick::random;
 		double trackLength = 240.0, bpm = 120.0;   // ~20 s at 120 = 10 bars
+		// Where every loaded track is heard, known this long after its load
+		// (0: at once); none: no levels.
+		std::optional<double> audibleStart, audibleEnd;
+		double levelsAfter = 0.0;
+		std::array<double, 2> levelsAt { -1.0, -1.0 };
 
 		AutoDj::Commands tick (double dt = 0.05)
 		{
 			now += dt;
+			for (int i = 0; i < 2; ++i)
+				if (levelsAt[(size_t) i] >= 0.0 && now >= levelsAt[(size_t) i])
+				{
+					auto& d = decks[(size_t) i];
+					d.levelsPending = false;
+					d.audibleStart = audibleStart;
+					d.audibleEnd = audibleEnd;
+					levelsAt[(size_t) i] = -1.0;
+				}
 			for (int i = 0; i < 2; ++i)
 			{
 				auto& d = decks[(size_t) i];
@@ -73,6 +87,17 @@ namespace
 				d.rate = 1.0;
 				d.looping = false;
 				d.levels = withLevels ? &levels[(size_t) c.load] : nullptr;
+				d.audibleStart.reset();
+				d.audibleEnd.reset();
+				d.levelsPending = audibleStart || audibleEnd;
+				levelsAt[(size_t) c.load] = d.levelsPending ? now + levelsAfter : -1.0;
+				if (d.levelsPending && levelsAfter <= 0.0)
+				{
+					d.levelsPending = false;
+					d.audibleStart = audibleStart;
+					d.audibleEnd = audibleEnd;
+					levelsAt[(size_t) c.load] = -1.0;
+				}
 			}
 			std::vector<buses::Route> wanted;
 			for (int d = 0; d < 2; ++d)
@@ -87,7 +112,7 @@ namespace
 			if (c.start >= 0)
 			{
 				auto& d = decks[(size_t) c.start];
-				d.position = d.firstBeat;
+				d.position = c.startAt;
 				d.playing = true;
 			}
 			if (c.stop >= 0)
@@ -732,4 +757,121 @@ TEST (AutoDj, AMixNowStillWaitsForTheDjsLoop)
 	rig.decks[0].looping = false;
 	rig.runFor (2.2);
 	EXPECT_TRUE (rig.decks[1].playing) << "loop off: the mix starts at the next downbeat";
+}
+
+// Where a track is heard, not where its file starts and ends.
+TEST (AutoDj, TheOldTrackEndsWhereItIsLastHeard)
+{
+	Rig rig;
+	rig.audibleEnd = 220.0;   // 20 s of silence after it
+	rig.dj.setEnabled (true);
+	rig.runFor (0.2);
+	tickUntilBPlays (rig);
+	ASSERT_TRUE (rig.decks[1].playing);
+	EXPECT_LE (220.0 - rig.decks[0].position, 20.0 + 0.1) << "the overlap ends with the sound, not the file";
+	EXPECT_GT (220.0 - rig.decks[0].position, 18.0 - 0.1);
+	rig.runFor (22.0);
+
+	const auto vocals = rig.firstRoute (1, 3, 3);
+	ASSERT_TRUE (vocals);
+	EXPECT_NEAR (vocals->positionA, 220.5, 0.06) << "on the downbeat that closes the bar the sound ends in";
+	EXPECT_LT (rig.endedAt[0], 0.0) << "it never ran into its silence";
+	EXPECT_FALSE (rig.decks[0].playing) << "the old deck stopped with the vocals";
+}
+
+TEST (AutoDj, TheNextTrackIsLoadedAheadOfTheAudibleEnd)
+{
+	Rig rig;
+	rig.audibleEnd = 200.0;
+	rig.dj.setEnabled (true);
+	rig.runFor (0.2);
+	rig.runFor (200.0 - 20.0 - 30.0 - 2.0);
+	EXPECT_EQ (rig.loads, 1) << "not yet";
+	rig.runFor (4.0);
+	EXPECT_EQ (rig.loads, 2);
+}
+
+TEST (AutoDj, TheNewTrackStartsOnTheFirstDownbeatOfItsSound)
+{
+	// Downbeats at 0.5, 2.5, ... 8.5, 10.5: the sound from 9.4 is not on a
+	// downbeat, nor in the last beat before one.
+	Rig rig;
+	rig.audibleStart = 9.4;
+	rig.dj.setEnabled (true);
+	rig.runFor (0.2);
+	EXPECT_NEAR (rig.decks[0].position, 10.5, 0.2) << "the first track too";
+	tickUntilBPlays (rig);
+	EXPECT_NEAR (rig.decks[1].position, 10.5, 0.06) << "not the file's start, not a downbeat in the silence";
+	EXPECT_TRUE (rig.synced[1]);
+	rig.runFor (22.0);
+	const auto bass = rig.firstRoute (1, 1, 1);
+	ASSERT_TRUE (bass);
+	EXPECT_TRUE (onDownbeat (bass->positionB)) << "its bars count from there";
+}
+
+TEST (AutoDj, APickupIsHeardFromTheDownbeatBeforeIt)
+{
+	// Sound from 10.2, in the last beat before the downbeat at 10.5.
+	Rig rig;
+	rig.audibleStart = 10.2;
+	rig.dj.setEnabled (true);
+	rig.runFor (0.2);
+	tickUntilBPlays (rig);
+	EXPECT_NEAR (rig.decks[1].position, 8.5, 0.06);
+}
+
+TEST (AutoDj, SoundRightOnADownbeatStartsThere)
+{
+	// The level crosses a little after the hit: still that downbeat.
+	Rig rig;
+	rig.audibleStart = 10.55;
+	rig.dj.setEnabled (true);
+	rig.runFor (0.2);
+	tickUntilBPlays (rig);
+	EXPECT_NEAR (rig.decks[1].position, 10.5, 0.06);
+}
+
+TEST (AutoDj, WithoutAGridTheAudibleSecondsCount)
+{
+	Rig rig;
+	rig.bpm = 0.0;
+	rig.audibleStart = 3.7;
+	rig.audibleEnd = 225.0;
+	rig.dj.setEnabled (true);
+	rig.runFor (0.2);
+	tickUntilBPlays (rig);
+	EXPECT_NEAR (rig.decks[1].position, 3.7, 0.06) << "from where it is heard";
+	EXPECT_NEAR (225.0 - rig.decks[0].position, AutoDj::defaultNoGridMixSeconds, 0.1);
+	rig.runFor (11.0);
+	EXPECT_FALSE (rig.decks[0].playing);
+	EXPECT_LT (rig.endedAt[0], 0.0) << "stopped at its audible end";
+	EXPECT_NEAR (rig.decks[0].position, 225.0, 0.1);
+}
+
+TEST (AutoDj, NextWaitsForTheNewTracksLevels)
+{
+	Rig rig;
+	playUntilMidTrack (rig);
+	rig.audibleStart = 9.4;
+	rig.levelsAfter = 3.0;   // longer than the bar to the next downbeat
+	ASSERT_TRUE (rig.dj.requestMixNow (AutoDj::Pick::next));
+	const auto pressed = rig.now;
+	tickUntilBPlays (rig);
+	EXPECT_GE (rig.now - pressed, 3.0) << "the mix waited for them";
+	EXPECT_LE (rig.now - pressed, 3.0 + 2.1) << "then the next downbeat";
+	EXPECT_NEAR (rig.decks[1].position, 10.5, 0.06) << "and used them";
+	EXPECT_LT (std::fmod (rig.decks[0].position - 0.5, 2.0), 0.1) << "on the 1 of a bar of the playing track";
+}
+
+TEST (AutoDj, LevelsThatNeverComeAreNotWaitedForLong)
+{
+	Rig rig;
+	playUntilMidTrack (rig);
+	rig.audibleStart = 9.4;
+	rig.levelsAfter = 1000.0;
+	ASSERT_TRUE (rig.dj.requestMixNow (AutoDj::Pick::next));
+	const auto pressed = rig.now;
+	tickUntilBPlays (rig);
+	EXPECT_LE (rig.now - pressed, AutoDj::maxLevelsWait + 2.1);
+	EXPECT_NEAR (rig.decks[1].position, 0.5, 0.06) << "without them: from the first downbeat, as before";
 }

@@ -148,9 +148,13 @@ namespace surface
 			auto foot = side.removeFromBottom (line);
 			foot = mirrored ? Rect { foot.x - gap, foot.y, foot.w + gap, foot.h } : Rect { foot.x, foot.y, foot.w + gap, foot.h };
 			side.removeFromBottom (gap);
-			d.pitch = outer (side, pitchWidth);
+			auto tempo = outer (side, pitchWidth);
 			outer (side, gap);
 			auto infoArea = side.removeFromBottom (info);
+			// KEY (key lock) under the pitch fader, beside the title line.
+			d.keyLock = tempo.removeFromBottom (info);
+			tempo.removeFromBottom (gap);
+			d.pitch = tempo;
 			d.title = infoArea.removeFromTop (infoArea.h * 3 / 5);
 			d.stems = infoArea;
 			side.removeFromBottom (gap);

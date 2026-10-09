@@ -101,6 +101,7 @@ namespace
 			band.controls.push_back ({ "pitch" + name, deck.pitch, true });
 			band.controls.push_back ({ "pitchValue" + name, deck.pitchValue, false });
 			band.controls.push_back ({ "range" + name, deck.range, true });
+			band.controls.push_back ({ "keyLock" + name, deck.keyLock, true });
 			band.controls.push_back ({ "bpm" + name, deck.bpm, false });
 			band.controls.push_back ({ "bpmInfo" + name, deck.bpmInfo, false });
 			band.controls.push_back ({ "title" + name, deck.title, false });
@@ -192,7 +193,7 @@ TEST (SurfaceLayout, TheBandRunsPitchOverviewFaderMeters)
 	{
 		const auto& deck = b.deck[d];
 		EXPECT_EQ (deck.pitch.y, deck.overview.y);
-		EXPECT_EQ (deck.pitch.bottom(), deck.stems.bottom()) << "the fader beside overview and title";
+		EXPECT_EQ (deck.pitch.bottom(), deck.overview.bottom()) << "the fader beside the overview";
 		EXPECT_LT (deck.overview.bottom(), deck.title.y + 1) << "the title under the overview";
 		EXPECT_LT (deck.title.bottom(), deck.stems.y + 1);
 		EXPECT_EQ (deck.title.x, deck.overview.x);
@@ -230,6 +231,27 @@ TEST (SurfaceLayout, TheBandRunsPitchOverviewFaderMeters)
 	EXPECT_LE (b.meters.w, 125);
 	EXPECT_GE (b.fader[0].h, 160) << "the faders keep a usable travel";
 	EXPECT_GE (b.deck[0].overview.w, 170);
+}
+
+// KEY (key lock) with the tempo controls: under the pitch fader, beside the
+// deck's title line, over the pitch value -- fader, KEY, value, one column.
+TEST (SurfaceLayout, TheKeyLockKeyStandsWithTheTempoControls)
+{
+	const auto s = surface::sections (rigWidth, rigHeight);
+	const auto b = surface::band (s.band);
+
+	for (const auto& deck : b.deck)
+	{
+		EXPECT_EQ (deck.keyLock.x, deck.pitch.x);
+		EXPECT_EQ (deck.keyLock.w, deck.pitch.w);
+		EXPECT_GT (deck.keyLock.y, deck.pitch.bottom() - 1) << "under the fader";
+		EXPECT_EQ (deck.keyLock.y, deck.title.y) << "beside the title line";
+		EXPECT_EQ (deck.keyLock.bottom(), deck.stems.bottom());
+		EXPECT_LT (deck.keyLock.bottom(), deck.pitchValue.y + 1) << "over the value";
+		EXPECT_EQ (deck.keyLock.x, deck.pitchValue.x);
+		EXPECT_GE (deck.keyLock.h, 30) << "a finger's key on the rig";
+		EXPECT_GE (deck.pitch.h, 120) << "the fader keeps its travel";
+	}
 }
 
 // No key moves when GRID turns on: the finger that turned it on turns it off.

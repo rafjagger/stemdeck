@@ -51,13 +51,14 @@ namespace surface
 
 	// The band under the decks and the mixer, in window coordinates. Per deck,
 	// from the outside in: the pitch fader beside the overview and, under the
-	// overview, the deck's title and stems line; under both the bottom line:
+	// overview, the deck's title and stems line with the KEY (key lock) key
+	// beside it, under the fader; under both the bottom line:
 	// the pitch value, the range key and the BPM (big, and the original). Then
 	// the volume fader (the stems' meters in its slot) inside the deck's colour
 	// frame; the output meters in the middle. A on the left, B mirrored.
 	struct BandDeck
 	{
-		Rect pitch, pitchValue, range, bpm, bpmInfo, title, stems, overview;
+		Rect pitch, pitchValue, range, keyLock, bpm, bpmInfo, title, stems, overview;
 	};
 	struct Band
 	{

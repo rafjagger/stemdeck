@@ -22,7 +22,7 @@ Needs CMake ≥ 3.22, a C++17 compiler, pkg-config, **JUCE 9.0.3** (the A³ pin,
 default `~/local/juce`) with its Linux dependencies, and on Debian:
 
 ```sh
-apt install libjack-jackd2-dev libflac-dev libvorbis-dev libogg-dev
+apt install libjack-jackd2-dev libflac-dev libvorbis-dev libogg-dev librubberband-dev
 ```
 
 ```sh
@@ -89,3 +89,6 @@ DJ Link network. See [Trademarks and Pro DJ Link](https://a3-audio.github.io/a3-
 
 GPL-3.0-or-later. REUSE-compliant: the licenses are in `LICENSES/`, which file has
 which is in `.reuse/dep5`.
+
+Key lock links the [Rubber Band Library](https://breakfastquay.com/rubberband/)
+(`librubberband`, GPL-2.0-or-later), which may be used under GPL-3.0-or-later as StemDeck is.

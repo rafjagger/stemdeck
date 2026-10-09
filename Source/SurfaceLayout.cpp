@@ -176,8 +176,13 @@ namespace surface
 			d.title = area.removeFromTop (share (tile.h, 110));
 			d.stems = area.removeFromTop (share (tile.h, 70));
 			area.removeFromTop (gap);
-			d.bpmInfo = area.removeFromBottom (share (tile.h, 70));
-			d.bpm = area.removeFromBottom (share (tile.h, 130));
+			// KEY (key lock) at the foot beside the range key, before the BPM:
+			// the tempo's keys together, and the pitch fader keeps its travel.
+			auto foot = area.removeFromBottom (share (tile.h, 200));
+			d.keyLock = outer (foot, pitchWidth);
+			outer (foot, gap);
+			d.bpmInfo = foot.removeFromBottom (share (tile.h, 70));
+			d.bpm = foot;
 			area.removeFromBottom (gap);
 			d.overview = area;
 			return d;

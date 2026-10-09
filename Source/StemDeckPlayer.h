@@ -1,6 +1,7 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include "KeyLockStretcher.h"
 #include "Remote.h"
 #include "StemSet.h"
 #include "TempoAnalysis.h"
@@ -12,6 +13,11 @@
 // which makes seeking and looping instant; a background thread touches the
 // pages ahead of the playhead so the callback does not wait on the disk.
 // Other formats fall back to a buffered reader.
+//
+// With key lock on, each stem goes through its Rubber Band stretcher
+// (KeyLockStretcher) before the resampler: the stretchers play the tempo,
+// the resampler only converts the file's rate to the device's. The reported
+// position is then what is heard, the stretchers' latency taken off.
 class StemDeckPlayer : public juce::AudioSource,
 					   private juce::TimeSliceClient
 {
@@ -54,6 +60,13 @@ public:
 	double getPitchBend() const { return pitchBend.load(); }
 	void setSyncNudge (double factor) { syncNudge = factor; } // phase correction while synced
 	double getEffectiveRate() const { return speed.load() * pitchBend.load() * syncNudge.load(); }
+
+	// Key lock (a CDJ's MASTER TEMPO): tempo changes keep the pitch. The
+	// stretchers are built on the first switch on, and anew on loading a file
+	// of another sample rate -- here, never on the audio thread. Off, the
+	// deck plays exactly as without it. Switching crossfades the two paths.
+	void setKeyLock (bool on);
+	bool isKeyLocked() const { return keyLock.load(); }
 
 	// Scratching (jog wheel top in vinyl mode): while active the playhead
 	// follows a target position that scratchBy() moves, forwards or backwards,
@@ -120,8 +133,45 @@ private:
 		StemDeckPlayer& owner;
 	};
 
+	// The key lock path: a stem's stretcher pulls the stem through this.
+	struct KeyLockInput : public KeyLockStretcher::Input
+	{
+		KeyLockInput (StemDeckPlayer& o, int s) : owner (o), stem (s) {}
+		int read (float* const* dest, int count, std::int64_t position) override;
+		std::int64_t jumpFrom (std::int64_t position) override;
+		StemDeckPlayer& owner;
+		const int stem;
+	};
+
+	// A deck's stretchers, one per stem, built and swapped as one.
+	struct Stretchers
+	{
+		explicit Stretchers (double fileRate);
+		double sampleRate;
+		std::array<std::unique_ptr<KeyLockStretcher>, numStems> stems;
+	};
+
+	// What the key lock path's resampler pulls from: the stretchers' output.
+	struct KeyLockSource : public juce::AudioSource
+	{
+		explicit KeyLockSource (StemDeckPlayer& o) : owner (o) {}
+		void prepareToPlay (int, double) override {}
+		void releaseResources() override {}
+		void getNextAudioBlock (const juce::AudioSourceChannelInfo& info) override { owner.renderStretched (info); }
+		StemDeckPlayer& owner;
+	};
+
 	void readStems (const juce::AudioSourceChannelInfo& info);
+	void readRun (float* const* dest, int count, juce::int64 position);
+	void readStemRun (int stem, float* const* dest, int count, juce::int64 position);
 	void renderScratch (const juce::AudioSourceChannelInfo& info);
+	void renderPlayback (const juce::AudioSourceChannelInfo& info);
+	void renderPath (bool stretched, const juce::AudioSourceChannelInfo& info);
+	void renderStretched (const juce::AudioSourceChannelInfo& info);
+	void restartStretchers (juce::int64 position);
+	double stretchedPosition() const;
+	void buildStretchers();
+	void seekTo (juce::int64 position);
 	void updateResamplingRatio();
 	int useTimeSlice() override;
 
@@ -165,6 +215,21 @@ private:
 
 	StemReader stemReader { *this };
 	juce::ResamplingAudioSource resampler { &stemReader, false, numOutputChannels };
+
+	// Key lock. The stretchers are swapped under setLock, like the set.
+	std::unique_ptr<Stretchers> stretchers;
+	std::atomic<bool> keyLock { false };
+	// A seek from outside the audio thread, for the stretchers to start
+	// again there; -1: none.
+	std::atomic<juce::int64> pendingSeek { -1 };
+	// Audio thread only.
+	bool stretching = false, restartPending = false;
+	const Stretchers* stretchersInUse = nullptr;
+	int fadeRemaining = 0, fadeLength = 1;
+	juce::AudioBuffer<float> fadeBuffer;
+	std::array<KeyLockInput, numStems> keyLockInputs { { { *this, 0 }, { *this, 1 }, { *this, 2 }, { *this, 3 } } };
+	KeyLockSource keyLockSource { *this };
+	juce::ResamplingAudioSource keyLockResampler { &keyLockSource, false, numOutputChannels };
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (StemDeckPlayer)
 };

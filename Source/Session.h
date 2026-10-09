@@ -1,7 +1,7 @@
 #pragma once
 
-#include <JuceHeader.h>
-#include "StemSet.h"
+#include <juce_core/juce_core.h>
+#include "Buses.h"
 
 #include <array>
 #include <vector>
@@ -32,8 +32,9 @@ struct DeckSession
 	double tempoRange = 0.08;
 	bool vinyl = true;
 	bool sync = false;
+	bool keyLock = false;       // tempo changes keep the pitch
 
-	std::array<StemMixState, StemSet::numStems> stems;
+	std::array<StemMixState, buses::stemsPerDeck> stems;
 	double faderDb = 0.0;
 };
 

@@ -77,6 +77,13 @@ DeckPanel::DeckPanel (StemDeckPlayer& p, StemThumbnails& thumbnails, int index)
 		setTempoRange (next);
 	};
 
+	// Key lock, a CDJ's MASTER TEMPO: with the tempo controls, in the deck's colour as SYNC.
+	keyLockButton.setClickingTogglesState (true);
+	keyLockButton.setColour (juce::TextButton::buttonOnColourId, Theme::deck (deckIndex));
+	keyLockButton.setTooltip ("Key lock: the tempo changes, the key stays");
+	keyLockButton.setMouseClickGrabsKeyboardFocus (false);
+	keyLockButton.onClick = [this] { player.setKeyLock (keyLockButton.getToggleState()); };
+
 	vinylButton.setClickingTogglesState (true);
 	vinylButton.setToggleState (true, juce::dontSendNotification);
 	vinylButton.setColour (juce::TextButton::buttonOnColourId, Theme::panelRaised.brighter (0.3f));
@@ -192,6 +199,7 @@ void DeckPanel::saveState (DeckSession& state) const
 {
 	state.tempo = pitchFader.getValue();
 	state.tempoRange = tempoRange;
+	state.keyLock = keyLockButton.getToggleState();
 	state.vinyl = vinylButton.getToggleState();
 	state.repeat = repeatButton.getToggleState();
 	state.sync = syncButton.getToggleState();
@@ -206,6 +214,7 @@ void DeckPanel::restoreState (const DeckSession& state)
 		const juce::ScopedValueSetter<bool> svs (settingTempoFromSync, true);
 		pitchFader.setValue (state.tempo, juce::sendNotificationSync);
 	}
+	keyLockButton.setToggleState (state.keyLock, juce::sendNotificationSync);
 	vinylButton.setToggleState (state.vinyl, juce::sendNotificationSync);
 	repeatButton.setToggleState (state.repeat, juce::sendNotificationSync);
 	syncButton.setToggleState (state.sync, juce::dontSendNotification);
@@ -343,7 +352,7 @@ void DeckPanel::showPitchValue()
 
 void DeckPanel::addBandPartsTo (juce::Component& parent)
 {
-	for (auto* part : std::initializer_list<juce::Component*> { &overview, &pitchFader, &pitchValue, &rangeKey,
+	for (auto* part : std::initializer_list<juce::Component*> { &overview, &pitchFader, &pitchValue, &rangeKey, &keyLockButton,
 																&titleLabel, &stemsLabel, &bpmLabel, &bpmInfoLabel })
 		parent.addAndMakeVisible (part);
 }
@@ -359,6 +368,7 @@ void DeckPanel::setBandBounds (const surface::BandDeck& parts)
 	overview.setBounds (surface::toJuce (parts.overview));
 	pitchFader.setBounds (surface::toJuce (parts.pitch));
 	rangeKey.setBounds (surface::toJuce (parts.range));
+	keyLockButton.setBounds (surface::toJuce (parts.keyLock));
 	place (pitchValue, parts.pitchValue, 0.42f, false);
 	place (titleLabel, parts.title, 0.8f, true);
 	place (stemsLabel, parts.stems, 0.8f, false);

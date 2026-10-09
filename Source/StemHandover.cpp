@@ -21,9 +21,9 @@ namespace StemHandover
 
 		// The level `direction` (+1 after, -1 before) of `t`, over half the
 		// window, the nearest moments weighted most.
-		double weightedLevel (const Envelope& e, double t, double window, int direction)
+		double weightedLevel (const Envelope& e, double t, double windowSeconds, int direction)
 		{
-			const auto steps = std::max (1, (int) std::lround (window / 2.0 / e.hop));
+			const auto steps = std::max (1, (int) std::lround (windowSeconds / 2.0 / e.hop));
 			double sum = 0.0, weights = 0.0;
 			for (int k = 0; k < steps; ++k)
 			{
@@ -82,22 +82,22 @@ namespace StemHandover
 	}
 
 	std::vector<double> changeoverCosts (const Envelope& oldStem, const Envelope& newStem,
-										 const std::vector<Downbeat>& candidates, double window)
+										 const std::vector<Downbeat>& candidates, double windowSeconds)
 	{
 		std::vector<double> oldAfter, costs;
 		double loudest = 0.0;
 		for (const auto& c : candidates)
 		{
-			oldAfter.push_back (weightedLevel (oldStem, c.oldSeconds, window, 1));
+			oldAfter.push_back (weightedLevel (oldStem, c.oldSeconds, windowSeconds, 1));
 			loudest = std::max (loudest, oldAfter.back());
 		}
 
 		for (std::size_t i = 0; i < candidates.size(); ++i)
 		{
 			const auto& c = candidates[i];
-			const auto oldBefore = weightedLevel (oldStem, c.oldSeconds, window, -1);
-			const auto newBefore = weightedLevel (newStem, c.newSeconds, window, -1);
-			const auto newAfter = weightedLevel (newStem, c.newSeconds, window, 1);
+			const auto oldBefore = weightedLevel (oldStem, c.oldSeconds, windowSeconds, -1);
+			const auto newBefore = weightedLevel (newStem, c.newSeconds, windowSeconds, -1);
+			const auto newAfter = weightedLevel (newStem, c.newSeconds, windowSeconds, 1);
 
 			const auto cutOff = share (oldAfter[i], oldAfter[i] + oldBefore);     // the old stem carries on past it
 			const auto midNote = share (newBefore, newBefore + newAfter);         // the new one was already sounding
@@ -108,9 +108,9 @@ namespace StemHandover
 	}
 
 	int chooseDownbeat (const Envelope& oldStem, const Envelope& newStem,
-						const std::vector<Downbeat>& candidates, double window)
+						const std::vector<Downbeat>& candidates, double windowSeconds)
 	{
-		const auto costs = changeoverCosts (oldStem, newStem, candidates, window);
+		const auto costs = changeoverCosts (oldStem, newStem, candidates, windowSeconds);
 		if (costs.empty())
 			return -1;
 		const auto best = std::min_element (costs.begin(), costs.end());
@@ -118,7 +118,7 @@ namespace StemHandover
 	}
 
 	Pair chooseBassAndOther (const Envelopes& oldStems, const Envelopes& newStems,
-							 const std::vector<Downbeat>& downbeats, int endBar, double window)
+							 const std::vector<Downbeat>& downbeats, int endBar, double windowSeconds)
 	{
 		const auto gap = std::max (1, (int) std::lround (endBar / 5.0));
 
@@ -127,8 +127,8 @@ namespace StemHandover
 			if (d.bar >= gap && d.bar <= endBar - gap)
 				inside.push_back (d);
 
-		const auto bassCosts = changeoverCosts (oldStems[bass], newStems[bass], inside, window);
-		const auto otherCosts = changeoverCosts (oldStems[other], newStems[other], inside, window);
+		const auto bassCosts = changeoverCosts (oldStems[bass], newStems[bass], inside, windowSeconds);
+		const auto otherCosts = changeoverCosts (oldStems[other], newStems[other], inside, windowSeconds);
 		const auto bassIdeal = endBar / 3.0, otherIdeal = 2.0 * endBar / 3.0;
 
 		Pair best { endBar >= 2 ? 1 : endBar, endBar };

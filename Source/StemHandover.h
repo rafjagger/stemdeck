@@ -62,12 +62,12 @@ namespace StemHandover
 	// How audible the changeover of one stem would be at each candidate,
 	// 0 (unheard) .. 3, in the order of `candidates`.
 	std::vector<double> changeoverCosts (const Envelope& oldStem, const Envelope& newStem,
-										 const std::vector<Downbeat>& candidates, double window);
+										 const std::vector<Downbeat>& candidates, double windowSeconds);
 
 	// The least audible of the candidates (its bar); the earliest on a tie.
 	// -1 without candidates.
 	int chooseDownbeat (const Envelope& oldStem, const Envelope& newStem,
-						const std::vector<Downbeat>& candidates, double window);
+						const std::vector<Downbeat>& candidates, double windowSeconds);
 
 	// The bars where bass and other change over, in an overlap whose vocals
 	// change over at `endBar` (the drums did at bar 0). Never on the same
@@ -83,5 +83,5 @@ namespace StemHandover
 		int bass = 0, other = 0;
 	};
 	Pair chooseBassAndOther (const Envelopes& oldStems, const Envelopes& newStems,
-							 const std::vector<Downbeat>& downbeats, int endBar, double window);
+							 const std::vector<Downbeat>& downbeats, int endBar, double windowSeconds);
 }

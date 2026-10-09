@@ -38,13 +38,13 @@ BeatStep BeatScheduler::step (double now, double position, double rate, double f
 	};
 
 	// Starting on a beat -- a cue on the downbeat: that beat is played.
-	if (justStarted && position >= first)
-	{
-		const auto index = std::floor ((position - first) / beatLength + 1e-9);
-		const auto on = first + index * beatLength;
-		if (position - on < onBeatTolerance && ! mayDouble (now, beatSeconds))
-			return sendNow ({ on, 1 + (int) ((long long) index % 4) });
-	}
+	if (justStarted)
+		if (const auto passed = beatPassed (first, bpm, position))
+		{
+			const auto on = first + (double) passed->index * beatLength;
+			if (position - on < onBeatTolerance && ! mayDouble (now, beatSeconds))
+				return sendNow ({ on, passed->beatInBar });
+		}
 
 	// Crossed since the last wake-up and not sent: late, but not lost.
 	if (! justStarted && ! jumped)

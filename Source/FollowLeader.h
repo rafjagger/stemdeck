@@ -49,7 +49,8 @@ double positionAt (double position, double stampSeconds, double nowSeconds, doub
 
 // Part 2, StemDeck as the tempo master: the next beat of a deck's grid after
 // `position` (track seconds) -- when it falls, and where in the bar. The bar
-// counts from the grid's first beat: that beat is 1. Nothing without a tempo.
+// counts from the grid's first beat: that beat is 1, and the beats before it
+// in the track end the bar before. Nothing without a tempo.
 // One beat only: after a jump back it is simply the next one, never a burst
 // of the beats skipped over.
 struct NextBeat
@@ -59,3 +60,15 @@ struct NextBeat
 };
 
 std::optional<NextBeat> nextBeat (double gridFirstBeat, double gridBpm, double position);
+
+// The beat of a grid last passed at `position`: its index from the grid's
+// first beat, and where it is in the bar. The first downbeat can lie up to a
+// bar into the track; the beats before it have negative indices and end the
+// bar before. Nothing before the track's first beat or without a tempo.
+struct PassedBeat
+{
+	long long index = 0;
+	int beatInBar = 1;
+};
+
+std::optional<PassedBeat> beatPassed (double gridFirstBeat, double gridBpm, double position);

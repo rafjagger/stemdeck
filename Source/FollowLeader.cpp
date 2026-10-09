@@ -68,14 +68,38 @@ double positionAt (double position, double stampSeconds, double nowSeconds, doub
 	return position + age * rate;
 }
 
+namespace
+{
+	int beatInBarOf (long long index)
+	{
+		return 1 + (int) (((index % 4) + 4) % 4);
+	}
+
+	// The index of the track's earliest beat, at or after 0 s.
+	double earliestBeat (double gridFirstBeat, double beatLength)
+	{
+		return -std::floor (gridFirstBeat / beatLength + 1e-9);
+	}
+}
+
 std::optional<NextBeat> nextBeat (double gridFirstBeat, double gridBpm, double position)
 {
 	if (gridBpm <= 0.0)
 		return std::nullopt;
 
 	const auto beatLength = 60.0 / gridBpm;
-	const auto n = std::max (0.0, std::floor ((position - gridFirstBeat) / beatLength) + 1.0);
-	const auto index = (long long) n;
+	const auto n = std::max (earliestBeat (gridFirstBeat, beatLength), std::floor ((position - gridFirstBeat) / beatLength) + 1.0);
+	return NextBeat { gridFirstBeat + n * beatLength, beatInBarOf ((long long) n) };
+}
 
-	return NextBeat { gridFirstBeat + n * beatLength, 1 + (int) (index % 4) };
+std::optional<PassedBeat> beatPassed (double gridFirstBeat, double gridBpm, double position)
+{
+	if (gridBpm <= 0.0)
+		return std::nullopt;
+
+	const auto beatLength = 60.0 / gridBpm;
+	const auto n = std::floor ((position - gridFirstBeat) / beatLength + 1e-9);
+	if (n < earliestBeat (gridFirstBeat, beatLength))
+		return std::nullopt;
+	return PassedBeat { (long long) n, beatInBarOf ((long long) n) };
 }

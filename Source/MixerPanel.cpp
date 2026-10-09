@@ -260,12 +260,6 @@ void ChannelStrip::toggleMute (int stem)
 		b->setToggleState (! b->getToggleState(), juce::sendNotificationSync);
 }
 
-void ChannelStrip::setMuted (int stem, bool muted)
-{
-	if (auto* b = muteButtons[stem])
-		b->setToggleState (muted, juce::sendNotificationSync);
-}
-
 void ChannelStrip::refresh()
 {
 	for (int s = 0; s < StemSet::numStems; ++s)
@@ -391,11 +385,21 @@ std::vector<int> MixerPanel::switchBus (int deck, int stem, int bus, bool on)
 {
 	const auto before = busMasks();
 	const auto switched = buses::stemIndex (deck, stem);
-	const auto after = buses::applySwitch (before, switched, bus, on);
+	const auto after = buses::applySwitch (before, switched, bus, on, spare);
 	// Every strip re-shown, also when nothing changed: a refused click (AUX
 	// off) has already toggled its button and must toggle back.
 	setBusMasks (after);
 	return buses::toReport (before, after, switched);
+}
+
+void MixerPanel::route (const std::vector<buses::Route>& routes)
+{
+	const auto before = busMasks();
+	const auto after = buses::route (before, routes);
+	setBusMasks (after);
+	for (int index = 0; index < buses::stemCount; ++index)
+		if (before[(size_t) index] != after[(size_t) index] && onBusesChanged)
+			onBusesChanged (index / buses::stemsPerDeck, index % buses::stemsPerDeck);
 }
 
 void MixerPanel::normaliseBuses()

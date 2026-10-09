@@ -7,9 +7,13 @@
 // The output buses and who reaches them. Pure: no JUCE, testable.
 //
 // Five stereo buses, 1-4 and AUX, all feeding A³ Core. Every stem has one
-// switch per bus, and since 2026-10-07 is on exactly one bus: each of the
-// buses 1-4 carries at most one of the eight stems, and every stem on none
-// of them is on AUX (applySwitch, normalise). Buses 1-4 are the desk's
+// switch per bus, and since 2026-10-07 is on one bus at most: each of the
+// buses 1-4 carries at most one of the eight stems, and a stem a switch takes
+// off its channel goes to AUX (applySwitch, normalise). A stem can also be
+// off -- on no bus, silent: the Auto-DJ's place for a stem not yet, or no
+// longer, playing (route). A manual switch never puts a stem off and leaves an
+// off stem off; while the Auto-DJ plays, the place a switch sends a stem to
+// is off instead of AUX, so nothing reaches AUX then. Buses 1-4 are the desk's
 // channels, switched by remote control (spec stemdeck-remote), and a stem
 // there silences that channel's analog input -- so a fresh StemDeck starts
 // with every stem on AUX and on no channel. Every bus is post fader; stem
@@ -23,6 +27,11 @@ namespace buses
 	constexpr int aux = 4;
 
 	constexpr unsigned allMask = (1u << count) - 1;
+	constexpr unsigned offMask = 0;   // on no bus
+
+	// Where a switch sends a stem it takes off its channel: AUX, or, while
+	// the Auto-DJ plays, off.
+	enum class Spare { toAux, toOff };
 
 	// Which buses a stem starts on: the aux return only.
 	constexpr unsigned defaultMask (int) { return 1u << aux; }
@@ -68,16 +77,20 @@ namespace buses
 
 	using Masks = std::array<unsigned, stemCount>;
 
+	constexpr unsigned spareMask (Spare spare) { return spare == Spare::toAux ? 1u << aux : offMask; }
+
 	// Any state brought into the rule. In stem order (deck A stems 1-4, then
 	// deck B stems 1-4) the first stem on a bus keeps it; a stem on several
-	// keeps the lowest one still free; every other stem goes to AUX.
-	inline Masks normalise (const Masks& masks)
+	// keeps the lowest one still free; an off stem stays off; every other
+	// stem goes to the spare place.
+	inline Masks normalise (const Masks& masks, Spare spare = Spare::toAux)
 	{
 		Masks result {};
 		unsigned taken = 0;
 		for (size_t stem = 0; stem < masks.size(); ++stem)
 		{
-			result[stem] = 1u << aux;
+			const auto onAux = (masks[stem] & (1u << aux)) != 0;
+			result[stem] = masks[stem] == offMask ? offMask : onAux ? 1u << aux : spareMask (spare);
 			for (int bus = 0; bus < aux; ++bus)
 			{
 				const auto bit = 1u << bus;
@@ -92,34 +105,68 @@ namespace buses
 	}
 
 	// The masks after one switch, under the rule. A stem put on bus N takes
-	// N's previous stem to AUX; a stem taken off its bus goes to AUX; AUX on
-	// takes the stem off its channel; AUX off is refused, since a stem on no
-	// bus is on AUX. A switch out of range changes nothing.
-	inline Masks applySwitch (const Masks& masks, int stem, int bus, bool on)
+	// N's previous stem to the spare place; a stem taken off its bus goes
+	// there too; AUX on takes the stem off its channel; AUX off is refused,
+	// since a switch never puts a stem off. While the Auto-DJ plays (spare
+	// off), AUX on is refused instead and AUX off puts the stem off. A switch
+	// out of range changes nothing.
+	inline Masks applySwitch (const Masks& masks, int stem, int bus, bool on, Spare spare = Spare::toAux)
 	{
 		if (stem < 0 || stem >= stemCount || bus < 0 || bus >= count)
 			return masks;
 
-		auto result = normalise (masks);
+		auto result = normalise (masks, spare);
 		auto& mask = result[(size_t) stem];
 		const auto bit = 1u << bus;
 
 		if (bus == aux)
 		{
-			if (on)
+			if (spare == Spare::toAux && on)
 				mask = bit;
+			if (spare == Spare::toOff && ! on && mask == bit)
+				mask = offMask;
 			return result;
 		}
 		if (! on)
 		{
 			if (mask == bit)
-				mask = 1u << aux;
+				mask = spareMask (spare);
 			return result;
 		}
 		for (auto& other : result)
 			if (other == bit)
-				other = 1u << aux;
+				other = spareMask (spare);
 		mask = bit;
+		return result;
+	}
+
+	// The Auto-DJ's routing: a stem onto bus 1-4, or off. A stem it puts on a
+	// bus takes that bus's previous stem off, never to AUX. In order; one out
+	// of range is skipped.
+	constexpr int off = -1;
+	struct Route
+	{
+		int stem;   // stemIndex
+		int bus;    // 0-3, or off
+	};
+	inline Masks route (const Masks& masks, const std::vector<Route>& routes)
+	{
+		auto result = masks;
+		for (const auto& r : routes)
+		{
+			if (r.stem < 0 || r.stem >= stemCount || r.bus < off || r.bus >= aux)
+				continue;
+			if (r.bus == off)
+			{
+				result[(size_t) r.stem] = offMask;
+				continue;
+			}
+			const auto bit = 1u << r.bus;
+			for (auto& other : result)
+				if (other == bit)
+					other = offMask;
+			result[(size_t) r.stem] = bit;
+		}
 		return result;
 	}
 

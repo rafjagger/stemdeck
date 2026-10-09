@@ -69,6 +69,8 @@ namespace
 		return h < 0.0 ? h + 360.0 : h;
 	}
 
+	int sum (panel::Rgb c) { return c.r + c.g + c.b; }
+
 	int load (const panel::Leds& leds)
 	{
 		int total = 0;
@@ -77,6 +79,7 @@ namespace
 		return total;
 	}
 
+	// Theme::stem() and Theme::play / Theme::cue, which the panel is shown in.
 	const std::array<panel::Rgb, 4> stemColours { { { 0xe8, 0xa3, 0x3d }, { 0x4f, 0xb3, 0xbf },
 													{ 0xd0, 0x6a, 0x86 }, { 0x8f, 0x9b, 0xd6 } } };
 
@@ -281,49 +284,104 @@ TEST (PanelMap, TheBudgetCapsTheTotalAndKeepsTheBalance)
 	EXPECT_NEAR (scaled[0].g / (double) scaled[0].r, 128.0 / 255.0, 0.02);
 }
 
-TEST (PanelMap, EachStemLightsItsBusPad)
+// Every pad lights in its stem's colour, at full on the bus the stem is on
+// and at the base glow on the four it is not: the row says whose it is
+// before anything is pressed.
+TEST (PanelMap, EachStemLightsItsBusPadOverItsBase)
 {
 	auto state = allOnAux();
 	state.masks[(size_t) buses::stemIndex (0, 2)] = 1u << 0;
 	const auto leds = panel::render (state);
 
-	EXPECT_EQ (panel::withinBudget (leds), leds) << "rendered within the budget";
-	EXPECT_FALSE (dark (at (leds, { 4, 1 }))) << "deck A stem 3 on bus 1";
-	EXPECT_TRUE (dark (at (leds, { 4, 0 }))) << "and no longer on AUX";
-	EXPECT_NEAR (hue (at (leds, { 4, 1 })), hue (stemColours[2]), 3.0);
-	EXPECT_FALSE (dark (at (leds, { 2, 9 }))) << "deck B stem 1 on AUX";
-	EXPECT_NEAR (hue (at (leds, { 2, 9 })), hue (stemColours[0]), 3.0);
-
-	int lit = 0;
-	for (const auto& c : leds)
-		lit += dark (c) ? 0 : 1;
-	EXPECT_EQ (lit, 8) << "one pad per stem, transport dark";
+	EXPECT_EQ (at (leds, { 4, 1 }), panel::vivid (stemColours[2])) << "deck A stem 3 on bus 1, at full";
+	EXPECT_EQ (at (leds, { 4, 0 }), panel::base (stemColours[2])) << "and its AUX at the base";
+	EXPECT_EQ (at (leds, { 4, 3 }), panel::base (stemColours[2]));
+	EXPECT_EQ (at (leds, { 2, 9 }), panel::vivid (stemColours[0])) << "deck B stem 1 on AUX";
+	EXPECT_EQ (at (leds, { 2, 5 }), panel::base (stemColours[0]));
+	EXPECT_NEAR (hue (at (leds, { 4, 0 })), hue (stemColours[2]), 6.0);
 }
 
-TEST (PanelMap, AMutedStemIsDimmer)
+// At rest nothing is dark: CUE and PLAY glow in their own colours.
+TEST (PanelMap, EveryKeyGlowsAtRest)
+{
+	const auto state = allOnAux();
+	const auto leds = panel::render (state);
+	for (int led = 0; led < panel::ledCount; ++led)
+		EXPECT_FALSE (dark (leds[(size_t) led])) << "LED " << led;
+
+	EXPECT_EQ (at (leds, { 0, 0 }), panel::base (state.cueColour));
+	EXPECT_EQ (at (leds, { 1, 9 }), panel::base (state.playColour));
+}
+
+// The base is a glow, not a light: well under the active level.
+TEST (PanelMap, TheBaseIsAGlow)
+{
+	for (const auto c : stemColours)
+	{
+		const auto full = panel::vivid (c), glow = panel::base (c);
+		EXPECT_GT (sum (glow), 0);
+		EXPECT_LE (sum (glow) * 10, sum (full));
+	}
+}
+
+// A muted stem's pad stands clearly above the base glow around it, and
+// clearly below an open stem: three levels, one stop or more apart.
+TEST (PanelMap, MutedStandsBetweenBaseAndFull)
 {
 	auto state = allOnAux();
 	state.muted[(size_t) buses::stemIndex (1, 0)] = true;
 	const auto leds = panel::render (state);
-	const auto muted = at (leds, { 2, 9 }), open = at (leds, { 2, 0 });
-	EXPECT_FALSE (dark (muted));
-	EXPECT_LT (muted.r + muted.g + muted.b, (open.r + open.g + open.b) / 2);
+	const auto muted = at (leds, { 2, 9 }), glow = at (leds, { 2, 5 }), open = at (leds, { 2, 0 });
+	EXPECT_GE (sum (muted) * 10, sum (glow) * 25) << "muted at least 2.5 x the base";
+	EXPECT_LE (sum (muted) * 2, sum (open));
 }
 
-TEST (PanelMap, TransportLightsAndEverythingStaysInBudget)
+TEST (PanelMap, TransportLightsOverItsBase)
 {
 	auto state = allOnAux();
 	state.playing = { true, false };
 	state.atCue = { false, true };
 	const auto leds = panel::render (state);
-	EXPECT_FALSE (dark (at (leds, { 1, 0 })));
-	EXPECT_TRUE (dark (at (leds, { 0, 0 })));
-	EXPECT_TRUE (dark (at (leds, { 1, 9 })));
-	EXPECT_FALSE (dark (at (leds, { 0, 9 })));
+	EXPECT_EQ (at (leds, { 1, 0 }), panel::vivid (state.playColour));
+	EXPECT_EQ (at (leds, { 0, 0 }), panel::base (state.cueColour));
+	EXPECT_EQ (at (leds, { 1, 9 }), panel::base (state.playColour));
+	EXPECT_EQ (at (leds, { 0, 9 }), panel::vivid (state.cueColour));
+}
 
+// The worst the stems' own colours can do -- every stem open on a bus, each
+// deck's CUE or PLAY lit, every other key at its base -- fits the budget as
+// composed: the scale-down is a safety net, not part of normal use.
+TEST (PanelMap, WorstCaseFitsTheBudgetWithoutScaling)
+{
+	const std::array<std::array<bool, 2>, 4> transport { { { false, false }, { true, false }, { false, true }, { true, true } } };
+	const std::array<unsigned, 3> placements { 1u << buses::aux, 1u << 0, 1u << 3 };
+
+	int worst = 0;
+	for (const auto& playing : transport)
+		for (const auto& cue : transport)
+			for (const auto mask : placements)
+			{
+				auto state = allOnAux();
+				state.masks.fill (mask);
+				state.masks = buses::normalise (state.masks);
+				state.playing = playing;
+				state.atCue = cue;
+				const auto leds = panel::compose (state);
+				worst = std::max (worst, load (leds));
+				EXPECT_EQ (panel::render (state), leds) << "no scale-down";
+			}
+	EXPECT_LE (worst, panel::budget);
+	RecordProperty ("worstLoad", worst);
+}
+
+// Brighter colours than the stems' still never go over: the safety net.
+TEST (PanelMap, AnythingStaysWithinTheBudget)
+{
+	auto state = allOnAux();
 	state.playing = { true, true };
 	state.atCue = { true, true };
 	for (auto& c : state.stemColours)
 		c = { 255, 255, 255 };
+	state.playColour = state.cueColour = { 255, 255, 255 };
 	EXPECT_LE (load (panel::render (state)), panel::budget);
 }

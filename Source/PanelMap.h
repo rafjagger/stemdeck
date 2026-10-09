@@ -19,9 +19,10 @@
 //   rows 2-5  AUX  1  2  3  4   |   1  2  3  4  AUX     a row per stem, 1-4
 //
 // A pad switches its stem onto that bus or off it, through the mixer's own
-// switch (MixerPanel::pressBus) -- what a click on the screen key does; it
-// lights in the stem's colour while the stem is on that bus, dimmer while the
-// stem is muted. Over each half, four encoders -- two columns of two -- turn
+// switch (MixerPanel::pressBus) -- what a click on the screen key does. Every
+// key glows at rest in what it is (the stem's colour on its row, CUE and PLAY
+// in theirs) and lights at full over that glow while it is on: the stem on
+// that bus, a quarter while the stem is muted. Over each half, four encoders -- two columns of two -- turn
 // the four stems' gains in reading order; a push mutes the stem. The inner
 // pot of each half is the deck's fader; the outer pots are left free.
 namespace panel
@@ -95,6 +96,11 @@ namespace panel
 		Rgb playColour, cueColour;
 	};
 
-	// Every LED, by its id in the chain, within budget.
+	// A key's resting glow in `colour`: vivid, at a twelfth.
+	Rgb base (Rgb colour);
+
+	// Every LED as wanted, by its id in the chain, before the budget.
+	Leds compose (const LedState& state);
+	// The same within budget: what the panel is sent.
 	Leds render (const LedState& state);
 }

@@ -3,6 +3,7 @@
 #include <JuceHeader.h>
 #include "StemSet.h"
 #include "BarPhase.h"
+#include "CachedGrid.h"
 #include <optional>
 
 // Constant-tempo beat grid: beats at firstBeat + n * 60 / bpm (seconds).
@@ -67,11 +68,19 @@ public:
 	void storeCorrected (const StemSet& set, const BeatGrid& grid);
 	void clearCorrected (const StemSet& set);
 	std::optional<BeatGrid> findAnalysed (const StemSet& set) const;
+
+	// A grid analysed before the one was found from the stems, never
+	// corrected by hand: its one is to be found again (CachedGrid.h).
+	bool needsNewDownbeat (const StemSet& set) const;
+	// The analysed grid's one, found again; a correction made meanwhile wins.
+	void storeNewDownbeat (const StemSet& set, double firstBeat);
 	// Corrections are many small steps (the jog): kept in memory, written here.
 	void flush();
 
 private:
 	static juce::String keyFor (const StemSet& set);
+	static CachedGrid::Entry entryOf (const juce::XmlElement& element);
+	void write();
 
 	juce::File file;
 	std::unique_ptr<juce::XmlElement> xml;

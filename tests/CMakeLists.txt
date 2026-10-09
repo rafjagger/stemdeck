@@ -3,6 +3,8 @@ add_executable(stemdeck-tests
     Smoke.cpp
     BarPhase.cpp
     ${CMAKE_SOURCE_DIR}/Source/BarPhase.cpp
+    CachedGrid.cpp
+    ${CMAKE_SOURCE_DIR}/Source/CachedGrid.cpp
     Buses.cpp
     Outputs.cpp
     GridEdit.cpp

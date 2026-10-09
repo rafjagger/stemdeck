@@ -386,6 +386,39 @@ std::optional<BeatGrid> AnalysisCache::findAnalysed (const StemSet& set) const
 	return std::nullopt;
 }
 
+CachedGrid::Entry AnalysisCache::entryOf (const juce::XmlElement& element)
+{
+	CachedGrid::Entry entry;
+	entry.bpm = element.getDoubleAttribute ("bpm");
+	entry.firstBeat = element.getDoubleAttribute ("firstBeat");
+	entry.version = element.getIntAttribute ("version", 1);
+	entry.corrected = element.hasAttribute ("correctedBpm");
+	return entry;
+}
+
+bool AnalysisCache::needsNewDownbeat (const StemSet& set) const
+{
+	const auto* element = xml->getChildByAttribute ("key", keyFor (set));
+	return element != nullptr && CachedGrid::needsNewDownbeat (entryOf (*element));
+}
+
+void AnalysisCache::storeNewDownbeat (const StemSet& set, double firstBeat)
+{
+	auto* element = xml->getChildByAttribute ("key", keyFor (set));
+	if (element == nullptr)
+		return;
+
+	const auto before = entryOf (*element);
+	if (! CachedGrid::needsNewDownbeat (before))
+		return;   // corrected by hand or analysed anew meanwhile
+
+	const auto after = CachedGrid::withNewDownbeat (before, firstBeat);
+
+	element->setAttribute ("firstBeat", after.firstBeat);
+	element->setAttribute ("version", after.version);
+	write();
+}
+
 void AnalysisCache::storeCorrected (const StemSet& set, const BeatGrid& grid)
 {
 	if (auto* entry = xml->getChildByAttribute ("key", keyFor (set)))
@@ -426,7 +459,13 @@ void AnalysisCache::store (const StemSet& set, const BeatGrid& grid)
 	entry->setAttribute ("name", set.name);
 	entry->setAttribute ("bpm", grid.bpm);
 	entry->setAttribute ("firstBeat", grid.firstBeat);
+	entry->setAttribute ("version", CachedGrid::currentVersion);
+	write();
+}
 
+void AnalysisCache::write()
+{
 	file.getParentDirectory().createDirectory();
-	xml->writeTo (file);
+	if (xml->writeTo (file))
+		unwritten = false;
 }

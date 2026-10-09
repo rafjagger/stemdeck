@@ -72,6 +72,7 @@ private:
 
 	void loadSet (const StemSet& set, int deckIndex);
 	void startAnalysis (const StemSet& set, int deckIndex);
+	void startDownbeatAnalysis (const StemSet& set, int deckIndex);
 	void setSync (int deckIndex, bool enabled);
 	void updateSync();
 	double applyFollow (int deckIndex, FollowInput in, double followerPosition);

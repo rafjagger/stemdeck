@@ -10,6 +10,7 @@ target_sources(stemdeck-downbeat-eval PRIVATE
     Main.cpp
     ${CMAKE_SOURCE_DIR}/Source/TempoAnalysis.cpp
     ${CMAKE_SOURCE_DIR}/Source/BarPhase.cpp
+    ${CMAKE_SOURCE_DIR}/Source/CachedGrid.cpp
     ${CMAKE_SOURCE_DIR}/Source/StemSet.cpp
     ${CMAKE_SOURCE_DIR}/Source/LibraryPath.cpp
     ${CMAKE_SOURCE_DIR}/Source/StemNames.cpp)

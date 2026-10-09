@@ -1,6 +1,8 @@
 find_package(GTest REQUIRED)
 add_executable(stemdeck-tests
     Smoke.cpp
+    BarPhase.cpp
+    ${CMAKE_SOURCE_DIR}/Source/BarPhase.cpp
     Buses.cpp
     Outputs.cpp
     GridEdit.cpp

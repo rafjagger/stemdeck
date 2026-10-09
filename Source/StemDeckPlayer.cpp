@@ -3,6 +3,9 @@
 #include "GridEdit.h"
 #include "Buses.h"
 
+// The session keeps one mix state per stem (Session.h counts them as the buses do).
+static_assert (StemDeckPlayer::numStems == buses::stemsPerDeck);
+
 StemDeckPlayer::StemDeckPlayer (juce::AudioFormatManager& fm) : formatManager (fm)
 {
 	for (int i = 0; i < numStems; ++i)

@@ -54,8 +54,20 @@ add_executable(stemdeck-tests
     KeyLock.cpp
     ${CMAKE_SOURCE_DIR}/Source/KeyLock.cpp
     KeyLockStretcher.cpp
-    ${CMAKE_SOURCE_DIR}/Source/KeyLockStretcher.cpp)
+    ${CMAKE_SOURCE_DIR}/Source/KeyLockStretcher.cpp
+    Session.cpp
+    ${CMAKE_SOURCE_DIR}/Source/Session.cpp)
 target_include_directories(stemdeck-tests PRIVATE ${CMAKE_SOURCE_DIR}/Source)
+
+# The session is XML: juce_core, and nothing else of JUCE, comes into the
+# tests -- as a library of its own, JUCE's way for module code outside an app.
+add_library(stemdeck-tests-juce STATIC)
+target_link_libraries(stemdeck-tests-juce
+    PRIVATE juce::juce_core
+    PUBLIC juce::juce_recommended_config_flags)
+target_compile_definitions(stemdeck-tests-juce PUBLIC JUCE_USE_CURL=0 JUCE_WEB_BROWSER=0 JUCE_STANDALONE_APPLICATION=0)
+target_compile_definitions(stemdeck-tests-juce INTERFACE $<TARGET_PROPERTY:stemdeck-tests-juce,COMPILE_DEFINITIONS>)
+target_include_directories(stemdeck-tests-juce INTERFACE $<TARGET_PROPERTY:stemdeck-tests-juce,INCLUDE_DIRECTORIES>)
 
 # Debian keeps upstream file times, so make cannot see that libgtest-dev was
 # upgraded and links old test objects against the new library (stemdeck#1).
@@ -73,6 +85,6 @@ add_custom_target(stemdeck-gtest-stamp
 add_dependencies(stemdeck-tests stemdeck-gtest-stamp)
 target_compile_options(stemdeck-tests PRIVATE -include ${gtest_stamp_header})
 target_compile_features(stemdeck-tests PRIVATE cxx_std_17)
-target_link_libraries(stemdeck-tests PRIVATE GTest::gtest GTest::gtest_main PkgConfig::RUBBERBAND)
+target_link_libraries(stemdeck-tests PRIVATE GTest::gtest GTest::gtest_main PkgConfig::RUBBERBAND stemdeck-tests-juce)
 include(GoogleTest)
 gtest_discover_tests(stemdeck-tests)

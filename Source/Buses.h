@@ -13,7 +13,8 @@
 // off -- on no bus, silent: the Auto-DJ's place for a stem not yet, or no
 // longer, playing (route). A manual switch never puts a stem off and leaves an
 // off stem off; while the Auto-DJ plays, the place a switch sends a stem to
-// is off instead of AUX, so nothing reaches AUX then. Buses 1-4 are the desk's
+// is off instead of AUX, so only a DJ's own AUX press reaches AUX then.
+// Buses 1-4 are the desk's
 // channels, switched by remote control (spec stemdeck-remote), and a stem
 // there silences that channel's analog input -- so a fresh StemDeck starts
 // with every stem on AUX and on no channel. Every bus is post fader; stem
@@ -108,8 +109,8 @@ namespace buses
 	// N's previous stem to the spare place; a stem taken off its bus goes
 	// there too; AUX on takes the stem off its channel; AUX off is refused,
 	// since a switch never puts a stem off. While the Auto-DJ plays (spare
-	// off), AUX on is refused instead and AUX off puts the stem off. A switch
-	// out of range changes nothing.
+	// off), AUX off puts the stem off instead. A switch out of range changes
+	// nothing.
 	inline Masks applySwitch (const Masks& masks, int stem, int bus, bool on, Spare spare = Spare::toAux)
 	{
 		if (stem < 0 || stem >= stemCount || bus < 0 || bus >= count)
@@ -121,7 +122,7 @@ namespace buses
 
 		if (bus == aux)
 		{
-			if (spare == Spare::toAux && on)
+			if (on)
 				mask = bit;
 			if (spare == Spare::toOff && ! on && mask == bit)
 				mask = offMask;

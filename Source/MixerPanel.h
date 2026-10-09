@@ -70,8 +70,6 @@ public:
 	ChannelStrip (StemDeckPlayer& player, int deckIndex);
 
 	void toggleMute (int stem);
-	// As a click on the stem's mute button would (the Auto-DJ's handover).
-	void setMuted (int stem, bool muted);
 	void refresh(); // meters, called by the main timer
 	void setMeterParameters (MeterParameters parameters)
 	{
@@ -133,6 +131,13 @@ public:
 	// decks: the players and the screen follow. Returns the stems Core must
 	// hear (buses::stemIndex), the switched one always among them.
 	std::vector<int> switchBus (int deck, int stem, int bus, bool on);
+	// Where a switch sends a stem it takes off its channel: AUX, or off
+	// while the Auto-DJ plays (Buses.h).
+	void setSpare (buses::Spare s) { spare = s; }
+	// The Auto-DJ's routing (buses::route), applied as a switch is: the
+	// players and the screen follow, and every stem it moved is reported
+	// through onBusesChanged, as after a click.
+	void route (const std::vector<buses::Route>& routes);
 	// After a session load: brings both decks' switches into the rule.
 	void normaliseBuses();
 	// Called for every stem a click moved, the clicked one included.
@@ -155,6 +160,7 @@ private:
 	void setBusMasks (const buses::Masks& masks);
 
 	std::array<StemDeckPlayer*, buses::decks> players;
+	buses::Spare spare = buses::Spare::toAux;
 	ChannelStrip stripA, stripB;
 	OutputMeters outputMeters;
 

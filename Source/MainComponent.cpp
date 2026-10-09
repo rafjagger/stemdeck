@@ -844,6 +844,8 @@ void MainComponent::setAutoDj (bool on)
 	autoDjButton.setToggleState (on, juce::dontSendNotification);
 	autoDjButton.setButtonText ("AUTO DJ");
 	autoDj.setEnabled (on);
+	// While it plays nothing reaches AUX; off, the routing stays as it is.
+	mixer.setSpare (on ? buses::Spare::toOff : buses::Spare::toAux);
 	if (on)
 		runAutoDj();
 }
@@ -960,8 +962,6 @@ void MainComponent::runAutoDj()
 		view.firstBeat = grid.firstBeat;
 		view.rate = player.getEffectiveRate();
 		view.looping = player.hasLoop();
-		for (int s = 0; s < AutoDj::numStems; ++s)
-			view.muted[(size_t) s] = player.isStemMuted (s);
 		view.levels = deckLevels[(size_t) d].get();
 	}
 
@@ -986,16 +986,19 @@ void MainComponent::runAutoDj()
 		}
 	}
 
+	std::vector<buses::Route> routes;
 	for (int d = 0; d < numDecks; ++d)
 	{
 		if (const auto db = c.faderDb[(size_t) d])
 			mixer.strip (d).setFaderDb (*db);
-		// Through the mute buttons, as a click: the player, the screen, the
-		// controller's lights and the session all see it as a DJ's mute.
 		for (int s = 0; s < AutoDj::numStems; ++s)
-			if (const auto muted = c.mute[(size_t) d][(size_t) s])
-				mixer.strip (d).setMuted (s, *muted);
+			if (const auto bus = c.bus[(size_t) d][(size_t) s])
+				routes.push_back ({ buses::stemIndex (d, s), *bus == AutoDj::offBus ? buses::off : *bus });
 	}
+	// All of a tick's switches at once, before the start, and to Core as a
+	// click's are: the desk sees every stem it moved.
+	if (! routes.empty())
+		mixer.route (routes);
 
 	if (c.syncOn >= 0)
 	{

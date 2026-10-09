@@ -83,6 +83,9 @@ namespace
 	const std::array<panel::Rgb, 4> stemColours { { { 0xe8, 0xa3, 0x3d }, { 0x4f, 0xb3, 0xbf },
 													{ 0xd0, 0x6a, 0x86 }, { 0x8f, 0x9b, 0xd6 } } };
 
+	// Theme::deck(): A blue, B orange, as the decks are on the screen.
+	const std::array<panel::Rgb, 2> deckColours { { { 0x4a, 0x9e, 0xff }, { 0xff, 0x8a, 0x3d } } };
+
 	panel::LedState allOnAux()
 	{
 		panel::LedState state;
@@ -90,6 +93,7 @@ namespace
 		state.stemColours = stemColours;
 		state.playColour = { 0x3e, 0xc4, 0x6d };
 		state.cueColour = { 0xe8, 0xa3, 0x3d };
+		state.deckColours = deckColours;
 		return state;
 	}
 
@@ -110,6 +114,13 @@ TEST (PanelMap, PadsAreTheRoutingMatrix)
 	expectRoute ({ 2, 5 }, 1, 0, 0);
 	expectRoute ({ 4, 8 }, 1, 2, 3);
 	expectRoute ({ 5, 9 }, 1, 3, buses::aux);
+
+	// The far left and far right columns: AUX of stems 1-4, top to bottom.
+	for (int stem = 0; stem < buses::stemsPerDeck; ++stem)
+	{
+		expectRoute ({ panel::firstPadRow + stem, 0 }, 0, stem, buses::aux);
+		expectRoute ({ panel::firstPadRow + stem, 9 }, 1, stem, buses::aux);
+	}
 }
 
 TEST (PanelMap, EveryRouteHasExactlyOnePad)
@@ -284,33 +295,41 @@ TEST (PanelMap, TheBudgetCapsTheTotalAndKeepsTheBalance)
 	EXPECT_NEAR (scaled[0].g / (double) scaled[0].r, 128.0 / 255.0, 0.02);
 }
 
-// Every pad lights in its stem's colour, at full on the bus the stem is on
-// and at the base glow on the four it is not: the row says whose it is
-// before anything is pressed.
-TEST (PanelMap, EachStemLightsItsBusPadOverItsBase)
+// A pad lights in its stem's colour at full on the bus the stem is on; every
+// other key of a deck's half rests in the deck's colour -- the halves read as
+// A and B before anything is pressed.
+TEST (PanelMap, ActivePadsOverTheDecksBase)
 {
 	auto state = allOnAux();
 	state.masks[(size_t) buses::stemIndex (0, 2)] = 1u << 0;
 	const auto leds = panel::render (state);
 
 	EXPECT_EQ (at (leds, { 4, 1 }), panel::vivid (stemColours[2])) << "deck A stem 3 on bus 1, at full";
-	EXPECT_EQ (at (leds, { 4, 0 }), panel::base (stemColours[2])) << "and its AUX at the base";
-	EXPECT_EQ (at (leds, { 4, 3 }), panel::base (stemColours[2]));
+	EXPECT_EQ (at (leds, { 4, 0 }), panel::base (deckColours[0])) << "and its AUX at deck A's base";
+	EXPECT_EQ (at (leds, { 4, 3 }), panel::base (deckColours[0]));
 	EXPECT_EQ (at (leds, { 2, 9 }), panel::vivid (stemColours[0])) << "deck B stem 1 on AUX";
-	EXPECT_EQ (at (leds, { 2, 5 }), panel::base (stemColours[0]));
-	EXPECT_NEAR (hue (at (leds, { 4, 0 })), hue (stemColours[2]), 6.0);
+	EXPECT_EQ (at (leds, { 2, 5 }), panel::base (deckColours[1]));
 }
 
-// At rest nothing is dark: CUE and PLAY glow in their own colours.
-TEST (PanelMap, EveryKeyGlowsAtRest)
+// At rest nothing is dark, and every key wears its half's deck colour:
+// the outer columns' CUE and PLAY included.
+TEST (PanelMap, EveryKeyRestsInItsDecksColour)
 {
-	const auto state = allOnAux();
+	auto state = allOnAux();
+	state.masks.fill (1u << 0);
+	state.masks = buses::normalise (state.masks);   // stem A1 on bus 1, the rest on AUX
 	const auto leds = panel::render (state);
-	for (int led = 0; led < panel::ledCount; ++led)
-		EXPECT_FALSE (dark (leds[(size_t) led])) << "LED " << led;
-
-	EXPECT_EQ (at (leds, { 0, 0 }), panel::base (state.cueColour));
-	EXPECT_EQ (at (leds, { 1, 9 }), panel::base (state.playColour));
+	for (int i = 0; i < panel::buttonCount; ++i)
+	{
+		const auto cell = panel::buttonCell (i);
+		const auto colour = at (leds, cell);
+		EXPECT_FALSE (dark (colour)) << cell.row << "," << cell.col;
+		const auto control = panel::controlAt (cell);
+		const auto on = control.kind == Control::Kind::route
+					 && (state.masks[(size_t) buses::stemIndex (control.deck, control.stem)] & (1u << control.bus)) != 0;
+		if (! on)
+			EXPECT_EQ (colour, panel::base (deckColours[(size_t) (cell.col < 5 ? 0 : 1)])) << cell.row << "," << cell.col;
+	}
 }
 
 // The base is a glow, not a light: well under the active level.
@@ -325,7 +344,7 @@ TEST (PanelMap, TheBaseIsAGlow)
 }
 
 // A muted stem's pad stands clearly above the base glow around it, and
-// clearly below an open stem: three levels, one stop or more apart.
+// clearly below an open stem.
 TEST (PanelMap, MutedStandsBetweenBaseAndFull)
 {
 	auto state = allOnAux();
@@ -336,15 +355,16 @@ TEST (PanelMap, MutedStandsBetweenBaseAndFull)
 	EXPECT_LE (sum (muted) * 2, sum (open));
 }
 
-TEST (PanelMap, TransportLightsOverItsBase)
+// Active CUE and PLAY keep their own colours over the deck's base.
+TEST (PanelMap, TransportLightsOverTheDecksBase)
 {
 	auto state = allOnAux();
 	state.playing = { true, false };
 	state.atCue = { false, true };
 	const auto leds = panel::render (state);
 	EXPECT_EQ (at (leds, { 1, 0 }), panel::vivid (state.playColour));
-	EXPECT_EQ (at (leds, { 0, 0 }), panel::base (state.cueColour));
-	EXPECT_EQ (at (leds, { 1, 9 }), panel::base (state.playColour));
+	EXPECT_EQ (at (leds, { 0, 0 }), panel::base (deckColours[0]));
+	EXPECT_EQ (at (leds, { 1, 9 }), panel::base (deckColours[1]));
 	EXPECT_EQ (at (leds, { 0, 9 }), panel::vivid (state.cueColour));
 }
 
@@ -383,5 +403,6 @@ TEST (PanelMap, AnythingStaysWithinTheBudget)
 	for (auto& c : state.stemColours)
 		c = { 255, 255, 255 };
 	state.playColour = state.cueColour = { 255, 255, 255 };
+	state.deckColours = { { { 255, 255, 255 }, { 255, 255, 255 } } };
 	EXPECT_LE (load (panel::render (state)), panel::budget);
 }

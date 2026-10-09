@@ -853,6 +853,8 @@ void MainComponent::showPanel()
 		state.stemColours[(size_t) s] = toRgb (Theme::stem (s));
 	state.playColour = toRgb (Theme::play);
 	state.cueColour = toRgb (Theme::cue);
+	for (int d = 0; d < numDecks; ++d)
+		state.deckColours[(size_t) d] = toRgb (Theme::deck (d));
 	motionPanel->show (state);
 }
 

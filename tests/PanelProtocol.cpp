@@ -171,3 +171,20 @@ TEST (PanelProtocol, PlacesOfAFewKeys)
 	EXPECT_EQ (panel::buttonCell (40), (Cell { 0, 0 }));
 	EXPECT_EQ (panel::buttonCell (43), (Cell { 1, 9 }));
 }
+
+// The outer columns' rows 2-5, top to bottom, are the AUX keys of stems 1-4:
+// pinned here by the firmware's key index and LED id, as A³ Motion's adapter
+// has them (its function rows 2-5: keys 2 1 0 3 on the left, 36 38 39 37 on
+// the right; LEDs by hwIndexToLedId).
+TEST (PanelProtocol, OuterColumnsKeysAndLeds)
+{
+	const struct { int button, row, col, led; } outer[] = {
+		{ 2, 2, 0, 41 }, { 1, 3, 0, 40 }, { 0, 4, 0, 39 }, { 3, 5, 0, 38 },
+		{ 36, 2, 9, 2 }, { 38, 3, 9, 3 }, { 39, 4, 9, 4 }, { 37, 5, 9, 5 },
+	};
+	for (const auto& k : outer)
+	{
+		EXPECT_EQ (panel::buttonCell (k.button), (Cell { k.row, k.col })) << k.button;
+		EXPECT_EQ (panel::ledAt ({ k.row, k.col }), k.led) << k.button;
+	}
+}

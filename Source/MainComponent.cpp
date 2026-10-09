@@ -199,6 +199,8 @@ MainComponent::MainComponent()
 	// After the session is restored: a click reports, a restore before the
 	// link runs reports nothing, and Core asks for everything on our hello.
 	mixer.onBusesChanged = [this] (int deck, int stem) { remote.report (deck, stem); };
+	static_assert (AutoDj::auxBus == buses::aux && AutoDj::numStems == buses::stemsPerDeck);
+	mixer.onDjSwitch = [this] (int deck, int stem, int bus, bool on) { autoDj.djSwitched (deck, stem, bus, on); };
 	remote.start (truthPath, truthHash);
 
 	motionPanel = std::make_unique<PanelDevice>();
@@ -1157,6 +1159,13 @@ void MainComponent::runAutoDj()
 		{
 			view.audibleStart = span->start;
 			view.audibleEnd = span->end;
+		}
+		for (int s = 0; s < AutoDj::numStems; ++s)
+		{
+			const auto mask = player.getStemBuses (s);
+			view.bus[(size_t) s] = mask == buses::offMask ? AutoDj::offBus
+								 : (mask & (1u << buses::aux)) != 0 ? AutoDj::auxBus
+								 : (int) juce::findHighestSetBit (mask);
 		}
 		view.levelsPending = levelsGeneration[(size_t) d] == loadGeneration[(size_t) d]
 						  && levelsRead[(size_t) d] != loadGeneration[(size_t) d];

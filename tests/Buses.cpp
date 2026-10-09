@@ -332,7 +332,7 @@ TEST (Buses, AManualSwitchNeverPutsAStemOff)
 	EXPECT_EQ (buses::applySwitch (autoDjDeckAOn14(), 6, buses::aux, true)[6], onAux);
 }
 
-// While the Auto-DJ plays, nothing goes to AUX: the spare place is off.
+// While the Auto-DJ plays, a displaced stem goes off, not to AUX.
 TEST (Buses, WhileTheAutoDjPlaysTheSparePlaceIsOff)
 {
 	const auto masks = autoDjDeckAOn14();
@@ -343,8 +343,20 @@ TEST (Buses, WhileTheAutoDjPlaysTheSparePlaceIsOff)
 	const auto takenOff = buses::applySwitch (masks, 1, 1, false, buses::Spare::toOff);
 	EXPECT_EQ (takenOff[1], buses::offMask);
 
-	EXPECT_EQ (buses::applySwitch (masks, 4, buses::aux, true, buses::Spare::toOff), masks) << "AUX on is refused";
-	EXPECT_EQ (stemsOn (buses::applySwitch (masks, 2, buses::aux, true, buses::Spare::toOff), buses::aux), 0);
+}
+
+// A DJ's AUX press while the Auto-DJ plays is his: the stem leaves its desk
+// bus for AUX, and AUX off puts it on no bus, for the Auto-DJ to place.
+TEST (Buses, WhileTheAutoDjPlaysTheDjCanStillUseAux)
+{
+	const auto masks = autoDjDeckAOn14();
+	const auto onReturn = buses::applySwitch (masks, 2, buses::aux, true, buses::Spare::toOff);
+	EXPECT_EQ (onReturn[2], onAux) << "A's other on the return";
+	EXPECT_EQ (stemsOn (onReturn, 2), 0) << "bus 3 carries nothing now";
+	expectTheRule (onReturn);
+
+	const auto back = buses::applySwitch (onReturn, 2, buses::aux, false, buses::Spare::toOff);
+	EXPECT_EQ (back[2], buses::offMask);
 }
 
 // A deck's switches left to right, on the screen and on the A³ Motion panel

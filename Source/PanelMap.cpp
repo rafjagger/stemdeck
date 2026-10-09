@@ -9,7 +9,13 @@ namespace panel
 	{
 		constexpr int columnsPerDeck = columns / buses::decks;
 		constexpr int cueRow = 0, playRow = 1;
-		constexpr int mutedShare = 4;   // a muted stem's pad at a quarter
+		// Three levels a stem's pad can be at: full on its bus, a quarter on
+		// its bus while muted, a twelfth -- the resting glow -- on the buses
+		// it is not on; each well over a stop from the next. The twelfth is
+		// also what keeps 32 resting keys and 10 lit ones inside the budget
+		// (PanelMap test WorstCaseFitsTheBudgetWithoutScaling).
+		constexpr int mutedShare = 4;
+		constexpr int baseShare = 12;
 
 		int deckOfColumn (int col) { return col / columnsPerDeck; }
 		int outerColumn (int deck) { return deck == 0 ? 0 : columns - 1; }
@@ -213,28 +219,41 @@ namespace panel
 		return result;
 	}
 
-	Leds render (const LedState& state)
+	Rgb base (Rgb colour)
+	{
+		return scaled (vivid (colour), 1, baseShare);
+	}
+
+	Leds render (const LedState& state) { return withinBudget (compose (state)); }
+
+	Leds compose (const LedState& state)
 	{
 		Leds leds {};
 
 		for (int deck = 0; deck < buses::decks; ++deck)
 		{
+			// Every key glows in what it is; what is on lights over it.
 			for (int stem = 0; stem < buses::stemsPerDeck; ++stem)
 			{
 				const auto index = (size_t) buses::stemIndex (deck, stem);
-				auto colour = vivid (state.stemColours[(size_t) stem]);
+				const auto stemColour = state.stemColours[(size_t) stem];
+				auto on = vivid (stemColour);
 				if (state.muted[index])
-					colour = scaled (colour, 1, mutedShare);
+					on = scaled (on, 1, mutedShare);
 				for (int bus = 0; bus < buses::count; ++bus)
-					if ((state.masks[index] & (1u << bus)) != 0)
-						light (leds, { Control::Kind::route, deck, stem, bus }, colour);
+				{
+					const auto isOn = (state.masks[index] & (1u << bus)) != 0;
+					light (leds, { Control::Kind::route, deck, stem, bus }, isOn ? on : base (stemColour));
+				}
 			}
 
-			if (state.atCue[(size_t) deck])
-				light (leds, { Control::Kind::cue, deck }, vivid (state.cueColour));
-			if (state.playing[(size_t) deck])
-				light (leds, { Control::Kind::play, deck }, vivid (state.playColour));
+			const auto transport = [&] (Control::Kind kind, bool isOn, Rgb colour)
+			{
+				light (leds, { kind, deck }, isOn ? vivid (colour) : base (colour));
+			};
+			transport (Control::Kind::cue, state.atCue[(size_t) deck], state.cueColour);
+			transport (Control::Kind::play, state.playing[(size_t) deck], state.playColour);
 		}
-		return withinBudget (leds);
+		return leds;
 	}
 }

@@ -10,8 +10,8 @@
 
 // One deck, as a column: the times, the Grid Adjust rows, track search |
 // CUE | PLAY | track search, and the keys below (2026-10-08). Its overview
-// (stem names on its lanes), title, BPM and pitch fader (with value and range
-// key) stand in the band under the decks and the mixer: the deck owns and
+// (stem names on its lanes), title, BPM and pitch fader (with value, range
+// key and KEY, the key lock) stand in the band under the decks and the mixer: the deck owns and
 // drives them, the window holds and places them (addBandPartsTo, setBandBounds).
 //
 // Cue works like Mixxx's CDJ mode: while playing it jumps back to the cue
@@ -56,8 +56,8 @@ public:
 	std::function<void()> onMasterPressed;
 	void setMaster (bool isMaster) { masterButton.setToggleState (isMaster, juce::dontSendNotification); }
 
-	// The deck's own controls for the session (tempo, range, vinyl, repeat,
-	// SYNC); restoring SYNC is the caller's, through onSyncToggled.
+	// The deck's own controls for the session (tempo, range, key lock, vinyl,
+	// repeat, SYNC); restoring SYNC is the caller's, through onSyncToggled.
 	// Grid Adjust, as on a CDJ-3000: GRID turns it on; the jog wheel then moves
 	// the grid, and <1/2 1/2> <1 1> (the one a beat) SNAP (the downbeat onto the cue) SHIFT (take the
 	// phase aligned by ear against the sync leader) RESET (as analysed) edit it.
@@ -105,6 +105,7 @@ private:
 	juce::Slider pitchFader { juce::Slider::LinearVertical, juce::Slider::NoTextBox };
 	juce::Label pitchValue;
 	juce::TextButton rangeKey;
+	juce::TextButton keyLockButton { "KEY" };
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DeckPanel)
 };

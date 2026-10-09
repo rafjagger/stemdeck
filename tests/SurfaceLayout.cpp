@@ -108,6 +108,7 @@ namespace
 			band.controls.push_back ({ "pitch" + name, deck.pitch, true });
 			band.controls.push_back ({ "pitchValue" + name, deck.pitchValue, false });
 			band.controls.push_back ({ "range" + name, deck.range, true });
+			band.controls.push_back ({ "keyLock" + name, deck.keyLock, true });
 			band.controls.push_back ({ "bpm" + name, deck.bpm, false });
 			band.controls.push_back ({ "bpmInfo" + name, deck.bpmInfo, false });
 			band.controls.push_back ({ "title" + name, deck.title, false });
@@ -210,7 +211,7 @@ TEST (SurfaceLayout, OneTilePerDeckAndOneForTheMeters)
 		for (size_t d = 0; d < 2; ++d)
 		{
 			const auto& deck = b.deck[d];
-			for (const auto& part : { deck.pitchValue, deck.pitch, deck.range, deck.title, deck.stems,
+			for (const auto& part : { deck.pitchValue, deck.pitch, deck.keyLock, deck.range, deck.title, deck.stems,
 									  deck.overview, deck.bpm, deck.bpmInfo, deck.fader })
 				EXPECT_TRUE (deck.tile.contains (part)) << at;
 			EXPECT_FALSE (deck.tile.intersects (b.metersTile)) << at;
@@ -295,6 +296,39 @@ TEST (SurfaceLayout, TilesStandOneGapFromTheDeckLines)
 				EXPECT_TRUE (column.transportTile.reduced (m.gap).contains (key)) << "a gap inside the tile, " << at;
 		}
 	}
+}
+
+// KEY (key lock) with the tempo's keys: at the foot of the tile, beside the
+// range key, before the BPM -- the pitch fader keeps its whole travel.
+TEST (SurfaceLayout, TheKeyLockKeyStandsWithTheTempoControls)
+{
+	for (const auto& [w, h] : windows)
+	{
+		const auto at = sizeName (w, h);
+		const auto s = surface::sections (w, h);
+		const auto b = surface::band (s.band, s.metrics);
+
+		for (size_t d = 0; d < 2; ++d)
+		{
+			const auto& deck = b.deck[d];
+			EXPECT_TRUE (deck.tile.contains (deck.keyLock)) << at;
+			EXPECT_EQ (deck.keyLock.bottom(), deck.range.bottom()) << "level with the range key at the foot, " << at;
+			EXPECT_GE (deck.keyLock.h, deck.range.h) << at;
+			EXPECT_EQ (deck.keyLock.y, deck.bpm.y) << "beside the BPM, " << at;
+			EXPECT_EQ (deck.keyLock.w, deck.pitch.w) << at;
+		}
+
+		// From the outside in: range key, KEY, BPM.
+		EXPECT_LT (b.deck[0].range.right(), b.deck[0].keyLock.x) << at;
+		EXPECT_LT (b.deck[0].keyLock.right(), b.deck[0].bpm.x) << at;
+		EXPECT_LT (b.deck[1].bpm.right(), b.deck[1].keyLock.x) << at;
+		EXPECT_LT (b.deck[1].keyLock.right(), b.deck[1].range.x) << at;
+	}
+
+	const auto s = surface::sections (rigWidth, rigHeight);
+	const auto b = surface::band (s.band, s.metrics);
+	EXPECT_GE (b.deck[0].keyLock.h, 26) << "a finger's key on the rig, as the range key";
+	EXPECT_GE (b.deck[0].bpm.w, 90) << "room for 129.00";
 }
 
 // No key moves when GRID turns on: the finger that turned it on turns it off.

@@ -65,12 +65,13 @@ namespace surface
 	// at the same gap from the decks' lines, which run between the tiles.
 	// A deck's tile, from the outside in: the pitch column (the value above
 	// the fader, the range key below it); the title and stems line above the
-	// overview, the BPM and the original under it; the volume fader (the
-	// stems' meters in its slot). B mirrored.
+	// overview, the BPM and the original under it, KEY (key lock) before
+	// them beside the range key; the volume fader (the stems' meters in its
+	// slot). B mirrored.
 	struct DeckTile
 	{
 		Rect tile;
-		Rect pitchValue, pitch, range;
+		Rect pitchValue, pitch, keyLock, range;
 		Rect title, stems, overview, bpm, bpmInfo;
 		Rect fader;
 	};

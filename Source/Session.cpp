@@ -24,6 +24,7 @@ std::unique_ptr<juce::XmlElement> Session::toXml() const
 		e->setAttribute ("tempoRange", deck.tempoRange);
 		e->setAttribute ("vinyl", deck.vinyl);
 		e->setAttribute ("sync", deck.sync);
+		e->setAttribute ("keyLock", deck.keyLock);
 		e->setAttribute ("fader", deck.faderDb);
 
 		for (size_t s = 0; s < deck.stems.size(); ++s)
@@ -79,6 +80,7 @@ Session Session::fromXml (const juce::XmlElement& xml)
 		deck.tempoRange = e->getDoubleAttribute ("tempoRange", 0.08);
 		deck.vinyl = e->getBoolAttribute ("vinyl", true);
 		deck.sync = e->getBoolAttribute ("sync");
+		deck.keyLock = e->getBoolAttribute ("keyLock");
 		deck.faderDb = e->getDoubleAttribute ("fader");
 
 		size_t s = 0;

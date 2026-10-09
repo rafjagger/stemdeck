@@ -3,6 +3,9 @@
 #include "GridEdit.h"
 #include "Buses.h"
 
+// The session keeps one mix state per stem (Session.h counts them as the buses do).
+static_assert (StemDeckPlayer::numStems == buses::stemsPerDeck);
+
 StemDeckPlayer::StemDeckPlayer (juce::AudioFormatManager& fm) : formatManager (fm)
 {
 	for (int i = 0; i < numStems; ++i)
@@ -71,13 +74,13 @@ juce::String StemDeckPlayer::load (const StemSet& set)
 
 	playing = false;
 	scratching = false;
-	readPosition = 0;
 	loopEnd = 0;
 	gridBpm = 0.0;
 	loopStart = 0;
 	cuePoint = 0.0;
 	fileSampleRate = newSet->sampleRate;
 	lengthInSamples = newSet->length;
+	seekTo (0);
 
 	{
 		const juce::ScopedLock sl (setLock);
@@ -87,6 +90,9 @@ juce::String StemDeckPlayer::load (const StemSet& set)
 	// The previous set (now in newSet) is released here, outside the lock.
 	resampler.flushBuffers();
 	updateResamplingRatio();
+
+	if (keyLock.load())
+		buildStretchers();   // for this file's sample rate
 	return {};
 }
 
@@ -96,7 +102,7 @@ void StemDeckPlayer::play()
 		return;
 
 	if (readPosition.load() >= lengthInSamples.load())
-		readPosition = hasLoop() ? loopStart.load() : 0;
+		seekTo (hasLoop() ? loopStart.load() : 0);
 
 	playing = true;
 }
@@ -109,14 +115,22 @@ void StemDeckPlayer::pause()
 void StemDeckPlayer::stop()
 {
 	playing = false;
-	readPosition = hasLoop() ? loopStart.load() : 0;
+	seekTo (hasLoop() ? loopStart.load() : 0);
 	resampler.flushBuffers();
 }
 
 void StemDeckPlayer::setPosition (double seconds)
 {
-	readPosition = juce::jlimit ((juce::int64) 0, lengthInSamples.load(), (juce::int64) (seconds * fileSampleRate.load()));
+	seekTo (juce::jlimit ((juce::int64) 0, lengthInSamples.load(), (juce::int64) (seconds * fileSampleRate.load())));
 	resampler.flushBuffers();
+}
+
+// Written here for the views, and handed to the audio thread so the key
+// lock path starts again from there; the plain path reads readPosition.
+void StemDeckPlayer::seekTo (juce::int64 position)
+{
+	readPosition = position;
+	pendingSeek = position;
 }
 
 double StemDeckPlayer::getPosition() const
@@ -188,6 +202,39 @@ remote::Level StemDeckPlayer::popDeskLevel (int stem)
 	return deskLevels[(size_t) stem].pop();
 }
 
+void StemDeckPlayer::setKeyLock (bool on)
+{
+	if (on)
+		buildStretchers();
+
+	keyLock = on;
+}
+
+StemDeckPlayer::Stretchers::Stretchers (double fileRate) : sampleRate (fileRate)
+{
+	const auto alignment = KeyLockStretcher::measureAlignment (fileRate);
+	for (auto& stem : stems)
+		stem = std::make_unique<KeyLockStretcher> (2, fileRate, alignment);
+}
+
+// Builds (and measures) the stretchers for the loaded file's sample rate,
+// unless they are there; allocates, so never on the audio thread.
+void StemDeckPlayer::buildStretchers()
+{
+	const auto rate = fileSampleRate.load();
+
+	if (stretchers != nullptr && juce::approximatelyEqual (stretchers->sampleRate, rate))
+		return;
+
+	auto fresh = std::make_unique<Stretchers> (rate);
+
+	{
+		const juce::ScopedLock sl (setLock);
+		std::swap (stretchers, fresh);
+	}
+	// The old ones (now in fresh) go here, outside the lock.
+}
+
 void StemDeckPlayer::updateResamplingRatio()
 {
 	resampler.setResamplingRatio (getEffectiveRate() * fileSampleRate.load() / deviceSampleRate.load());
@@ -211,10 +258,16 @@ void StemDeckPlayer::prepareToPlay (int samplesPerBlockExpected, double sampleRa
 	deviceSampleRate = sampleRate;
 	updateResamplingRatio();
 	resampler.prepareToPlay (samplesPerBlockExpected, sampleRate);
+	keyLockResampler.prepareToPlay (samplesPerBlockExpected, sampleRate);
 
 	// Room for one block at the highest scratch speed (plus interpolation margin).
 	const auto maxBlock = juce::jmax (samplesPerBlockExpected, 4096);
 	scratchBuffer.setSize (numOutputChannels, (int) (maxBlock * maxScratchSpeed * 4) + 8);
+
+	// Key lock on or off while playing: the two paths crossfade, short
+	// enough to sound like a switch, long enough not to click.
+	fadeBuffer.setSize (numOutputChannels, maxBlock);
+	fadeLength = juce::jmax (1, juce::roundToInt (sampleRate * 0.02));
 
 	for (int i = 0; i < numStems; ++i)
 	{
@@ -226,6 +279,7 @@ void StemDeckPlayer::prepareToPlay (int samplesPerBlockExpected, double sampleRa
 void StemDeckPlayer::releaseResources()
 {
 	resampler.releaseResources();
+	keyLockResampler.releaseResources();
 }
 
 void StemDeckPlayer::getNextAudioBlock (const juce::AudioSourceChannelInfo& info)
@@ -249,6 +303,7 @@ void StemDeckPlayer::getNextAudioBlock (const juce::AudioSourceChannelInfo& info
 		else
 		{
 			resampler.flushBuffers();
+			restartPending = true;   // the key lock path goes on from where the hand left the record
 		}
 
 		wasScratching = scratchNow;
@@ -261,14 +316,9 @@ void StemDeckPlayer::getNextAudioBlock (const juce::AudioSourceChannelInfo& info
 	}
 
 	if (scratchNow)
-	{
 		renderScratch (info);
-	}
 	else
-	{
-		updateResamplingRatio(); // follows pitch bend and sync nudge block by block
-		resampler.getNextAudioBlock (info);
-	}
+		renderPlayback (info);
 
 	// The position is final for this block now: stamped here, the UI carries
 	// it forward from this moment (positionAt, PIO sync).
@@ -403,23 +453,10 @@ void StemDeckPlayer::readStems (const juce::AudioSourceChannelInfo& info)
 			break;
 		}
 
-		const auto offset = info.startSample + done;
-
-		for (int s = 0; s < numStems; ++s)
-		{
-			auto* reader = loaded->readers[(size_t) s].get();
-			float* dest[2] = { buffer->getWritePointer (s * 2, offset), buffer->getWritePointer (s * 2 + 1, offset) };
-
-			if (reader->numChannels == 1)
-			{
-				reader->read (dest, 1, pos, numToRead);
-				juce::FloatVectorOperations::copy (dest[1], dest[0], numToRead);
-			}
-			else
-			{
-				reader->read (dest, 2, pos, numToRead);
-			}
-		}
+		std::array<float*, numOutputChannels> dest;
+		for (int ch = 0; ch < numOutputChannels; ++ch)
+			dest[(size_t) ch] = buffer->getWritePointer (ch, info.startSample + done);
+		readRun (dest.data(), numToRead, pos);
 
 		pos += numToRead;
 		done += numToRead;
@@ -431,6 +468,186 @@ void StemDeckPlayer::readStems (const juce::AudioSourceChannelInfo& info)
 	// If the UI seeked meanwhile, its position wins.
 	auto expected = startPos;
 	readPosition.compare_exchange_strong (expected, pos);
+}
+
+// Every stem's `count` frames from `position` on, stem N into dest[2N], dest[2N+1].
+// Audio thread, with setLock held.
+void StemDeckPlayer::readRun (float* const* dest, int count, juce::int64 position)
+{
+	for (int s = 0; s < numStems; ++s)
+		readStemRun (s, dest + s * 2, count, position);
+}
+
+// One stem's `count` frames into dest[0], dest[1]; a mono stem on both.
+void StemDeckPlayer::readStemRun (int stem, float* const* dest, int count, juce::int64 position)
+{
+	auto* reader = loaded->readers[(size_t) stem].get();
+	float* pair[2] = { dest[0], dest[1] };
+
+	if (reader->numChannels == 1)
+	{
+		reader->read (pair, 1, position, count);
+		juce::FloatVectorOperations::copy (pair[1], pair[0], count);
+	}
+	else
+	{
+		reader->read (pair, 2, position, count);
+	}
+}
+
+//==============================================================================
+// Playing, not scratching: the plain path or the key lock path, and for
+// fadeLength after a switch both, crossfaded. Audio thread, setLock held.
+void StemDeckPlayer::renderPlayback (const juce::AudioSourceChannelInfo& info)
+{
+	const auto seek = pendingSeek.exchange (-1);
+	const bool ready = stretchers != nullptr && juce::approximatelyEqual (stretchers->sampleRate, fileSampleRate.load());
+	const bool wanted = keylock::usesStretcher (keyLock.load(), ready, false);
+
+	if (stretchers.get() != stretchersInUse)
+	{
+		stretchersInUse = stretchers.get();
+		restartPending = true;
+	}
+
+	if (stretching && ! ready)
+	{
+		stretching = false;   // its stretchers are gone: the plain path, as it is
+		fadeRemaining = 0;
+	}
+
+	if (seek >= 0)
+		fadeRemaining = 0;   // a jump is a cut anyway
+
+	if (stretching && (seek >= 0 || restartPending))
+		restartStretchers (seek >= 0 ? seek : readPosition.load());
+
+	restartPending = false;
+
+	if (wanted != stretching)
+	{
+		if (wanted)
+		{
+			restartStretchers (readPosition.load());   // takes over where the plain path is
+		}
+		else
+		{
+			// The plain path goes on from what is heard.
+			readPosition = juce::jlimit ((juce::int64) 0, loaded->length, (juce::int64) stretchedPosition());
+			resampler.flushBuffers();
+		}
+
+		stretching = wanted;
+		fadeRemaining = fadeLength;
+	}
+
+	if (fadeRemaining > 0 && info.numSamples <= fadeBuffer.getNumSamples())
+	{
+		const juce::AudioSourceChannelInfo outgoing { &fadeBuffer, 0, info.numSamples };
+		renderPath (! stretching, outgoing);
+		renderPath (stretching, info);
+
+		for (int ch = 0; ch < numOutputChannels; ++ch)
+		{
+			const auto* from = fadeBuffer.getReadPointer (ch);
+			auto* to = info.buffer->getWritePointer (ch, info.startSample);
+
+			for (int i = 0; i < info.numSamples; ++i)
+			{
+				const auto in = juce::jlimit (0.0f, 1.0f, 1.0f - (float) (fadeRemaining - i) / (float) fadeLength);
+				to[i] = to[i] * in + from[i] * (1.0f - in);
+			}
+		}
+
+		fadeRemaining = juce::jmax (0, fadeRemaining - info.numSamples);
+	}
+	else
+	{
+		fadeRemaining = 0;
+		renderPath (stretching, info);
+	}
+
+	// While the plain path still fades out, it owns the position; then the
+	// stretchers report what is heard. A seek meanwhile wins.
+	if (stretching && fadeRemaining == 0)
+	{
+		const auto heard = stretchedPosition();
+
+		if (stretchers->stems[0]->hasEnded() && heard >= (double) loaded->length)
+			playing = false;
+
+		if (pendingSeek.load() < 0)
+			readPosition = juce::jlimit ((juce::int64) 0, loaded->length, (juce::int64) heard);
+	}
+}
+
+void StemDeckPlayer::renderPath (bool stretched, const juce::AudioSourceChannelInfo& info)
+{
+	if (stretched)
+	{
+		keyLockResampler.setResamplingRatio (keylock::resamplingRatio (getEffectiveRate(), fileSampleRate.load(), deviceSampleRate.load(), true));
+		keyLockResampler.getNextAudioBlock (info);
+	}
+	else
+	{
+		updateResamplingRatio(); // follows pitch bend and sync nudge block by block
+		resampler.getNextAudioBlock (info);
+	}
+}
+
+// Called by keyLockResampler from within renderPath, with setLock held.
+void StemDeckPlayer::renderStretched (const juce::AudioSourceChannelInfo& info)
+{
+	const auto rate = getEffectiveRate();
+
+	for (int s = 0; s < numStems; ++s)
+	{
+		float* pair[2] = { info.buffer->getWritePointer (s * 2, info.startSample),
+						   info.buffer->getWritePointer (s * 2 + 1, info.startSample) };
+		stretchers->stems[(size_t) s]->render (pair, info.numSamples, rate, keyLockInputs[(size_t) s]);
+	}
+}
+
+void StemDeckPlayer::restartStretchers (juce::int64 position)
+{
+	const auto rate = getEffectiveRate();
+
+	for (int s = 0; s < numStems; ++s)
+		stretchers->stems[(size_t) s]->restart (position, rate, keyLockInputs[(size_t) s]);
+
+	keyLockResampler.flushBuffers();
+}
+
+// The first stem's playhead stands for the deck's: the stems' agree to a
+// fraction of a millisecond, and around a loop's end an average of them
+// would be neither end.
+double StemDeckPlayer::stretchedPosition() const
+{
+	return stretchers->stems[0]->position();
+}
+
+// As readStems() reads: up to the loop's end while inside the loop, else
+// up to the track's end.
+int StemDeckPlayer::KeyLockInput::read (float* const* dest, int count, std::int64_t position)
+{
+	const auto loopEnd = owner.loopEnd.load();
+	const auto stopAt = loopEnd > 0 && position < loopEnd ? loopEnd : owner.loaded->length;
+	const auto n = (int) juce::jlimit ((juce::int64) 0, (juce::int64) count, stopAt - position);
+
+	if (n > 0)
+		owner.readStemRun (stem, dest, n, position);
+	return n;
+}
+
+std::int64_t StemDeckPlayer::KeyLockInput::jumpFrom (std::int64_t position)
+{
+	const auto loopEnd = owner.loopEnd.load();
+
+	if (loopEnd > 0 && position == loopEnd)
+		return owner.loopStart.load();
+	if (position >= owner.loaded->length && owner.repeat.load() && owner.loaded->length > 0)
+		return 0;
+	return -1;
 }
 
 // Background thread: touch the mapped pages ahead of the playhead and around

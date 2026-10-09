@@ -578,6 +578,11 @@ namespace BarPhase
 		return result;
 	}
 
+	double foundAgain (const Stems& stems, double bpm, double firstBeat, const std::function<bool()>& shouldAbort)
+	{
+		return find (stems, bpm, firstBeat, Beats::ontoTheKick, shouldAbort).firstDownbeat;
+	}
+
 	double firstDownbeat (double bpm, double beatPhase, int offset)
 	{
 		const auto beatLength = 60.0 / bpm;

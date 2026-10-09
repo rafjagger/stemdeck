@@ -50,6 +50,11 @@ namespace BarPhase
 	Result find (const Stems& stems, double bpm, double beatPhase, Beats beats,
 				 const std::function<bool()>& shouldAbort = [] { return false; });
 
+	// A cached grid's first beat found again: its tempo stays, its beats
+	// move onto the kick if they were between, and the one is found anew.
+	double foundAgain (const Stems& stems, double bpm, double firstBeat,
+					   const std::function<bool()>& shouldAbort = [] { return false; });
+
 	// The earliest downbeat at or after 0 s, when beat `offset` (counted from
 	// the earliest beat at or after 0 s) is a one: within the first bar.
 	double firstDownbeat (double bpm, double beatPhase, int offset);

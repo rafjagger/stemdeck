@@ -370,8 +370,8 @@ void MainComponent::startSectionAnalysis (const StemSet& set, int deckIndex, con
 	});
 }
 
-// A grid from before the one was found from the stems: its beats are
-// played with at once, its one follows a few seconds later.
+// A grid from before the one was found from the stems is played with at
+// once; its first beat, onto the kick and the one, follows a few seconds later.
 void MainComponent::startDownbeatAnalysis (const StemSet& set, int deckIndex)
 {
 	const auto analysed = analysisCache->findAnalysed (set);

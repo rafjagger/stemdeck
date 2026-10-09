@@ -4,9 +4,10 @@
 // again. Pure: no JUCE, testable.
 //
 // Grids analysed before the one was found from the stems took the track's
-// first beat as the one. Their tempo and beats stay; the next time such a set
-// is loaded only the one is found again. A grid the DJ corrected by hand is
-// his and is never touched.
+// first beat as the one, and their beats could sit on the off-beat. Their
+// tempo stays; the next time such a set is loaded its first beat is found
+// again (BarPhase::foundAgain). A grid the DJ corrected by hand is his and is
+// never touched.
 namespace CachedGrid
 {
 	// 1: the first beat was the one. 2: the one found from the stems.

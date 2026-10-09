@@ -336,7 +336,12 @@ BeatGrid TempoAnalysis::redetectDownbeat (const StemSet& set, juce::AudioFormatM
 	if (! stems || shouldAbort())
 		return {};
 
-	return findDownbeat (*stems, grid, BarPhase::Beats::keep, shouldAbort);
+	if (! grid.isValid())
+		return grid;
+
+	auto found = grid;
+	found.firstBeat = BarPhase::foundAgain (*stems, grid.bpm, grid.firstBeat, shouldAbort);
+	return found;
 }
 
 //==============================================================================

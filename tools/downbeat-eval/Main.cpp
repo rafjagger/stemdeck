@@ -129,7 +129,7 @@ int main (int argc, char* argv[])
 	// beats are off the corrected ones (beats, -0.5 .. 0.5); then where each
 	// way's first downbeat lies in the corrected bar (beats, 0 .. 4, a hit
 	// near 0 or 4): old = the first beat, new = a fresh analysis, kept = a
-	// cached grid's one found again with its beats kept, true = the new
+	// cached grid (the old one) found again on loading, true = the new
 	// detection on the corrected beats (the bar alone).
 	int sets = 0, tempoMisses = 0;
 	std::array<int, 4> hits {};
@@ -154,12 +154,12 @@ int main (int argc, char* argv[])
 		const auto beats = TempoAnalysis::analyseBeats (*stems);
 		const auto found = BarPhase::find (*stems, beats.bpm, beats.firstBeat, BarPhase::Beats::ontoTheKick);
 		const auto elapsed = (juce::Time::getMillisecondCounterHiRes() - started) / 1000.0;
-		const auto kept = BarPhase::find (*stems, beats.bpm, beats.firstBeat, BarPhase::Beats::keep);
+		const auto kept = BarPhase::foundAgain (*stems, beats.bpm, beats.firstBeat);
 		const auto onTruth = BarPhase::find (*stems, truth->second.bpm, truth->second.firstBeat, BarPhase::Beats::keep);
 
 		const std::array<double, 4> offsets { beatsFromTruth (beats.firstBeat, truth->second),
 											  beatsFromTruth (found.firstDownbeat, truth->second),
-											  beatsFromTruth (kept.firstDownbeat, truth->second),
+											  beatsFromTruth (kept, truth->second),
 											  beatsFromTruth (onTruth.firstDownbeat, truth->second) };
 		const auto beatError = offsets[0] - std::round (offsets[0]);
 		const auto tempoRight = std::abs (beats.bpm - truth->second.bpm) <= 0.05;

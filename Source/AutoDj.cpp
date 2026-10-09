@@ -33,9 +33,6 @@ void AutoDj::setEnabled (bool on)
 	request.reset();
 	mixNow = false;
 	mix = {};
-	// Mutes left from a mix it was turned off in are the DJ's now.
-	ownMutes = {};
-	releaseDeck = -1;
 }
 
 void AutoDj::setMixLength (MixLength length)
@@ -59,35 +56,21 @@ double AutoDj::mixSeconds (const DeckView& deck, bool synced, MixLength length)
 	return overlapBars (deck, length) * barSeconds (deck);
 }
 
-void AutoDj::mute (Commands& out, const std::array<DeckView, 2>& decks, int deck, int stem)
+void AutoDj::takeOver (Commands& out, int deck)
 {
-	if (decks[(size_t) deck].muted[(size_t) stem])
-		return;   // muted by the DJ: his, and so never unmuted here
-	out.mute[(size_t) deck][(size_t) stem] = true;
-	ownMutes[(size_t) deck][(size_t) stem] = true;
+	for (int s = 0; s < numStems; ++s)
+	{
+		out.bus[(size_t) deck][(size_t) s] = s;
+		out.bus[(size_t) (1 - deck)][(size_t) s] = offBus;
+	}
 }
 
-void AutoDj::unmute (Commands& out, int deck, int stem)
+// The bus switches source on one tick: never both stems, never neither.
+void AutoDj::handOver (Commands& out, int stem)
 {
-	if (! ownMutes[(size_t) deck][(size_t) stem])
-		return;
-	out.mute[(size_t) deck][(size_t) stem] = false;
-	ownMutes[(size_t) deck][(size_t) stem] = false;
-}
-
-// Old out and new in on the same tick: never both, never neither.
-void AutoDj::handOver (Commands& out, const std::array<DeckView, 2>& decks, int stem)
-{
-	mute (out, decks, current, stem);
-	unmute (out, 1 - current, stem);
-}
-
-void AutoDj::forgetLiftedMutes (const std::array<DeckView, 2>& decks)
-{
-	for (size_t d = 0; d < 2; ++d)
-		for (size_t s = 0; s < (size_t) numStems; ++s)
-			if (ownMutes[d][s] && ! decks[d].muted[s])
-				ownMutes[d][s] = false;
+	out.bus[(size_t) current][(size_t) stem] = offBus;
+	out.bus[(size_t) (1 - current)][(size_t) stem] = stem;
+	mix.handedOver[(size_t) stem] = true;
 }
 
 bool AutoDj::canMixNow() const
@@ -129,16 +112,6 @@ AutoDj::Commands AutoDj::update (const std::array<DeckView, 2>& decks)
 	if (! enabled)
 		return out;
 
-	forgetLiftedMutes (decks);
-	// A tick after the stop, so the audio thread cannot play one more block
-	// of the old track whole.
-	if (releaseDeck >= 0)
-	{
-		for (int s = 0; s < numStems; ++s)
-			unmute (out, releaseDeck, s);
-		releaseDeck = -1;
-	}
-
 	const auto other = 1 - current;
 	otherLoops = decks[(size_t) other].looping;
 	if (takeRequest (out))
@@ -156,6 +129,7 @@ AutoDj::Commands AutoDj::update (const std::array<DeckView, 2>& decks)
 				if (decks[(size_t) d].playing)
 				{
 					current = d;
+					takeOver (out, d);
 					state = Phase::playing;
 					return out;
 				}
@@ -175,6 +149,7 @@ AutoDj::Commands AutoDj::update (const std::array<DeckView, 2>& decks)
 			{
 				if (decks[(size_t) current].loaded)
 				{
+					takeOver (out, current);
 					out.start = current;
 					state = Phase::playing;
 					progress = 0.0;
@@ -187,6 +162,7 @@ AutoDj::Commands AutoDj::update (const std::array<DeckView, 2>& decks)
 			if (! playing.playing)
 			{
 				// Ended or stopped before the mix: straight on.
+				takeOver (out, other);
 				out.start = other;
 				out.faderDb[(size_t) other] = 0.0;
 				current = other;
@@ -251,7 +227,9 @@ AutoDj::Commands AutoDj::update (const std::array<DeckView, 2>& decks)
 	return out;
 }
 
-// On the playing track's downbeat: the new track in with only its drums.
+// On the playing track's downbeat: the new track in with only its drums --
+// without a grid too, since one bus carries one drum part: two unsynced ones
+// at once would only trip over each other.
 void AutoDj::startMix (Commands& out, const std::array<DeckView, 2>& decks)
 {
 	const auto other = 1 - current;
@@ -263,8 +241,11 @@ void AutoDj::startMix (Commands& out, const std::array<DeckView, 2>& decks)
 	mix.synced = bothOnAGrid (outgoing, incoming);
 	mix.toTrackEnd = ! mixNow;
 
+	// The new track's stems on no bus, whatever was done to them while it
+	// waited; then the drums change over.
 	for (auto stem : { bass, StemHandover::other, vocals })
-		mute (out, decks, other, stem);
+		out.bus[(size_t) other][(size_t) stem] = offBus;
+	handOver (out, drums);
 	out.start = other;
 	progress = 0.0;
 	state = Phase::mixing;
@@ -277,7 +258,6 @@ void AutoDj::startMix (Commands& out, const std::array<DeckView, 2>& decks)
 	}
 
 	out.syncOn = other;
-	mute (out, decks, current, drums);
 
 	// The downbeat this tick found (it may be a tick past it), and the old
 	// track's bars from there: the vocals change over on the first downbeat
@@ -309,7 +289,7 @@ void AutoDj::runSyncedMix (Commands& out, const std::array<DeckView, 2>& decks)
 	const auto bar = barSeconds (incoming);
 	const auto bars = (incoming.position - incoming.firstBeat) / bar;
 
-	// A downbeat counts from half a tick before it: a mute due on it is then
+	// A downbeat counts from half a tick before it: a switch due on it is then
 	// at most half a tick early or late, rather than up to a whole tick late.
 	const auto step = std::clamp (incoming.position - lastIncomingPosition, 0.0, 0.1);
 	lastIncomingPosition = incoming.position;
@@ -328,24 +308,17 @@ void AutoDj::runSyncedMix (Commands& out, const std::array<DeckView, 2>& decks)
 		finishMix (out);
 		return;
 	}
-	if (! mix.bassDone && at >= mix.bassBar)
-	{
-		handOver (out, decks, bass);
-		mix.bassDone = true;
-	}
-	if (! mix.otherDone && at >= mix.otherBar)
-	{
-		handOver (out, decks, StemHandover::other);
-		mix.otherDone = true;
-	}
+	if (! mix.handedOver[bass] && at >= mix.bassBar)
+		handOver (out, bass);
+	if (! mix.handedOver[StemHandover::other] && at >= mix.otherBar)
+		handOver (out, StemHandover::other);
 }
 
-// Four steps over the mix time: drums in at the start; a third in, the bass;
-// two thirds, old drums out and new other in; at the end the vocals.
+// Four steps over the mix time: the drums at the start; a third in, the
+// bass; two thirds in, the other; at the end the vocals.
 void AutoDj::runUnsyncedMix (Commands& out, const std::array<DeckView, 2>& decks)
 {
 	const auto& outgoing = decks[(size_t) current];
-	const auto other = 1 - current;
 	progress = outgoing.playing ? std::clamp ((outgoing.position - mix.start) / mix.length, 0.0, 1.0) : 1.0;
 
 	if (progress >= 1.0)
@@ -353,28 +326,22 @@ void AutoDj::runUnsyncedMix (Commands& out, const std::array<DeckView, 2>& decks
 		finishMix (out);
 		return;
 	}
-	if (! mix.bassDone && progress >= 1.0 / 3.0)
-	{
-		handOver (out, decks, bass);
-		mix.bassDone = true;
-	}
-	if (! mix.otherDone && progress >= 2.0 / 3.0)
-	{
-		mute (out, decks, current, drums);
-		unmute (out, other, StemHandover::other);
-		mix.otherDone = true;
-	}
+	if (! mix.handedOver[bass] && progress >= 1.0 / 3.0)
+		handOver (out, bass);
+	if (! mix.handedOver[StemHandover::other] && progress >= 2.0 / 3.0)
+		handOver (out, StemHandover::other);
 }
 
-// The new track whole (what the DJ muted aside), the old deck stopped.
+// The vocals, and whatever has not changed over yet (an old track stopped
+// early); the old deck stops on no bus.
 void AutoDj::finishMix (Commands& out)
 {
 	const auto other = 1 - current;
 	for (int s = 0; s < numStems; ++s)
-		unmute (out, other, s);
+		if (! mix.handedOver[(size_t) s])
+			handOver (out, s);
 	out.stop = current;
 	out.syncOff = other;
-	releaseDeck = current;
 	current = other;
 	progress = 0.0;
 	mixNow = false;

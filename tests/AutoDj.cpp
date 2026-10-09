@@ -33,7 +33,7 @@ namespace
 		buses::Masks masks = [] { buses::Masks m; m.fill (1u << buses::aux); return m; }();
 		std::vector<RouteEvent> routes;
 		bool routed = false;
-		int ticksOnAux = 0, ticksWithAGapOrTwo = 0, ticksWithAStrayStem = 0;
+		int ticksOnAux = 0, ticksWithAGapOrTwo = 0, ticksWithAStrayStem = 0, ticksWithTwoOnABus = 0;
 		std::vector<double> faderMoves;
 		std::array<double, 2> endedAt { -1.0, -1.0 };
 		double now = 0.0;
@@ -72,6 +72,14 @@ namespace
 				}
 			}
 
+			for (int d = 0; d < 2; ++d)
+				for (int s = 0; s < 4; ++s)
+				{
+					const auto mask = maskOf (d, s);
+					decks[(size_t) d].bus[(size_t) s] = mask == buses::offMask ? AutoDj::offBus
+													  : mask == (1u << buses::aux) ? AutoDj::auxBus
+													  : __builtin_ctz (mask);
+				}
 			const auto c = dj.update (decks);
 			if (c.load >= 0)
 			{
@@ -142,12 +150,29 @@ namespace
 						ticksWithAStrayStem += stem % 4 != bus;
 					}
 				ticksWithAGapOrTwo += on != 1;
+				ticksWithTwoOnABus += on > 1;
 			}
 			for (auto mask : masks)
 				ticksOnAux += (mask & (1u << buses::aux)) != 0;
 		}
 
 		void runFor (double seconds) { for (double t = 0; t < seconds; t += 0.05) tick(); }
+
+		// A DJ's switch, by hand or from the desk, as the mixer applies it
+		// while AutoDJ plays.
+		void djSwitch (int deck, int stem, int bus, bool on)
+		{
+			masks = buses::applySwitch (masks, buses::stemIndex (deck, stem), bus, on, buses::Spare::toOff);
+			dj.djSwitched (deck, stem, bus, on);
+		}
+
+		int routesOf (int deck, int stem, double after) const
+		{
+			int n = 0;
+			for (const auto& e : routes)
+				n += e.deck == deck && e.stem == stem && e.time > after;
+			return n;
+		}
 
 		// The first time AutoDJ routed this stem of this deck to `bus`.
 		std::optional<RouteEvent> firstRoute (int deck, int stem, int bus) const
@@ -874,4 +899,87 @@ TEST (AutoDj, LevelsThatNeverComeAreNotWaitedForLong)
 	tickUntilBPlays (rig);
 	EXPECT_LE (rig.now - pressed, AutoDj::maxLevelsWait + 2.1);
 	EXPECT_NEAR (rig.decks[1].position, 0.5, 0.06) << "without them: from the first downbeat, as before";
+}
+
+// A DJ's switch while AutoDJ plays is his: AutoDJ leaves that stem alone.
+TEST (AutoDj, ADjAuxPressStaysThroughTheMix)
+{
+	Rig rig;
+	rig.dj.setEnabled (true);
+	rig.runFor (60.0);
+	rig.djSwitch (0, 2, buses::aux, true);   // A's other to the return
+	const auto pressed = rig.now;
+	rig.tick();
+	EXPECT_EQ (rig.maskOf (0, 2), 1u << buses::aux);
+	tickUntilBPlays (rig);
+	while (rig.decks[0].playing)
+	{
+		rig.tick();
+		if (rig.decks[0].playing)
+			EXPECT_EQ (rig.maskOf (0, 2), 1u << buses::aux) << "on the return while its deck plays";
+	}
+	rig.runFor (2.0);   // the vocals' downbeat, where the mix ends
+	EXPECT_EQ (rig.routesOf (0, 2, pressed), 1) << "AutoDJ moved it once: off, as its deck stopped";
+	EXPECT_TRUE (rig.isOff (0, 2));
+	EXPECT_TRUE (rig.everRouted (1, 2, 2)) << "the new other came onto bus 3 as usual";
+	EXPECT_EQ (rig.ticksWithTwoOnABus, 0);
+	for (int stem = 0; stem < 4; ++stem)
+		EXPECT_TRUE (rig.isOn (1, stem));
+}
+
+TEST (AutoDj, AuxOffGivesTheStemBackToAutoDj)
+{
+	Rig rig;
+	rig.dj.setEnabled (true);
+	rig.runFor (60.0);
+	rig.djSwitch (0, 2, buses::aux, true);
+	rig.runFor (1.0);
+	rig.djSwitch (0, 2, buses::aux, false);
+	EXPECT_TRUE (rig.isOff (0, 2)) << "the press takes it off the return";
+	rig.tick();
+	EXPECT_TRUE (rig.isOn (0, 2)) << "and AutoDJ puts it where it plays: bus 3";
+}
+
+TEST (AutoDj, ADjBusMoveIsRespectedUntilThatBusChangesHands)
+{
+	Rig rig;
+	rig.dj.setEnabled (true);
+	rig.runFor (60.0);
+	rig.djSwitch (0, 3, 1, true);   // A's vocals onto bus 2; A's bass goes off
+	rig.runFor (1.0);
+	EXPECT_EQ (rig.maskOf (0, 3), 1u << 1);
+	EXPECT_TRUE (rig.isOff (0, 1)) << "AutoDJ does not push the DJ's stem off bus 2";
+	EXPECT_EQ (rig.maskOf (0, 3), 1u << 1);
+	EXPECT_EQ (rig.ticksWithTwoOnABus, 0);
+
+	tickUntilBPlays (rig);
+	while (! rig.everRouted (1, 1, 1) && rig.decks[0].playing)
+		rig.tick();
+	ASSERT_TRUE (rig.everRouted (1, 1, 1)) << "the bass handover takes bus 2 for the new bass";
+	EXPECT_TRUE (rig.isOn (1, 1));
+	EXPECT_TRUE (rig.isOn (0, 3)) << "the old vocals, given back, sing on bus 4";
+	rig.runFor (22.0);
+	EXPECT_EQ (rig.ticksWithTwoOnABus, 0);
+	for (int stem = 0; stem < 4; ++stem)
+		EXPECT_TRUE (rig.isOn (1, stem));
+}
+
+TEST (AutoDj, AStemTheDjTookOnTheIncomingDeckIsLeftAlone)
+{
+	Rig rig;
+	rig.dj.setEnabled (true);
+	rig.runFor (240.0 - 40.0);   // the next one waits on B
+	rig.djSwitch (1, 0, buses::aux, true);   // the DJ previews B's drums on the return
+	const auto pressed = rig.now;
+	tickUntilBPlays (rig);
+	rig.runFor (22.0);
+	EXPECT_EQ (rig.routesOf (1, 0, pressed), 0) << "AutoDJ never routed it";
+	EXPECT_EQ (rig.maskOf (1, 0), 1u << buses::aux);
+	EXPECT_TRUE (rig.isOff (0, 0)) << "the old drums still left on the first downbeat";
+	EXPECT_EQ (rig.ticksWithTwoOnABus, 0);
+
+	// The next track on A: its drums come onto bus 1 as usual.
+	rig.runFor (240.0);
+	EXPECT_TRUE (rig.decks[0].playing);
+	EXPECT_TRUE (rig.isOn (0, 0));
 }

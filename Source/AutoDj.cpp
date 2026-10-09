@@ -29,6 +29,8 @@ void AutoDj::setEnabled (bool on)
 	mixNow = false;
 	mix = {};
 	levelsWaitFrom = -1.0;
+	routing = false;
+	djStems = {};
 }
 
 void AutoDj::setMixLength (MixLength length)
@@ -73,21 +75,54 @@ double AutoDj::mixSeconds (const DeckView& deck, bool synced, MixLength length)
 	return overlapBars (deck, length) * barSeconds (deck);
 }
 
-void AutoDj::takeOver (Commands& out, int deck)
+void AutoDj::takeOver (int deck)
 {
-	for (int s = 0; s < numStems; ++s)
-	{
-		out.bus[(size_t) deck][(size_t) s] = s;
-		out.bus[(size_t) (1 - deck)][(size_t) s] = offBus;
-	}
+	routing = true;
+	source.fill (deck);
 }
 
-// The bus switches source on one tick: never both stems, never neither.
-void AutoDj::handOver (Commands& out, int stem)
+// Bus `stem` goes over to the new deck. A stem of the old deck the DJ put on
+// that bus goes back to AutoDJ, which then places it as it places the rest.
+void AutoDj::handOver (const std::array<DeckView, 2>& decks, int stem)
 {
-	out.bus[(size_t) current][(size_t) stem] = offBus;
-	out.bus[(size_t) (1 - current)][(size_t) stem] = stem;
+	const auto old = source[(size_t) stem];
+	for (int s = 0; s < numStems; ++s)
+		if (decks[(size_t) old].bus[(size_t) s] == stem)
+			djStems[(size_t) old][(size_t) s] = false;
+	source[(size_t) stem] = 1 - current;
 	mix.handedOver[(size_t) stem] = true;
+}
+
+// Every stem not the DJ's where it belongs: stem n of the deck bus n is with
+// on bus n, unless the DJ put a stem there; every other stem on no bus. All
+// in one tick, so a bus switches source without a gap or two stems on it.
+void AutoDj::routeEveryStem (Commands& out, const std::array<DeckView, 2>& decks) const
+{
+	std::array<bool, numStems> heldByDj {};
+	for (size_t d = 0; d < 2; ++d)
+		for (size_t s = 0; s < (size_t) numStems; ++s)
+			if (djStems[d][s] && decks[d].bus[s] >= 0 && decks[d].bus[s] < numStems)
+				heldByDj[(size_t) decks[d].bus[s]] = true;
+
+	for (int d = 0; d < 2; ++d)
+		for (int s = 0; s < numStems; ++s)
+		{
+			if (djStems[(size_t) d][(size_t) s])
+				continue;
+			auto wanted = source[(size_t) s] == d ? s : offBus;
+			if (wanted == s && heldByDj[(size_t) s])
+				wanted = offBus;
+			if (decks[(size_t) d].bus[(size_t) s] != wanted)
+				out.bus[(size_t) d][(size_t) s] = wanted;
+		}
+}
+
+void AutoDj::djSwitched (int deck, int stem, int bus, bool on)
+{
+	if (deck < 0 || deck > 1 || stem < 0 || stem >= numStems)
+		return;
+	// AUX off: "not on the return" -- back to AutoDJ, which knows where it plays.
+	djStems[(size_t) deck][(size_t) stem] = ! (bus == auxBus && ! on);
 }
 
 bool AutoDj::canMixNow() const
@@ -129,11 +164,21 @@ AutoDj::Commands AutoDj::update (const std::array<DeckView, 2>& decks)
 	Commands out;
 	if (! enabled)
 		return out;
+	step (out, decks);
+	if (out.load >= 0)
+		djStems[(size_t) out.load] = {};   // a new track: every stem AutoDJ's
+	if (routing)
+		routeEveryStem (out, decks);
+	return out;
+}
+
+void AutoDj::step (Commands& out, const std::array<DeckView, 2>& decks)
+{
 
 	const auto other = 1 - current;
 	otherLoops = decks[(size_t) other].looping;
 	if (takeRequest (out))
-		return out;
+		return;
 
 	switch (state)
 	{
@@ -147,9 +192,9 @@ AutoDj::Commands AutoDj::update (const std::array<DeckView, 2>& decks)
 				if (decks[(size_t) d].playing)
 				{
 					current = d;
-					takeOver (out, d);
+					takeOver (d);
 					state = Phase::playing;
-					return out;
+					return;
 				}
 
 			current = 0;
@@ -167,7 +212,7 @@ AutoDj::Commands AutoDj::update (const std::array<DeckView, 2>& decks)
 			{
 				if (decks[(size_t) current].loaded)
 				{
-					takeOver (out, current);
+					takeOver (current);
 					out.start = current;
 					out.startAt = startPosition (decks[(size_t) current]);
 					state = Phase::playing;
@@ -181,7 +226,7 @@ AutoDj::Commands AutoDj::update (const std::array<DeckView, 2>& decks)
 			if (! playing.playing || playing.position >= audibleEnd (playing))
 			{
 				// Ended, or stopped, before the mix: straight on.
-				takeOver (out, other);
+				takeOver (other);
 				out.stop = current;
 				out.start = other;
 				out.startAt = startPosition (decks[(size_t) other]);
@@ -263,7 +308,6 @@ AutoDj::Commands AutoDj::update (const std::array<DeckView, 2>& decks)
 			break;
 	}
 
-	return out;
 }
 
 // On the playing track's downbeat: the new track in with only its drums --
@@ -280,11 +324,7 @@ void AutoDj::startMix (Commands& out, const std::array<DeckView, 2>& decks)
 	mix.synced = bothOnAGrid (outgoing, incoming);
 	mix.toTrackEnd = ! mixNow;
 
-	// The new track's stems on no bus, whatever was done to them while it
-	// waited; then the drums change over.
-	for (auto stem : { bass, StemHandover::other, vocals })
-		out.bus[(size_t) other][(size_t) stem] = offBus;
-	handOver (out, drums);
+	handOver (decks, drums);
 	out.start = other;
 	out.startAt = startPosition (incoming);
 	mix.incomingStart = out.startAt;
@@ -346,13 +386,13 @@ void AutoDj::runSyncedMix (Commands& out, const std::array<DeckView, 2>& decks)
 
 	if (at >= mix.endBar)
 	{
-		finishMix (out);
+		finishMix (out, decks);
 		return;
 	}
 	if (! mix.handedOver[bass] && at >= mix.bassBar)
-		handOver (out, bass);
+		handOver (decks, bass);
 	if (! mix.handedOver[StemHandover::other] && at >= mix.otherBar)
-		handOver (out, StemHandover::other);
+		handOver (decks, StemHandover::other);
 }
 
 // Four steps over the mix time: the drums at the start; a third in, the
@@ -365,23 +405,24 @@ void AutoDj::runUnsyncedMix (Commands& out, const std::array<DeckView, 2>& decks
 
 	if (progress >= 1.0)
 	{
-		finishMix (out);
+		finishMix (out, decks);
 		return;
 	}
 	if (! mix.handedOver[bass] && progress >= 1.0 / 3.0)
-		handOver (out, bass);
+		handOver (decks, bass);
 	if (! mix.handedOver[StemHandover::other] && progress >= 2.0 / 3.0)
-		handOver (out, StemHandover::other);
+		handOver (decks, StemHandover::other);
 }
 
 // The vocals, and whatever has not changed over yet (an old track stopped
 // early); the old deck stops on no bus.
-void AutoDj::finishMix (Commands& out)
+void AutoDj::finishMix (Commands& out, const std::array<DeckView, 2>& decks)
 {
 	const auto other = 1 - current;
 	for (int s = 0; s < numStems; ++s)
 		if (! mix.handedOver[(size_t) s])
-			handOver (out, s);
+			handOver (decks, s);
+	djStems[(size_t) current] = {};   // its stems AutoDJ's again, all off
 	out.stop = current;
 	out.syncOff = other;
 	current = other;

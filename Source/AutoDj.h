@@ -41,6 +41,13 @@
 //     (a pickup, heard whole), else the next one. Without a grid, at its
 //     audible start. Until the levels are there, the file's start and end;
 //     a mix waits up to a few seconds for the new track's.
+//   - A DJ's switch while it plays is his (djSwitched): AutoDJ leaves that
+//     stem where he put it -- on AUX, on another bus, off -- and puts nothing
+//     onto a bus he put a stem on. That lasts while the stem's deck plays,
+//     except that a stem of the old deck he put on a desk bus is given back
+//     when that bus changes over to the new deck, and AUX off gives a stem
+//     back at once. When its deck stops, or a track is loaded onto it, every
+//     stem of it is AutoDJ's again.
 // Next / Prev on the playing deck mixes now: the track beside it onto the
 // other deck and the same handover from the next downbeat, not waiting for
 // the end; the vocals change over and the old deck stops at the overlap's end.
@@ -50,6 +57,11 @@ class AutoDj
 {
 public:
 	static constexpr int numStems = StemHandover::numStems;
+
+	// Where a stem is: bus 0-3 (its own number when AutoDJ puts it there),
+	// AUX, or none.
+	static constexpr int offBus = -1;
+	static constexpr int auxBus = 4;
 
 	struct DeckView
 	{
@@ -63,15 +75,13 @@ public:
 		bool looping = false;
 		std::optional<double> audibleStart, audibleEnd;   // track seconds, once known
 		bool levelsPending = false;                       // being read
+		std::array<int, numStems> bus { offBus, offBus, offBus, offBus };
 		const StemHandover::Envelopes* levels = nullptr;   // the loaded track's, once analysed
 	};
 
 	// Which track a load means: AutoDJ's own random pick, or the one beside
 	// the playing track (Next / Prev), as the library lists them.
 	enum class Pick { random, next, previous };
-
-	// Where a stem goes: bus 0-3 (its own number), or none.
-	static constexpr int offBus = -1;
 
 	// What to do this tick; -1 / empty: nothing. The routing goes before the
 	// start, so the new track starts with only the stems the handover lets in.
@@ -118,6 +128,10 @@ public:
 	bool canMixNow() const;
 	bool requestMixNow (Pick target);
 
+	// A switch of a stem's bus by the DJ (a click, the panel, the desk), as
+	// the mixer applied it.
+	void djSwitched (int deck, int stem, int bus, bool on);
+
 	// Where it is, for the status line.
 	enum class Phase { off, starting, playing, preparing, ready, mixing };
 	Phase phase() const { return state; }
@@ -143,14 +157,16 @@ private:
 	static double startPosition (const DeckView& deck);
 	// The mix in the playing track's own seconds.
 	static double mixSeconds (const DeckView& deck, bool synced, MixLength length);
+	void step (Commands& out, const std::array<DeckView, 2>& decks);
 	bool takeRequest (Commands& out);
 	void startMix (Commands& out, const std::array<DeckView, 2>& decks);
 	void runSyncedMix (Commands& out, const std::array<DeckView, 2>& decks);
 	void runUnsyncedMix (Commands& out, const std::array<DeckView, 2>& decks);
-	void finishMix (Commands& out);
+	void finishMix (Commands& out, const std::array<DeckView, 2>& decks);
 
-	void takeOver (Commands& out, int deck);
-	void handOver (Commands& out, int stem);
+	void takeOver (int deck);
+	void handOver (const std::array<DeckView, 2>& decks, int stem);
+	void routeEveryStem (Commands& out, const std::array<DeckView, 2>& decks) const;
 
 	bool enabled = false;
 	Phase state = Phase::off;
@@ -165,4 +181,7 @@ private:
 	Mix mix;
 	double lastIncomingPosition = 0.0;
 	double levelsWaitFrom = -1.0;     // the playing track's position when the wait began
+	bool routing = false;             // since it took the buses over
+	std::array<int, numStems> source {};                   // the deck whose stem n is on bus n
+	std::array<std::array<bool, numStems>, 2> djStems {};  // left where the DJ put them
 };

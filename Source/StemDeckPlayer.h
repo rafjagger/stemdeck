@@ -149,6 +149,7 @@ private:
 	double scratchPosition = 0.0, scratchVelocity = 0.0; // audio thread only
 	float scratchGain = 0.0f;
 	bool wasScratching = false;
+	bool wasRendering = false;   // audio thread only
 	juce::AudioBuffer<float> scratchBuffer;
 	static constexpr double maxScratchSpeed = 16.0;
 

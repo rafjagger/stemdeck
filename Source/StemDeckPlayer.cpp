@@ -256,9 +256,18 @@ void StemDeckPlayer::getNextAudioBlock (const juce::AudioSourceChannelInfo& info
 
 	if (loaded == nullptr || (! playing.load() && ! scratchNow))
 	{
+		wasRendering = false;
 		info.clearActiveBufferRegion();
 		return;
 	}
+
+	// From a stop, the stems start at their set level: a mute set while the
+	// deck stood (the Auto-DJ's, right before its start) holds from the first
+	// sample instead of letting 20 ms of the stem through.
+	if (! wasRendering)
+		for (int s = 0; s < numStems; ++s)
+			gainSmoothers[(size_t) s].setCurrentAndTargetValue (stemMuted[(size_t) s] ? 0.0f : stemGain[(size_t) s].load());
+	wasRendering = true;
 
 	if (scratchNow)
 	{

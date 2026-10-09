@@ -93,6 +93,8 @@ target_sources(StemDeck PRIVATE
     Source/Session.cpp
     Source/GridEdit.cpp
     Source/AutoDj.cpp
+    Source/StemHandover.cpp
+    Source/StemLevels.cpp
     Source/Recorder.cpp
     Source/DataPaths.cpp
     Source/Scs3d.cpp

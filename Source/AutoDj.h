@@ -1,5 +1,7 @@
 #pragma once
 
+#include "StemHandover.h"
+
 #include <array>
 #include <optional>
 
@@ -8,22 +10,35 @@
 // the decks, says what to do, and MainComponent does it.
 //
 //   - Nothing playing when it goes on: a track onto deck A, from the start.
-//   - Half a minute before the mix: the next track onto the other deck, its
-//     fader down.
-//   - The mix starts on a downbeat of the playing track, so that it ends with
-//     the track (16 bars before its end by default; the length is a setting): the new track from its
-//     own first downbeat, SYNC on it (tempo, beats and bars follow), and over
-//     those 16 bars the faders cross, equal power.
-//   - Then the old deck stops, SYNC comes off, and the new one is the one
-//     playing. Its tempo stays where the mix put it.
-// Tracks without a beat grid mix over a fixed time (10 s by default), unsynced.
+//   - Half a minute before the mix: the next track onto the other deck.
+//   - It mixes by handing the stems over, muting on downbeats; the faders
+//     stay at unity and nothing fades.
+//   - Both tracks on a beat grid: they overlap for about 20 s, in whole bars
+//     of the playing track at its tempo (at least 4; a bar count can be set
+//     instead), so that the overlap ends with the playing track. The new
+//     track starts on a downbeat from its own first downbeat, SYNC on, with
+//     only its drums: the old drums go out on that same downbeat. Bass, then
+//     other, change over one at a time -- old out and new in on one downbeat
+//     -- where the stems' envelopes say it is least heard (StemHandover.h).
+//     The old vocals sing to the end of the old track; the new ones come in
+//     on the first downbeat after it, and SYNC comes off.
+//   - Without a grid on either: four steps over a time in seconds (10 s by
+//     default), unsynced -- new drums in; bass swapped; old drums out and
+//     new other in; new vocals in as the old deck stops.
+//   - The old deck stops with AutoDJ's own mutes cleared. A stem the DJ
+//     muted stays muted: AutoDJ only ever unmutes what it muted itself, and
+//     a mute of its own the DJ lifts is his from then on. Turning AutoDJ off
+//     leaves the mutes as they are, the DJ's to finish the mix with.
 // Next / Prev on the playing deck mixes now: the track beside it onto the
-// other deck and the mix from the next downbeat, not waiting for the end.
+// other deck and the same handover from the next downbeat, not waiting for
+// the end; the vocals change over and the old deck stops at the overlap's end.
 // A loop is the DJ's: nothing is loaded onto a deck that loops, and no mix
 // starts while the playing deck loops -- it waits until the loop is off.
 class AutoDj
 {
 public:
+	static constexpr int numStems = StemHandover::numStems;
+
 	struct DeckView
 	{
 		bool loaded = false;
@@ -34,13 +49,16 @@ public:
 		double firstBeat = 0.0;
 		double rate = 1.0;       // track seconds per second (tempo fader and sync)
 		bool looping = false;
+		std::array<bool, numStems> muted {};
+		const StemHandover::Envelopes* levels = nullptr;   // the loaded track's, once analysed
 	};
 
 	// Which track a load means: AutoDJ's own random pick, or the one beside
 	// the playing track (Next / Prev), as the library lists them.
 	enum class Pick { random, next, previous };
 
-	// What to do this tick; -1 / empty: nothing.
+	// What to do this tick; -1 / empty: nothing. Mutes go before the start,
+	// so the new track starts with only the stems the handover lets in.
 	struct Commands
 	{
 		int load = -1;               // a new track onto this deck
@@ -49,19 +67,23 @@ public:
 		int stop = -1;
 		int syncOn = -1, syncOff = -1;
 		std::array<std::optional<double>, 2> faderDb;
+		std::array<std::array<std::optional<bool>, numStems>, 2> mute;   // per deck and stem
 	};
 
-	// How long a mix runs: bars on the playing track's grid, or seconds
-	// without one. A new length applies to the next mix, not a running one.
+	// How long a mix runs: bars on the playing track's grid (or about 20 s
+	// of them), or seconds without one. A new length applies to the next
+	// mix, not a running one.
 	struct MixLength
 	{
 		int bars;
 		double noGridSeconds;
 	};
-	static constexpr int defaultMixBars = 16;
+	static constexpr int aboutTwentySeconds = 0;
+	static constexpr int defaultMixBars = aboutTwentySeconds;
+	static constexpr int minOverlapBars = 4;
+	static constexpr double overlapSeconds = 20.0;
 	static constexpr double defaultNoGridMixSeconds = 10.0;
 	static constexpr double loadAheadSeconds = 30.0;
-	static constexpr double silentDb = -60.0;   // the faders' bottom
 
 	void setEnabled (bool on);
 	bool isEnabled() const { return enabled; }
@@ -83,19 +105,36 @@ public:
 	int playingDeck() const { return current; }
 	double mixProgress() const { return progress; }
 
-	// The equal-power fader pair at `progress` 0..1 of a mix, in dB.
-	static double fadeInDb (double progress);
-	static double fadeOutDb (double progress);
-
 private:
-	// The mix in the playing track's own seconds: from `mixStart`, this long.
-	static double mixSeconds (const DeckView& deck, MixLength length);
+	// A running mix, fixed when it starts.
+	struct Mix
+	{
+		bool synced = false;
+		bool toTrackEnd = true;
+		// Synced: downbeats of the new track from its start.
+		int bassBar = 0, otherBar = 0, endBar = 0;
+		// Unsynced: the old track's seconds.
+		double start = 0.0, length = 0.0;
+		bool bassDone = false, otherDone = false;
+	};
+
+	static int overlapBars (const DeckView& deck, MixLength length);
+	// The mix in the playing track's own seconds.
+	static double mixSeconds (const DeckView& deck, bool synced, MixLength length);
 	bool takeRequest (Commands& out);
+	void startMix (Commands& out, const std::array<DeckView, 2>& decks);
+	void runSyncedMix (Commands& out, const std::array<DeckView, 2>& decks);
+	void runUnsyncedMix (Commands& out, const std::array<DeckView, 2>& decks);
+	void finishMix (Commands& out);
+
+	void mute (Commands& out, const std::array<DeckView, 2>& decks, int deck, int stem);
+	void unmute (Commands& out, int deck, int stem);
+	void handOver (Commands& out, const std::array<DeckView, 2>& decks, int stem);
+	void forgetLiftedMutes (const std::array<DeckView, 2>& decks);
 
 	bool enabled = false;
 	Phase state = Phase::off;
 	int current = 0;
-	double mixStart = 0.0;
 	double lastBarPosition = -1.0;
 	double progress = 0.0;
 	MixLength setting { defaultMixBars, defaultNoGridMixSeconds };
@@ -103,4 +142,8 @@ private:
 	std::optional<Pick> request;
 	bool mixNow = false;             // the waiting track mixes at the next downbeat
 	bool otherLoops = false;         // seen at the last update
+	Mix mix;
+	double lastIncomingPosition = 0.0;
+	std::array<std::array<bool, numStems>, 2> ownMutes {};
+	int releaseDeck = -1;            // the stopped deck: its mutes cleared on the next tick
 };

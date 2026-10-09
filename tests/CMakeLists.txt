@@ -6,6 +6,8 @@ add_executable(stemdeck-tests
     Outputs.cpp
     GridEdit.cpp
     AutoDj.cpp
+    StemHandover.cpp
+    ${CMAKE_SOURCE_DIR}/Source/StemHandover.cpp
     RecordingName.cpp
     Scs3d.cpp
     ${CMAKE_SOURCE_DIR}/Source/Scs3d.cpp

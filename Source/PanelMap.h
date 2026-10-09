@@ -20,9 +20,9 @@
 //
 // A pad switches its stem onto that bus or off it, through the mixer's own
 // switch (MixerPanel::pressBus) -- what a click on the screen key does. Every
-// key glows at rest in what it is (the stem's colour on its row, CUE and PLAY
-// in theirs) and lights at full over that glow while it is on: the stem on
-// that bus, a quarter while the stem is muted. Over each half, four encoders -- two columns of two -- turn
+// key of a half glows at rest in its deck's colour, so the halves read as A
+// and B, and lights over that while it is on: a pad in its stem's colour while
+// the stem is on that bus (a quarter while muted), CUE and PLAY in theirs. Over each half, four encoders -- two columns of two -- turn
 // the four stems' gains in reading order; a push mutes the stem. The inner
 // pot of each half is the deck's fader; the outer pots are left free.
 namespace panel
@@ -94,9 +94,10 @@ namespace panel
 		std::array<Rgb, buses::stemsPerDeck> stemColours {};
 		std::array<bool, buses::decks> playing {}, atCue {};
 		Rgb playColour, cueColour;
+		std::array<Rgb, buses::decks> deckColours {};   // every key's resting glow, by half
 	};
 
-	// A key's resting glow in `colour`: vivid, at a twelfth.
+	// A key's resting glow in `colour` (its deck's): vivid, at a twelfth.
 	Rgb base (Rgb colour);
 
 	// Every LED as wanted, by its id in the chain, before the budget.

@@ -5,6 +5,7 @@
 #include "OscTruthFile.h"
 #include "SyncLabels.h"
 #include "Tips.h"
+#include "Pointer.h"
 #include "SurfaceJuce.h"
 
 #include <cstdlib>
@@ -16,6 +17,9 @@
 MainComponent::MainComponent()
 {
 	setLookAndFeel (&lookAndFeel);
+	// Also the default, so the windows StemDeck opens (settings, alerts,
+	// menus, file choosers) hide the pointer as well.
+	juce::Desktop::getInstance().setDefaultLookAndFeel (&lookAndFeel);
 
 	// The one truth, chosen once and hashed at once (spec truth-from-core):
 	// the keeper's own fingerprint must be of this truth, not of a cache
@@ -56,6 +60,7 @@ MainComponent::MainComponent()
 
 	formatManager.registerBasicFormats();
 	showTips (tips::shown (settings().getValue (tips::settingKey).toStdString()));
+	lookAndFeel.setPointerShown (pointer::shown (settings().getValue (pointer::settingKey).toStdString()));
 
 	for (int d = 0; d < numDecks; ++d)
 	{
@@ -257,6 +262,7 @@ MainComponent::~MainComponent()
 	audioSourcePlayer.setSource (nullptr);
 	deviceManager.closeAudioDevice();
 	setLookAndFeel (nullptr);
+	juce::Desktop::getInstance().setDefaultLookAndFeel (nullptr);
 }
 
 //==============================================================================
@@ -1541,6 +1547,7 @@ void MainComponent::showSettings()
 	values.audioDeviceChoosable = ! usingJack;
 	values.audioDeviceNote = usingJack ? "Under JACK: route with qjackctl or a patchbay" : juce::String();
 	values.tipsShown = tooltips != nullptr;
+	values.pointerShown = pointer::shown (settings().getValue (pointer::settingKey).toStdString());
 
 	SettingsPanel::Actions actions;
 	actions.onLibraryFolder = [this] (const juce::File& folder) { library.setFolder (folder); };
@@ -1550,6 +1557,11 @@ void MainComponent::showSettings()
 	{
 		settings().setValue (tips::settingKey, juce::String (tips::stored (shown)));
 		showTips (shown);
+	};
+	actions.onPointer = [this] (bool shown)
+	{
+		settings().setValue (pointer::settingKey, juce::String (pointer::stored (shown)));
+		lookAndFeel.setPointerShown (shown);
 	};
 
 	dialog.content.setOwned (new SettingsPanel (values, std::move (actions)));

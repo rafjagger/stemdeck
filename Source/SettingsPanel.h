@@ -21,6 +21,7 @@ public:
 		bool audioDeviceChoosable = true;
 		juce::String audioDeviceNote;   // its tooltip, why not
 		bool tipsShown = true;
+		bool pointerShown = false;
 	};
 
 	struct Actions
@@ -29,6 +30,7 @@ public:
 		std::function<void (AutoDj::MixLength)> onAutoDjFade;
 		std::function<void()> onAudioDevice;
 		std::function<void (bool shown)> onTips;
+		std::function<void (bool shown)> onPointer;
 	};
 
 	SettingsPanel (const Values& values, Actions actions);
@@ -53,6 +55,9 @@ private:
 
 	juce::ToggleButton tipsButton { "Show tips (help text on the keys)" };
 	bool tipsWereShown = true;
+
+	juce::ToggleButton pointerButton { "Show the pointer (for development)" };
+	bool pointerWasShown = false;
 
 	juce::TextButton audioButton { juce::String::fromUTF8 ("Audio device\xe2\x80\xa6") };
 	juce::TextButton okButton { "OK" };

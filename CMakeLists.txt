@@ -111,9 +111,7 @@ target_sources(StemDeck PRIVATE
     Source/PanelProtocol.cpp
     Source/PanelMap.cpp
     Source/PanelLink.cpp
-    Source/PanelDevice.cpp
-
-    Source/Pointer.cpp)
+    Source/PanelDevice.cpp)
 
 target_compile_definitions(StemDeck PRIVATE
     JUCE_WEB_BROWSER=0

@@ -172,18 +172,3 @@ void DJLookAndFeel::drawTableHeaderColumn (juce::Graphics& g, juce::TableHeaderC
 	g.setFont (juce::FontOptions ((float) height * 0.4f, juce::Font::bold));
 	g.drawFittedText (columnName, area, juce::Justification::centredLeft, 1);
 }
-
-juce::MouseCursor DJLookAndFeel::getMouseCursorFor (juce::Component& component)
-{
-	if (! pointerVisibility.isShown())
-		return juce::MouseCursor::NoCursor;
-	return LookAndFeel_V4::getMouseCursorFor (component);
-}
-
-void DJLookAndFeel::setPointerShown (bool shown)
-{
-	pointerVisibility.set (shown);
-	// The cursor is only re-read when the mouse moves; ask for it now.
-	for (auto source : juce::Desktop::getInstance().getMouseSources())
-		source.forceMouseCursorUpdate();
-}

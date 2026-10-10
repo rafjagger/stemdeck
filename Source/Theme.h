@@ -1,6 +1,5 @@
 #pragma once
 
-#include "Pointer.h"
 #include <JuceHeader.h>
 
 // Colours and look of the app, loosely after Mixxx's dark skins.
@@ -93,14 +92,4 @@ public:
 		return track.withSizeKeepingCentre (faderCapWidth (fader, track) * share, track.getHeight());
 	}
 	int getSliderThumbRadius (juce::Slider&) override;
-
-	// No pointer on the touch screen. This is the default look and feel
-	// (MainComponent), so dialogs, alerts and menus, which are windows of
-	// their own, hide it too; a drag cannot show it either, as every
-	// component's cursor is asked here.
-	juce::MouseCursor getMouseCursorFor (juce::Component&) override;
-	void setPointerShown (bool shown);
-
-private:
-	pointer::Visibility pointerVisibility;
 };

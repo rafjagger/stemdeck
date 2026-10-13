@@ -1,14 +1,17 @@
-"""On a machine without the Core, a patchbay wires StemDeck to zita.
+"""On a machine without the Core, a patchbay wires StemDeck to AES67.
 
-a3nuc2 runs StemDeck on its own: zita-j2n carries ten channels to the Core,
-whose patchbay puts them on REAPER in13..in22 -- the inputs the Core's local
-StemDeck uses for deck1_L..aux_R, in that order. Nothing connected StemDeck
-to zita-j2n there; connected by hand, the sound arrived (2026-10-06). The
-patchbay makes it permanent, and its unit keeps a QjackCtl running with it.
+a3nuc2 runs StemDeck on its own: its audio reaches the Core over AES67, which
+PipeWire offers to JACK as two clients. The sender "AES67 a3nuc2 stems" takes
+send_D1L..send_AUXR (the ten bus channels, the inputs the Core's local
+StemDeck uses for deck1_L..aux_R, in that order) and send_CUEL / send_CUER
+(the cue pair); the receiver "AES67 a3nuc1 out" returns receive_CH1 / CH2,
+the rec bus of the Core's REAPER. Nothing connects StemDeck to either by
+itself; the patchbay makes it permanent, and its unit keeps a QjackCtl
+running with it.
 
 QjackCtl connects a cable plug by plug, in order, and reads a socket's client
-as a regular expression ("zita\\-j2n"); both are checked against the names
-the programs really register.
+as a regular expression; both are checked against the names the programs
+really register.
 """
 
 import configparser
@@ -26,12 +29,13 @@ INSTALLED_PATCHBAY = "/usr/share/stemdeck/stemdeck-without-core.xml"
 
 # StemDeck's buses toward the Core, in Buses.h's order: 1-4, then AUX.
 TO_THE_CORE = ["deck1", "deck2", "deck3", "deck4", "aux"]
-STEMDECK_TO_ZITA = [(f"{bus}_{side}", f"in_{n}") for n, (bus, side) in enumerate(
-    ((bus, side) for bus in TO_THE_CORE for side in "LR"), start=1)]
-
-
-def stemdeck_ports():
-    return [port for port, _ in STEMDECK_TO_ZITA]
+SENDS = ["D1", "D2", "D3", "D4", "AUX"]
+SENDER = "AES67 a3nuc2 stems"
+RECEIVER = "AES67 a3nuc1 out"
+STEMDECK_TO_SENDER = [(f"{bus}_{side}", f"send_{send}{side}")
+                      for bus, send in zip(TO_THE_CORE, SENDS) for side in "LR"]
+CUE_TO_SENDER = [("cue_L", "send_CUEL"), ("cue_R", "send_CUER")]
+RECEIVER_TO_STEMDECK = [("receive_CH1", "rec_L"), ("receive_CH2", "rec_R")]
 
 
 def connections():
@@ -76,13 +80,13 @@ class ThePatchbayIsQjackCtls(unittest.TestCase):
 
 
 class TheCables(unittest.TestCase):
-    def test_exactly_stemdeck_to_zita_and_zita_back_to_the_recorder(self):
-        """The two channels back are REAPER's rec bus (out23/24 on the rig,
-        where its patchbay feeds them into StemDeck:rec_L/R): StemDeck
-        records the rig's mix here too (maintainer, 2026-10-06)."""
-        expected = [("StemDeck", o, "zita-j2n", i) for o, i in STEMDECK_TO_ZITA]
-        expected += [("zita-n2j", "out_1", "StemDeck", "rec_L"),
-                     ("zita-n2j", "out_2", "StemDeck", "rec_R")]
+    def test_exactly_stemdeck_to_the_sender_and_the_receiver_back(self):
+        """The two channels back are REAPER's rec bus (where its patchbay
+        feeds them into StemDeck:rec_L/R): StemDeck records the rig's mix
+        here too (maintainer, 2026-10-06)."""
+        expected = [("StemDeck", o, SENDER, i) for o, i in STEMDECK_TO_SENDER]
+        expected += [("StemDeck", o, SENDER, i) for o, i in CUE_TO_SENDER]
+        expected += [(RECEIVER, o, "StemDeck", i) for o, i in RECEIVER_TO_STEMDECK]
         made = connections()
         self.assertEqual(len(expected), len(made), made)
         for (o_client, o, i_client, i), (o_pat, o_got, i_pat, i_got) in zip(expected, made):
@@ -91,14 +95,21 @@ class TheCables(unittest.TestCase):
             self.assertEqual((o, i), (o_got, i_got))
 
     def test_the_order_is_the_cores(self):
-        """deck1_L..aux_R on in_1..in_10: the Core's zita-n2j out_1..10 land
+        """deck1_L..aux_R on send_D1L..send_AUXR: the sender's channels land
         on REAPER in13..in22, where its local StemDeck puts deck1_L..aux_R."""
+        sent = [(o, i) for _, o, c, i in connections() if real(c, SENDER)]
+        self.assertEqual(STEMDECK_TO_SENDER + CUE_TO_SENDER, sent)
+
+    def test_the_cue_goes_to_the_cue_channels(self):
         self.assertEqual(
-            ["deck1_L", "deck1_R", "deck2_L", "deck2_R", "deck3_L", "deck3_R",
-             "deck4_L", "deck4_R", "aux_L", "aux_R"],
-            [o for c, o, *_ in connections() if real(c, "StemDeck")])
-        self.assertEqual([f"in_{n}" for n in range(1, 11)],
-                         [i for _, _, c, i in connections() if real(c, "zita-j2n")])
+            [("cue_L", "send_CUEL"), ("cue_R", "send_CUER")],
+            [(o, i) for _, o, c, i in connections()
+             if o.startswith("cue_") and real(c, SENDER)])
+
+    def test_nothing_goes_through_zita(self):
+        for out_client, _, in_client, _ in connections():
+            self.assertNotIn("zita", out_client)
+            self.assertNotIn("zita", in_client)
 
 
 class TheNamesAreTheProgramsOwn(unittest.TestCase):
@@ -119,23 +130,25 @@ class TheNamesAreTheProgramsOwn(unittest.TestCase):
         self.assertIn("channelCount() { return cueChannel() + 2; }", outputs)
         self.assertIn('jack.open ("StemDeck"', main)
 
-    def test_stemdeck_registers_exactly_what_zita_carries(self):
-        """Five stereo buses, ten ports, the ten zita-j2n carries: no phones
-        ports since 2026-10-07 (the cue is the desk channel, in REAPER)."""
+    def test_every_stemdeck_port_in_the_patchbay_exists(self):
+        """Five stereo buses and the cue pair are what StemDeck puts out; no
+        phones ports since 2026-10-07 (the cue is the desk channel, in
+        REAPER)."""
         buses = (REPO / "Source/Buses.h").read_text()
         self.assertIn("constexpr int count = 5;", buses)
         self.assertNotIn("phones", buses)
-        self.assertEqual(len(STEMDECK_TO_ZITA), 2 * 5)
+        outputs = [o for c, o, *_ in connections()
+                   if real(c, "StemDeck") and not o.startswith("rec_")]
+        self.assertEqual(2 * 5 + 2, len(outputs))
 
-    def test_zita_carries_as_many_channels_as_are_cabled(self):
-        """zita-j2n --chan 10 registers in_1..in_10; zita-n2j --chan 1-2
-        registers out_1, out_2."""
-        j2n = (UNITS / "zita-j2n.service").read_text()
-        n2j = (UNITS / "zita-n2j.service").read_text()
-        self.assertIn("j2n --chan 10 ", j2n)
-        self.assertIn("n2j --chan 1-2 ", n2j)
-        self.assertEqual(10, sum(1 for c in connections() if real(c[2], "zita-j2n")))
-        self.assertEqual(2, sum(1 for c in connections() if real(c[0], "zita-n2j")))
+    def test_the_aes67_names_are_the_streams(self):
+        """The PipeWire streams' JACK client names and ports, as registered on
+        a3nuc2 (sender, 12 inputs) and from the Core (receiver, 12 outputs)."""
+        sender_ports = {i for _, _, c, i in connections() if real(c, SENDER)}
+        self.assertTrue(sender_ports <= {
+            f"send_{n}{s}" for n in SENDS + ["CUE"] for s in "LR"})
+        receiver_ports = {o for c, o, *_ in connections() if real(c, RECEIVER)}
+        self.assertTrue(receiver_ports <= {f"receive_CH{n}" for n in range(1, 13)})
 
 
 def section(name):

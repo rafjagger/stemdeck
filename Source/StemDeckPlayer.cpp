@@ -12,6 +12,7 @@ StemDeckPlayer::StemDeckPlayer (juce::AudioFormatManager& fm) : formatManager (f
 	{
 		stemGain[(size_t) i] = 1.0f;
 		stemMuted[(size_t) i] = false;
+		stemCue[(size_t) i] = false;
 		stemBuses[(size_t) i] = buses::defaultMask (i);
 		stemPeak[(size_t) i] = 0.0f;
 	}
@@ -269,10 +270,18 @@ void StemDeckPlayer::prepareToPlay (int samplesPerBlockExpected, double sampleRa
 	fadeBuffer.setSize (numOutputChannels, maxBlock);
 	fadeLength = juce::jmax (1, juce::roundToInt (sampleRate * 0.02));
 
+	cueBuffer.setSize (numOutputChannels, maxBlock);
+	cueBuffer.clear();
+	cueSamples = 0;
+
 	for (int i = 0; i < numStems; ++i)
 	{
 		gainSmoothers[(size_t) i].reset (sampleRate, 0.02);
 		gainSmoothers[(size_t) i].setCurrentAndTargetValue (stemMuted[(size_t) i] ? 0.0f : stemGain[(size_t) i].load());
+		cueKnobSmoothers[(size_t) i].reset (sampleRate, 0.02);
+		cueKnobSmoothers[(size_t) i].setCurrentAndTargetValue (stemGain[(size_t) i].load());
+		cueSwitchSmoothers[(size_t) i].reset (sampleRate, 0.01);
+		cueSwitchSmoothers[(size_t) i].setCurrentAndTargetValue (stemCue[(size_t) i].load() ? 1.0f : 0.0f);
 	}
 }
 
@@ -288,6 +297,7 @@ void StemDeckPlayer::getNextAudioBlock (const juce::AudioSourceChannelInfo& info
 
 	// Only ever contended for a pointer copy/swap, so waiting beats a dropout.
 	const juce::ScopedLock sl (setLock);
+	cueSamples = 0;
 
 	const bool scratchNow = scratching.load() && loaded != nullptr;
 
@@ -321,7 +331,11 @@ void StemDeckPlayer::getNextAudioBlock (const juce::AudioSourceChannelInfo& info
 	// stem through.
 	if (! wasRendering)
 		for (int s = 0; s < numStems; ++s)
+		{
 			gainSmoothers[(size_t) s].setCurrentAndTargetValue (stemMuted[(size_t) s] ? 0.0f : stemGain[(size_t) s].load());
+			cueKnobSmoothers[(size_t) s].setCurrentAndTargetValue (stemGain[(size_t) s].load());
+			cueSwitchSmoothers[(size_t) s].setCurrentAndTargetValue (stemCue[(size_t) s].load() ? 1.0f : 0.0f);
+		}
 	wasRendering = true;
 
 	if (scratchNow)
@@ -333,8 +347,15 @@ void StemDeckPlayer::getNextAudioBlock (const juce::AudioSourceChannelInfo& info
 	// it forward from this moment (positionAt, PIO sync).
 	positionStamp = juce::Time::getMillisecondCounterHiRes() / 1000.0;
 
+	const auto cueFits = info.numSamples <= cueBuffer.getNumSamples();
+	if (cueFits)
+		cueSamples = info.numSamples;
+
 	for (int s = 0; s < numStems; ++s)
 	{
+		if (cueFits)
+			renderCue (s, info);
+
 		auto& smoother = gainSmoothers[(size_t) s];
 		smoother.setTargetValue (stemMuted[(size_t) s] ? 0.0f : stemGain[(size_t) s].load());
 
@@ -362,6 +383,36 @@ void StemDeckPlayer::getNextAudioBlock (const juce::AudioSourceChannelInfo& info
 		const auto screenPeak = remote::beforeFader (afterKnob).peak;
 		if (screenPeak > stemPeak[(size_t) s].load())
 			stemPeak[(size_t) s] = screenPeak;
+	}
+}
+
+// The stem as it is before its mute: the knob alone, then the cue switch.
+// Called from getNextAudioBlock with setLock held, before the stem's own gain
+// is applied to `info`; nothing is allocated here.
+void StemDeckPlayer::renderCue (int stem, const juce::AudioSourceChannelInfo& info)
+{
+	auto& knob = cueKnobSmoothers[(size_t) stem];
+	auto& send = cueSwitchSmoothers[(size_t) stem];
+	knob.setTargetValue (stemGain[(size_t) stem].load());
+	send.setTargetValue (stemCue[(size_t) stem].load() ? 1.0f : 0.0f);
+
+	const auto sendFrom = send.getCurrentValue();
+	const auto knobFrom = knob.getCurrentValue();
+	knob.skip (info.numSamples);
+	send.skip (info.numSamples);
+	const auto sendTo = send.getCurrentValue();
+	const auto knobTo = knob.getCurrentValue();
+
+	for (int ch = stem * 2; ch < stem * 2 + 2; ++ch)
+	{
+		if (sendFrom == 0.0f && sendTo == 0.0f)
+		{
+			cueBuffer.clear (ch, 0, info.numSamples);
+			continue;
+		}
+		cueBuffer.copyFrom (ch, 0, *info.buffer, ch, info.startSample, info.numSamples);
+		cueBuffer.applyGainRamp (ch, 0, info.numSamples, knobFrom, knobTo);
+		cueBuffer.applyGainRamp (ch, 0, info.numSamples, sendFrom, sendTo);
 	}
 }
 

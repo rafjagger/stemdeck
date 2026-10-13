@@ -366,3 +366,42 @@ TEST (Buses, AuxStandsOnTheDecksOuterSide)
 	EXPECT_EQ (buses::columnOrder (0), (std::array<int, buses::count> { buses::aux, 0, 1, 2, 3 }));
 	EXPECT_EQ (buses::columnOrder (1), (std::array<int, buses::count> { 0, 1, 2, 3, buses::aux }));
 }
+
+// CUE is a send beside the buses, not a sixth bus: it has no bit in a stem's
+// mask, so the one-stem-per-bus rule, the Auto-DJ's routing and what Core is
+// told never see it.
+TEST (Buses, CueIsNotABus)
+{
+	EXPECT_EQ (buses::count, 5);
+	EXPECT_EQ (buses::allMask, 0b11111u);
+}
+
+TEST (Buses, NoSwitchOrRouteEverSetsABitBeyondTheBuses)
+{
+	buses::Masks masks;
+	masks.fill (buses::allMask | 0b100000u);
+	for (const auto mask : buses::normalise (masks))
+		EXPECT_EQ (mask & ~buses::allMask, 0u);
+	for (const auto mask : buses::applySwitch (masks, 3, 0, true))
+		EXPECT_EQ (mask & ~buses::allMask, 0u);
+	for (const auto mask : buses::route (buses::normalise (masks), { { 0, 0 }, { 1, buses::off } }))
+		EXPECT_EQ (mask & ~buses::allMask, 0u);
+}
+
+// The cue takes the stem straight after its knob: unity knob gives what a
+// stem has on a bus at fader 0 dB (the same trim), whatever the fader and
+// the mute do, and a stem that is not on cue sends nothing.
+TEST (Buses, CueSendsTheStemAfterItsKnobAndTrim)
+{
+	EXPECT_FLOAT_EQ (buses::cueSendGain (true, 1.0f), buses::sendGain (1.0f));
+	EXPECT_FLOAT_EQ (buses::cueSendGain (true, 0.5f), 0.25f);
+	EXPECT_FLOAT_EQ (buses::cueSendGain (false, 1.0f), 0.0f);
+}
+
+TEST (Buses, ACuedStemIsHeardWhileMutedAndWhateverTheFader)
+{
+	EXPECT_FLOAT_EQ (buses::busSendGain (true, 1.0f, true, 1.0f), 0.0f) << "muted: silent on a bus";
+	EXPECT_GT (buses::cueSendGain (true, 1.0f), 0.0f) << "but on cue";
+	EXPECT_FLOAT_EQ (buses::busSendGain (true, 1.0f, false, 0.0f), 0.0f) << "fader closed: silent on a bus";
+	EXPECT_FLOAT_EQ (buses::busSendGain (true, 1.0f, false, 1.0f), buses::cueSendGain (true, 1.0f));
+}

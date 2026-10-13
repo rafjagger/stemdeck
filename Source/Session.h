@@ -17,6 +17,7 @@ struct StemMixState
 	double gainDb = 0.0;
 	bool muted = false;
 	unsigned buses = 0;     // bit per bus (Buses.h)
+	bool cue = false;       // the stem's cue send, apart from the buses
 };
 
 struct DeckSession

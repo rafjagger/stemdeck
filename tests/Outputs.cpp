@@ -7,9 +7,10 @@
 // mode (every stem on its own pair) is gone, and since 2026-10-07 so are the
 // PHONES outputs: the cue is the desk channel, in REAPER.
 
-TEST (Outputs, FiveStereoBusesAreTheOnlyOutput)
+TEST (Outputs, FiveStereoBusesThenTheCuePair)
 {
-	EXPECT_EQ (outputs::channelCount(), 10);
+	EXPECT_EQ (outputs::busChannelCount(), 10);
+	EXPECT_EQ (outputs::channelCount(), 12);
 	EXPECT_EQ (outputs::portName (0), "deck1_L");
 	EXPECT_EQ (outputs::portName (9), "aux_R");
 }
@@ -20,9 +21,17 @@ TEST (Outputs, TheBusPortsKeepTodaysNames)
 {
 	const char* expected[] = { "deck1_L", "deck1_R", "deck2_L", "deck2_R", "deck3_L", "deck3_R",
 							   "deck4_L", "deck4_R", "aux_L", "aux_R" };
-	ASSERT_EQ (outputs::channelCount(), (int) std::size (expected));
-	for (int ch = 0; ch < outputs::channelCount(); ++ch)
+	ASSERT_EQ (outputs::busChannelCount(), (int) std::size (expected));
+	for (int ch = 0; ch < outputs::busChannelCount(); ++ch)
 		EXPECT_EQ (outputs::portName (ch), expected[ch]);
+}
+
+// Appended after the buses, so no existing port moves.
+TEST (Outputs, TheCuePairComesLast)
+{
+	EXPECT_EQ (outputs::portName (10), "cue_L");
+	EXPECT_EQ (outputs::portName (11), "cue_R");
+	EXPECT_EQ (outputs::cueChannel(), 10);
 }
 
 TEST (Outputs, NoPhonesPorts)

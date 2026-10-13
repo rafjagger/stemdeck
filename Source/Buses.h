@@ -20,8 +20,13 @@
 // with every stem on AUX and on no channel. Every bus is post fader; stem
 // knob and mute act on every bus.
 //
-// No CUE bus and no PHONES outputs since 2026-10-07: the cue is the desk
-// channel after its whole chain, in REAPER, whatever its input is.
+// Beside the buses is a stem's CUE switch, a send to its own stereo pair:
+// pre-listen, taken straight after the stem knob, before the mute and before
+// the deck fader, so a muted stem can be heard before it is unmuted. It is
+// not a bus: any number of stems may be on cue, it has no bit in the mask,
+// takes part in none of the rules above, and Core is never told of it. (The
+// CUE bus of the days before 2026-10-07 was a bit in the mask; a stored one
+// stays dropped, fromStored.)
 namespace buses
 {
 	constexpr int count = 5;
@@ -55,6 +60,19 @@ namespace buses
 	// What a stem's samples are multiplied by on their way out of a bus it is
 	// on: the fader, then the trim. The same on every bus.
 	constexpr float sendGain (float fader) { return gain (true, fader) * trim; }
+
+	// What a stem's samples are multiplied by on their way to a bus, from the
+	// raw stem: knob, the mute, the deck fader, the trim. The model the audio
+	// path follows (the player applies knob and mute, the mixer the rest).
+	constexpr float busSendGain (bool onBus, float knob, bool muted, float fader)
+	{
+		return muted ? 0.0f : knob * gain (onBus, fader) * trim;
+	}
+
+	// ... and to the cue pair: the knob and the same trim, nothing else. At
+	// unity knob that is a bus at fader 0 dB, so a stem is as loud on cue as
+	// it is going to be on a bus, and the mute and the fader leave it alone.
+	constexpr float cueSendGain (bool onCue, float knob) { return onCue ? knob * trim : 0.0f; }
 
 	// "1" .. "4", "AUX": button labels and meter captions.
 	inline std::string name (int bus)

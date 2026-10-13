@@ -63,7 +63,7 @@ private:
 
 //==============================================================================
 // Channel strip of one deck: a knob per stem, with one switch per bus (1-4,
-// AUX -- one stem per bus, the rest on AUX, Buses.h) and mute in one row; the
+// AUX -- one stem per bus, the rest on AUX, Buses.h), a cue switch and mute in one row; the
 // four rows tight, a matrix of keys. The stems' names are on the overview's
 // lanes, not here.
 // Its channel fader, which shows the deck's level in its slot, stands in the
@@ -115,7 +115,7 @@ private:
 	const int deckIndex;
 
 	juce::OwnedArray<juce::Slider> knobs;
-	juce::OwnedArray<juce::TextButton> muteButtons, busButtons;   // busButtons: stem * buses::count + bus
+	juce::OwnedArray<juce::TextButton> muteButtons, cueButtons, busButtons;   // busButtons: stem * buses::count + bus
 	juce::Slider fader { juce::Slider::LinearVertical, juce::Slider::NoTextBox };
 	juce::OwnedArray<LevelMeter> stemMeters;   // behind the fader, one per stem
 

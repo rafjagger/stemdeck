@@ -1680,10 +1680,17 @@ void MainComponent::getNextAudioBlock (const juce::AudioSourceChannelInfo& buffe
 				for (int c = 0; c < 2; ++c)
 					busBuffer.addFromWithRamp (bus * 2 + c, 0, deckBuffer.getReadPointer (s * 2 + c), numSamples, from, to);
 			}
+
+		// The cue pair: every stem on cue, as the player rendered it (after
+		// its knob, before its mute and the fader), ramped there already.
+		if (player.getCueBlockSamples() == numSamples)
+			for (int s = 0; s < StemSet::numStems; ++s)
+				for (int c = 0; c < 2; ++c)
+					busBuffer.addFrom (outputs::cueChannel() + c, 0, player.getCueBlock(), s * 2 + c, 0, numSamples);
 	}
 
-	// The fixed 6 dB trim on every bus, before the meters, so they show what
-	// leaves StemDeck.
+	// The fixed 6 dB trim on every bus and on the cue pair, before the
+	// meters, so they show what leaves StemDeck.
 	for (int ch = 0; ch < numBusChannels; ++ch)
 		busBuffer.applyGain (ch, 0, numSamples, buses::trim);
 
@@ -1701,12 +1708,14 @@ void MainComponent::getNextAudioBlock (const juce::AudioSourceChannelInfo& buffe
 	}
 
 	// One output per bus channel; with fewer outputs (e.g. plain stereo for
-	// monitoring) the channels are summed down.
+	// monitoring) the buses are summed down. The cue pair only goes to
+	// outputs of its own: summed down it would land on bus 1.
 	bufferToFill.clearActiveBufferRegion();
 
 	if (numOut > 0)
 		for (int ch = 0; ch < numBusChannels; ++ch)
-			out.addFrom (ch % numOut, bufferToFill.startSample, busBuffer, ch, 0, numSamples);
+			if (ch < outputs::cueChannel() || ch < numOut)
+				out.addFrom (ch % numOut, bufferToFill.startSample, busBuffer, ch, 0, numSamples);
 }
 
 void MainComponent::releaseResources()

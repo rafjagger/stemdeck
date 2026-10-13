@@ -300,11 +300,11 @@ namespace surface
 		const auto gap = area.w / 56;
 		area.removeFromTop (gap);
 
-		// [knob] [the five switches  M], four rows tight under each other: a matrix.
-		// The knob a seventh of the row, the six keys share the rest and are
-		// as tall as the row, a hairline apart.
+		// [knob] [the five switches and cue  M], four rows tight under each
+		// other: a matrix. The knob a seventh of the row, the seven keys share
+		// the rest and are as tall as the row, a hairline apart.
 		const auto knobSize = area.w / 7;
-		const auto switchWidth = (area.w - knobSize - 2 * gap) / 6;
+		const auto switchWidth = (area.w - knobSize - 2 * gap) / 7;
 		const auto rows = (int) strip.stems.size();
 		const auto rowHeight = area.h / rows;
 
@@ -316,8 +316,13 @@ namespace surface
 			inner.removeFromLeft (gap);
 			inner = inner.reduced (0, hairline (rowHeight));
 
+			const auto key = [&] { return inner.removeFromLeft (switchWidth).reduced (hairline (switchWidth), 0); };
+			if (deckIndex == 0)
+				row.cue = key();
 			for (const auto bus : buses::columnOrder (deckIndex))
-				row.buses[(size_t) bus] = inner.removeFromLeft (switchWidth).reduced (hairline (switchWidth), 0);
+				row.buses[(size_t) bus] = key();
+			if (deckIndex != 0)
+				row.cue = key();
 			inner.removeFromLeft (gap);
 			row.mute = inner.reduced (hairline (switchWidth), 0);
 		}

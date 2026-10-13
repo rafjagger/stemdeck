@@ -17,6 +17,14 @@
    <plug>out_1</plug>
    <plug>out_2</plug>
   </socket>
+  <socket client="StemDeck" exclusive="off" name="stemdeck_cue" type="jack-audio">
+   <plug>cue_L</plug>
+   <plug>cue_R</plug>
+  </socket>
+  <socket client="AES67 a3nuc1 out" exclusive="off" name="aes67_from_core" type="jack-audio">
+   <plug>receive_CH1</plug>
+   <plug>receive_CH2</plug>
+  </socket>
  </output-sockets>
  <input-sockets>
   <socket client="zita\-j2n" exclusive="off" name="zita_to_core" type="jack-audio">
@@ -35,10 +43,29 @@
    <plug>rec_L</plug>
    <plug>rec_R</plug>
   </socket>
+  <socket client="AES67 a3nuc2 stems" exclusive="off" name="aes67_to_core" type="jack-audio">
+   <plug>send_D1L</plug>
+   <plug>send_D1R</plug>
+   <plug>send_D2L</plug>
+   <plug>send_D2R</plug>
+   <plug>send_D3L</plug>
+   <plug>send_D3R</plug>
+   <plug>send_D4L</plug>
+   <plug>send_D4R</plug>
+   <plug>send_AUXL</plug>
+   <plug>send_AUXR</plug>
+  </socket>
+  <socket client="AES67 a3nuc2 stems" exclusive="off" name="aes67_cue_to_core" type="jack-audio">
+   <plug>send_CUEL</plug>
+   <plug>send_CUER</plug>
+  </socket>
  </input-sockets>
  <slots/>
  <cables>
   <cable input="zita_to_core" output="stemdeck_to_core" type="jack-audio"/>
   <cable input="stemdeck_rec" output="zita_from_core" type="jack-audio"/>
+  <cable input="aes67_to_core" output="stemdeck_to_core" type="jack-audio"/>
+  <cable input="aes67_cue_to_core" output="stemdeck_cue" type="jack-audio"/>
+  <cable input="stemdeck_rec" output="aes67_from_core" type="jack-audio"/>
  </cables>
 </patchbay>

@@ -1,13 +1,13 @@
 [Unit]
 Description=StemDeck, the stem player, always running on i3 workspace 2
-# The screen first (the same wait A3 Motion uses), and JACK: StemDeck never
-# starts a server itself, it takes the one that runs, and waits for it
-# (jack_wait). Nothing here names a unit of the Core: StemDeck may run on a
-# machine of its own, and a unit bound to a missing unit never starts
-# (2026-10-05). On a Core the a3-core package adds the binding to a3-jack as a
-# drop-in (after a late sound card, 2026-10-02: StemDeck goes and comes with
-# JACK), and a3-jack's start pulls it up again (WantedBy below).
-After=graphical.target
+# The screen first (the same wait A3 Motion uses), and the audio graph:
+# StemDeck never starts a server itself, it takes PipeWire's JACK API and
+# waits for the graph (jack_wait). Nothing here names a unit of the Core:
+# StemDeck may run on a machine of its own, and a unit bound to a missing
+# unit never starts (2026-10-05). On a Core the a3-core package adds
+# the binding to pipewire.service as a drop-in (after a late sound card,
+# 2026-10-02: StemDeck goes and comes with the server).
+After=graphical.target pipewire.service wireplumber.service
 PartOf=a3-main.service
 
 [Service]
@@ -30,4 +30,4 @@ Restart=on-failure
 RestartSec=5
 
 [Install]
-WantedBy=default.target a3-jack.service
+WantedBy=default.target

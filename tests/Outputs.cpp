@@ -15,7 +15,7 @@ TEST (Outputs, FiveStereoBusesThenTheCuePair)
 	EXPECT_EQ (outputs::portName (9), "aux_R");
 }
 
-// The names as registered on the rig and carried by zita-j2n's ten channels
+// The names as registered on the rig and carried by the ten channels to the Core
 // (start.sh: deck1_L ... aux_R).
 TEST (Outputs, TheBusPortsKeepTodaysNames)
 {

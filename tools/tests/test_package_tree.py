@@ -15,9 +15,9 @@ DEBIAN = REPO / "packaging/DEBIAN"
 STAGE = REPO / "packaging/stage"
 UNIT = REPO / ".config/systemd/user/stemdeck.service"
 EXTRA_DEPENDS = ("jack-example-tools", "xdotool", "x11-xserver-utils", "x11-utils",
-                 "python3", "onboard", "librubberband3")
+                 "python3", "onboard", "librubberband3", "pipewire-jack")
 TOOLS = ("a3-wait-for-the-screen", "rig-keep-the-screen.sh", "setup-separator.sh",
-         "zita-from-truth.py", "stemdeck-seed")
+         "stemdeck-seed")
 
 
 def fields(text):
@@ -50,6 +50,10 @@ class TheControlFile(unittest.TestCase):
         self.assertEqual("${shlibs:Depends}", depends[0])
         for package in EXTRA_DEPENDS:
             self.assertIn(package, depends)
+
+    def test_it_names_no_jack_server_and_no_zita(self):
+        for forbidden in ("jackd", "zita"):
+            self.assertNotIn(forbidden, self.fields["Depends"])
 
     def test_it_does_not_need_the_core(self):
         """a3nuc2 runs StemDeck without a Core and must not get REAPER and i3's config."""

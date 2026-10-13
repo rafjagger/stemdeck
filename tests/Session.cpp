@@ -55,3 +55,48 @@ TEST (Session, TheDeckControlsRoundTrip)
 	EXPECT_TRUE (back.sync);
 	EXPECT_TRUE (back.repeat);
 }
+
+TEST (Session, CueIsKeptPerStem)
+{
+	Session session;
+	session.decks[0].stems[1].cue = true;
+	session.decks[1].stems[3].cue = true;
+	session.decks[1].stems[3].muted = true;
+
+	const auto back = throughXml (session);
+	for (int d = 0; d < 2; ++d)
+		for (int s = 0; s < 4; ++s)
+			EXPECT_EQ (back.decks[(size_t) d].stems[(size_t) s].cue, (d == 0 && s == 1) || (d == 1 && s == 3));
+	EXPECT_TRUE (back.decks[1].stems[3].muted);
+}
+
+TEST (Session, CueIsIndependentOfTheBuses)
+{
+	Session session;
+	session.decks[0].stems[0].buses = 0b00001;
+	session.decks[0].stems[0].cue = true;
+
+	const auto back = throughXml (session).decks[0].stems[0];
+	EXPECT_EQ (back.buses, 0b00001u);
+	EXPECT_TRUE (back.cue);
+}
+
+// A session from the days of the CUE bus has it as bit 5 of the bus mask;
+// that stays dropped -- the new cue is a field of its own, off in an older file.
+TEST (Session, AnOldCueBusBitDoesNotTurnCueOn)
+{
+	auto xml = Session().toXml();
+	for (auto* deck : xml->getChildWithTagNameIterator ("Deck"))
+		for (auto* stem : deck->getChildWithTagNameIterator ("Stem"))
+		{
+			stem->setAttribute ("buses", 0b110001);
+			stem->removeAttribute ("cue");
+		}
+
+	for (const auto& deck : Session::fromXml (*xml).decks)
+		for (const auto& stem : deck.stems)
+		{
+			EXPECT_EQ (stem.buses, 0b010001u);
+			EXPECT_FALSE (stem.cue);
+		}
+}

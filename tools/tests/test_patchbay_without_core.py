@@ -103,15 +103,20 @@ class TheCables(unittest.TestCase):
 
 class TheNamesAreTheProgramsOwn(unittest.TestCase):
     def test_stemdeck_registers_these_ports(self):
-        """Outputs.h: buses::portName(channel / 2) + _L/_R; Buses.h: deck1..4
-        for buses 0..3, aux for bus 4; the client is "StemDeck"."""
+        """Outputs.h: buses::portName(channel / 2) + _L/_R, then cue_L/cue_R
+        after the ten bus ports; Buses.h: deck1..4 for buses 0..3, aux for
+        bus 4; the client is "StemDeck"."""
         buses = (REPO / "Source/Buses.h").read_text()
         outputs = (REPO / "Source/Outputs.h").read_text()
         main = (REPO / "Source/MainComponent.cpp").read_text()
         self.assertIn("constexpr int aux = 4;", buses)
         self.assertIn('bus == aux ? "aux"', buses)
         self.assertIn('"deck" + std::to_string (bus + 1)', buses)
-        self.assertIn('(channel % 2 == 0 ? "_L" : "_R")', outputs)
+        self.assertIn('channel % 2 == 0 ? "_L" : "_R"', outputs)
+        self.assertIn('channel >= cueChannel() ? std::string ("cue") + side'
+                      ' : buses::portName (channel / 2) + side', outputs)
+        self.assertIn("cueChannel() { return busChannelCount(); }", outputs)
+        self.assertIn("channelCount() { return cueChannel() + 2; }", outputs)
         self.assertIn('jack.open ("StemDeck"', main)
 
     def test_stemdeck_registers_exactly_what_zita_carries(self):

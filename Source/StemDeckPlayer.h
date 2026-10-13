@@ -88,6 +88,19 @@ public:
 	unsigned getStemBuses (int stem) const { return stemBuses[(size_t) stem].load(); }
 	bool isStemOnBus (int stem, int bus) const { return (stemBuses[(size_t) stem].load() >> bus) & 1u; }
 
+	// A stem's cue send (Buses.h), apart from the buses: the stem straight
+	// after its knob, before the mute and the deck fader. Rendered here, since
+	// the mute is applied here; the mixer takes the block from getCueBlock().
+	// Ramped over 10 ms on any change.
+	void setStemCue (int stem, bool on) { stemCue[(size_t) stem] = on; }
+	bool isStemCued (int stem) const { return stemCue[(size_t) stem].load(); }
+
+	// The cue send of the block getNextAudioBlock just rendered: stem N on
+	// channels 2N, 2N+1, numSamples long, valid on the audio thread only. 0
+	// samples: nothing to take (the deck stood, or the block outgrew the room).
+	const juce::AudioBuffer<float>& getCueBlock() const { return cueBuffer; }
+	int getCueBlockSamples() const { return cueSamples; }
+
 	// Channel fader. Not applied here: the mixer puts it on every bus. The
 	// stem output is after knob and mute.
 	void setDeckGain (float gain) { deckGain = gain; }
@@ -164,6 +177,7 @@ private:
 	void readStems (const juce::AudioSourceChannelInfo& info);
 	void readRun (float* const* dest, int count, juce::int64 position);
 	void readStemRun (int stem, float* const* dest, int count, juce::int64 position);
+	void renderCue (int stem, const juce::AudioSourceChannelInfo& info);
 	void renderScratch (const juce::AudioSourceChannelInfo& info);
 	void renderPlayback (const juce::AudioSourceChannelInfo& info);
 	void renderPath (bool stretched, const juce::AudioSourceChannelInfo& info);
@@ -207,11 +221,16 @@ private:
 	std::atomic<double> cuePoint { 0.0 };
 	std::array<std::atomic<float>, numStems> stemGain;
 	std::array<std::atomic<bool>, numStems> stemMuted;
+	std::array<std::atomic<bool>, numStems> stemCue;
 	std::array<std::atomic<unsigned>, numStems> stemBuses;
 	std::array<std::atomic<float>, numStems> stemPeak;
 	// The desk's meters: written by the audio thread, emptied by popDeskLevel.
 	std::array<remote::LevelTap, numStems> deskLevels;
 	std::array<juce::SmoothedValue<float>, numStems> gainSmoothers;
+	// Audio thread only: the cue send's knob (without the mute) and switch.
+	std::array<juce::SmoothedValue<float>, numStems> cueKnobSmoothers, cueSwitchSmoothers;
+	juce::AudioBuffer<float> cueBuffer;
+	int cueSamples = 0;
 
 	StemReader stemReader { *this };
 	juce::ResamplingAudioSource resampler { &stemReader, false, numOutputChannels };

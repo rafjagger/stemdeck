@@ -33,6 +33,7 @@ std::unique_ptr<juce::XmlElement> Session::toXml() const
 			stem->setAttribute ("gain", deck.stems[s].gainDb);
 			stem->setAttribute ("muted", deck.stems[s].muted);
 			stem->setAttribute ("buses", (int) deck.stems[s].buses);
+			stem->setAttribute ("cue", deck.stems[s].cue);
 		}
 	}
 
@@ -90,7 +91,9 @@ Session Session::fromXml (const juce::XmlElement& xml)
 				break;
 			deck.stems[s].gainDb = stem->getDoubleAttribute ("gain");
 			deck.stems[s].muted = stem->getBoolAttribute ("muted");
-			// An older session's "phones" and CUE bus bit are not read back.
+			// An older session's "phones" and CUE bus bit are not read back: the
+			// cue send is its own attribute, absent (off) in a file without it.
+			deck.stems[s].cue = stem->getBoolAttribute ("cue");
 			deck.stems[s].buses = buses::fromStored ((unsigned) stem->getIntAttribute ("buses", (int) buses::defaultMask ((int) s)));
 			++s;
 		}

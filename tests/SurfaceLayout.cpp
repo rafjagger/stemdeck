@@ -468,6 +468,38 @@ TEST (SurfaceLayout, StemRowsPutAuxOnTheOuterSide)
 	}
 }
 
+// CUE sits on the deck's outer side beside AUX, before the mute: deck A
+// [knob] CUE AUX 1 2 3 4 M, deck B [knob] 1 2 3 4 AUX CUE M -- mirrored like AUX.
+TEST (SurfaceLayout, CueKeyIsOutsideAuxAndMirrored)
+{
+	for (const auto& [w, h] : windows)
+	{
+		const auto s = surface::sections (w, h);
+		const auto strips = surface::mixerStrips (Rect { 0, 0, s.mixer.w, s.mixer.h });
+		for (int d = 0; d < 2; ++d)
+		{
+			const auto strip = surface::channelStrip (Rect { 0, 0, strips[(size_t) d].w, strips[(size_t) d].h }, d);
+			for (const auto& row : strip.stems)
+			{
+				EXPECT_EQ (row.cue.y, row.buses[0].y);
+				EXPECT_EQ (row.cue.h, row.buses[0].h);
+				EXPECT_EQ (row.cue.w, row.buses[0].w);
+				if (d == 0)
+				{
+					EXPECT_LE (row.knob.right(), row.cue.x);
+					EXPECT_LE (row.cue.right(), row.buses[buses::aux].x);
+				}
+				else
+				{
+					EXPECT_LE (row.buses[buses::aux].right(), row.cue.x);
+					EXPECT_LE (row.cue.right(), row.mute.x);
+				}
+				EXPECT_TRUE (row.frame.contains (row.cue));
+			}
+		}
+	}
+}
+
 TEST (SurfaceLayout, RectSlicing)
 {
 	Rect r { 10, 20, 100, 50 };

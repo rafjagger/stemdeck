@@ -179,6 +179,15 @@ ChannelStrip::ChannelStrip (StemDeckPlayer& p, int index) : player (p), deckInde
 		mute->setTooltip ("Stem stumm");
 		addAndMakeVisible (mute);
 
+		auto* cue = cueButtons.add (new juce::TextButton ("C"));
+		cue->setClickingTogglesState (true);
+		cue->setToggleState (player.isStemCued (s), juce::dontSendNotification);
+		cue->setColour (juce::TextButton::buttonOnColourId, Theme::cue);
+		cue->setMouseClickGrabsKeyboardFocus (false);
+		cue->onClick = [this, s, cue] { player.setStemCue (s, cue->getToggleState()); };
+		cue->setTooltip ("Stem to the cue outputs (pre-listen, before mute and fader)");
+		addAndMakeVisible (cue);
+
 		for (int bus = 0; bus < buses::count; ++bus)
 		{
 			const auto label = bus == buses::aux ? juce::String ("A") : juce::String (bus + 1);
@@ -225,6 +234,7 @@ void ChannelStrip::saveState (DeckSession& state) const
 		auto& stem = state.stems[(size_t) s];
 		stem.gainDb = knobs[s]->getValue();
 		stem.muted = muteButtons[s]->getToggleState();
+		stem.cue = cueButtons[s]->getToggleState();
 		stem.buses = 0;
 		for (int bus = 0; bus < buses::count; ++bus)
 			if (busButtons[s * buses::count + bus]->getToggleState())
@@ -241,6 +251,7 @@ void ChannelStrip::restoreState (const DeckSession& state)
 		const auto& stem = state.stems[(size_t) s];
 		knobs[s]->setValue (stem.gainDb, juce::sendNotificationSync);
 		muteButtons[s]->setToggleState (stem.muted, juce::sendNotificationSync);
+		cueButtons[s]->setToggleState (stem.cue, juce::sendNotificationSync);
 		// As stored; the mixer brings both decks into the rule afterwards.
 		player.setStemBuses (s, stem.buses);
 		showBuses (s);
@@ -302,6 +313,7 @@ void ChannelStrip::resized()
 		const auto& row = layout.stems[(size_t) s];
 		knobs[s]->setBounds (surface::toJuce (row.knob));
 		muteButtons[s]->setBounds (surface::toJuce (row.mute));
+		cueButtons[s]->setBounds (surface::toJuce (row.cue));
 		for (int bus = 0; bus < buses::count; ++bus)
 			busButtons[s * buses::count + bus]->setBounds (surface::toJuce (row.buses[(size_t) bus]));
 	}

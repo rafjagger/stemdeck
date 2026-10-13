@@ -1,9 +1,11 @@
 # StemDeck
 
 A stem player for DJs: two decks, each playing a track split into four stems, and a mixer that
-sends every stem to any of six buses. It is part of the [A³ Audio](https://github.com/a3-audio/a3-system)
+sends every stem to one of five buses. It is part of the [A³ Audio](https://github.com/a3-audio/a3-system)
 system: buses 1–4 and AUX feed A³ Core, where each stem gets its own channel and can move round
-the room. StemDeck can also be the tempo master of a Pro DJ Link network when there are no CDJs.
+the room. Each stem also has a CUE key that sends it to a separate stereo pair (JACK ports `cue_L`,
+`cue_R`) for pre-listening: taken after the stem knob, before the mute and the channel fader, with
+any number of stems at once. Core is not told about it. StemDeck can also be the tempo master of a Pro DJ Link network when there are no CDJs.
 
 It makes its own stems, too: drop a stereo track on the library and Demucs (`htdemucs`) splits it
 into drums, bass, other and vocals while the decks play on. See

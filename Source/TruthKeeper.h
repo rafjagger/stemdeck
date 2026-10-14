@@ -59,6 +59,14 @@ namespace truthkeeper
 		return override == nullptr || *override == '\0';
 	}
 
+	// url and fingerprint, plus Core's boot id since it sends one (an older
+	// Core sends two). StemDeck has no use for the boot id: it only follows the
+	// fingerprint.
+	inline bool announcementSize (int arguments)
+	{
+		return arguments == 2 || arguments == 3;
+	}
+
 	// Never fetch, never restart for the truth StemDeck already has.
 	inline bool needsFetch (const std::string& announced, const std::string& own)
 	{

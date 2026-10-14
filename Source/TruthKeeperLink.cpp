@@ -47,7 +47,7 @@ void TruthKeeperLink::timerCallback()
 
 void TruthKeeperLink::oscMessageReceived (const juce::OSCMessage& message)
 {
-	if (message.getAddressPattern().toString() != truthkeeper::announceAddress || message.size() != 2
+	if (message.getAddressPattern().toString() != truthkeeper::announceAddress || ! truthkeeper::announcementSize (message.size())
 		|| ! message[0].isString() || ! message[1].isString())
 		return;
 	const auto url = message[0].getString();

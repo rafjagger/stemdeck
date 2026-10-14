@@ -405,7 +405,7 @@ void MixerPanel::setBusMasks (const buses::Masks& masks, int answered)
 		onBusesChanged (busMasks(), answered);
 }
 
-void MixerPanel::switchBus (int deck, int stem, int bus, bool on, By by)
+void MixerPanel::switchBus (int deck, int stem, int bus, bool on)
 {
 	const auto switched = buses::stemIndex (deck, stem);
 	const auto after = buses::applySwitch (busMasks(), switched, bus, on, spare);
@@ -413,7 +413,7 @@ void MixerPanel::switchBus (int deck, int stem, int bus, bool on, By by)
 	// off) has already toggled its button and must toggle back.
 	setBusMasks (after, switched);
 	if (onDjSwitch)
-		onDjSwitch (deck, stem, bus, on, by);
+		onDjSwitch (deck, stem, bus, on);
 }
 
 void MixerPanel::route (const std::vector<buses::Route>& routes)

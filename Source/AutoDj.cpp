@@ -98,7 +98,7 @@ void AutoDj::handOver (const std::array<DeckView, 2>& decks, int stem)
 // in one tick, so a bus switches source without a gap or two stems on it.
 void AutoDj::routeEveryStem (Commands& out, const std::array<DeckView, 2>& decks) const
 {
-	auto heldByDj = analogBus;
+	std::array<bool, numStems> heldByDj {};
 	for (size_t d = 0; d < 2; ++d)
 		for (size_t s = 0; s < (size_t) numStems; ++s)
 			if (djStems[d][s] && decks[d].bus[s] >= 0 && decks[d].bus[s] < numStems)
@@ -107,7 +107,7 @@ void AutoDj::routeEveryStem (Commands& out, const std::array<DeckView, 2>& decks
 	for (int d = 0; d < 2; ++d)
 		for (int s = 0; s < numStems; ++s)
 		{
-			if (djStems[(size_t) d][(size_t) s] || deskStems[(size_t) d][(size_t) s])
+			if (djStems[(size_t) d][(size_t) s])
 				continue;
 			auto wanted = source[(size_t) s] == d ? s : offBus;
 			if (wanted == s && heldByDj[(size_t) s])
@@ -123,33 +123,6 @@ void AutoDj::djSwitched (int deck, int stem, int bus, bool on)
 		return;
 	// AUX off: "not on the return" -- back to AutoDJ, which knows where it plays.
 	djStems[(size_t) deck][(size_t) stem] = ! (bus == auxBus && ! on);
-	// A stem switched again is no longer held where the desk put it, and a
-	// stem put on a channel the desk set to analog takes it back from analog.
-	deskStems[(size_t) deck][(size_t) stem] = false;
-	if (on && bus >= 0 && bus < numStems)
-		analogBus[(size_t) bus] = false;
-}
-
-void AutoDj::deskSwitched (int deck, int stem, int bus, bool on)
-{
-	if (deck < 0 || deck > 1 || stem < 0 || stem >= numStems)
-		return;
-	const auto from = lastBus[(size_t) deck][(size_t) stem];
-	const auto fromAChannel = from >= 0 && from < numStems;
-	const auto wasTheDesks = deskStems[(size_t) deck][(size_t) stem];
-	djSwitched (deck, stem, bus, on);
-
-	// The desk's A is two switches, off the channel and onto AUX, with
-	// perhaps a tick between them; AUX alone from a channel is the same.
-	// Onto AUX from nowhere (Core tidying the return) holds nothing.
-	const auto offItsChannel = bus >= 0 && bus < numStems && ! on;
-	const auto ontoTheReturn = bus == auxBus && on && (fromAChannel || wasTheDesks);
-	if (offItsChannel)
-		analogBus[(size_t) bus] = true;
-	else if (ontoTheReturn && fromAChannel)
-		analogBus[(size_t) from] = true;
-	if (offItsChannel || ontoTheReturn)
-		deskStems[(size_t) deck][(size_t) stem] = true;
 }
 
 bool AutoDj::canMixNow() const
@@ -189,8 +162,6 @@ bool AutoDj::takeRequest (Commands& out)
 AutoDj::Commands AutoDj::update (const std::array<DeckView, 2>& decks)
 {
 	Commands out;
-	for (size_t d = 0; d < 2; ++d)
-		lastBus[d] = decks[d].bus;
 	if (! enabled)
 		return out;
 	step (out, decks);

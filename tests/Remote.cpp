@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "Remote.h"
+#include "AutoDj.h"
 
 #include <array>
 #include <cmath>
@@ -359,4 +360,123 @@ TEST (Remote, TheScreensStemMeterReadsBeforeTheDeckFader)
 	EXPECT_FLOAT_EQ (remote::beforeFader (raw).peak, remote::sentToBus (raw, 1.0f).peak);
 	EXPECT_NEAR (remote::beforeFader (raw).squares, remote::sentToBus (raw, 1.0f).squares, 1.0e-9);
 	EXPECT_GT (remote::beforeFader (raw).peak, remote::sentToBus (raw, fromDecibels (-10.0f)).peak) << "the fader down leaves it alone";
+}
+
+// What Core hears of the bus switches (remote::BusReports): every change
+// once, and everything when the link comes up.
+namespace
+{
+	// Core's mirror of StemDeck's switches, as the reports build it.
+	struct CoreMirror
+	{
+		buses::Masks masks {};
+		int heard = 0;
+
+		void hear (const std::vector<int>& stems, const buses::Masks& now)
+		{
+			for (const auto stem : stems)
+			{
+				masks[(size_t) stem] = now[(size_t) stem];
+				++heard;
+			}
+		}
+	};
+
+	int busOf (unsigned mask)
+	{
+		for (int bus = 0; bus < buses::count; ++bus)
+			if (mask == 1u << bus)
+				return bus;
+		return AutoDj::offBus;
+	}
+}
+
+// The rig, 2026-10-14: the desk had put deck B's stems 1 and 2 on AUX
+// (channels 1 and 2 to analog). StemDeck came up again with that session,
+// Auto-DJ on and deck B playing, and the Auto-DJ took the deck over before
+// the link ran: stems 1 and 2 back on buses 1 and 2, never reported, and
+// Core -- whose minute had not run out, so no recall -- kept AUX.
+TEST (Remote, WhatTheStartChangedBeforeTheLinkRanReachesCore)
+{
+	buses::Masks masks {};
+	masks[(size_t) buses::stemIndex (1, 0)] = 1u << buses::aux;
+	masks[(size_t) buses::stemIndex (1, 1)] = 1u << buses::aux;
+	masks[(size_t) buses::stemIndex (1, 2)] = 1u << 2;
+	masks[(size_t) buses::stemIndex (1, 3)] = 1u << 3;
+
+	CoreMirror core;
+	core.masks = masks;   // what Core knew before the restart
+
+	remote::BusReports reports;
+	core.hear (reports.changed (masks), masks);   // the session restored
+
+	AutoDj autoDj;
+	autoDj.setEnabled (true);
+	std::array<AutoDj::DeckView, 2> decks;
+	decks[1].loaded = decks[1].playing = true;
+	decks[1].length = 300.0;
+	decks[1].position = 60.0;
+	for (int d = 0; d < 2; ++d)
+		for (int s = 0; s < AutoDj::numStems; ++s)
+			decks[(size_t) d].bus[(size_t) s] = busOf (masks[(size_t) buses::stemIndex (d, s)]);
+	const auto commands = autoDj.update (decks);
+	std::vector<buses::Route> routes;
+	for (int d = 0; d < 2; ++d)
+		for (int s = 0; s < AutoDj::numStems; ++s)
+			if (const auto bus = commands.bus[(size_t) d][(size_t) s])
+				routes.push_back ({ buses::stemIndex (d, s), *bus == AutoDj::offBus ? buses::off : *bus });
+	masks = buses::route (masks, routes);
+	ASSERT_EQ (masks[(size_t) buses::stemIndex (1, 0)], 1u << 0) << "the Auto-DJ took deck B over";
+	core.hear (reports.changed (masks), masks);   // before the link runs: nothing goes
+
+	core.hear (reports.start (masks), masks);
+	EXPECT_EQ (core.masks, masks);
+}
+
+TEST (Remote, EveryChangeIsReportedOnceAndNothingTwice)
+{
+	buses::Masks masks;
+	masks.fill (1u << buses::aux);
+	remote::BusReports reports;
+	CoreMirror core;
+	core.hear (reports.start (masks), masks);
+	EXPECT_EQ (core.heard, buses::stemCount);
+
+	const auto after = buses::route (masks, { { 0, 0 }, { 5, 1 } });
+	EXPECT_EQ (reports.changed (after), (std::vector<int> { 0, 5 }));
+	EXPECT_TRUE (reports.changed (after).empty()) << "nothing new: nothing sent";
+}
+
+TEST (Remote, ARefusedSwitchIsAnsweredOnce)
+{
+	buses::Masks masks;
+	masks.fill (1u << buses::aux);
+	remote::BusReports reports;
+	reports.start (masks);
+
+	const auto stem = buses::stemIndex (0, 2);
+	const auto refused = buses::applySwitch (masks, stem, buses::aux, false);   // AUX off: refused
+	EXPECT_EQ (reports.changed (refused, stem), (std::vector<int> { stem }));
+
+	const auto moved = buses::applySwitch (masks, stem, 0, true);
+	EXPECT_EQ (reports.changed (moved, stem), (std::vector<int> { stem })) << "changed and answered: once";
+}
+
+TEST (Remote, NothingGoesWhileTheLinkIsDown)
+{
+	buses::Masks masks;
+	masks.fill (1u << buses::aux);
+	remote::BusReports reports;
+	EXPECT_TRUE (reports.changed (buses::route (masks, { { 0, 0 } }), 0).empty());
+	EXPECT_TRUE (reports.everything (masks).empty());
+}
+
+TEST (Remote, TheRecallSendsEveryStemAndKeepsCount)
+{
+	buses::Masks masks;
+	masks.fill (1u << buses::aux);
+	remote::BusReports reports;
+	reports.start (masks);
+	EXPECT_EQ (reports.everything (masks).size(), (size_t) buses::stemCount);
+	EXPECT_TRUE (reports.changed (masks).empty());
 }

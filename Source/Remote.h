@@ -103,6 +103,33 @@ namespace remote
 		bool wasSounding = false;
 	};
 
+	// Which stems' bus masks Core is told, and when: the one place that
+	// decides it, whatever moved a stem -- a click, the panel, Core, the
+	// Auto-DJ, a session restore. Each call returns the stems (buses::stemIndex)
+	// to send now, with the masks it was given.
+	//   - While the link is down nothing is sent.
+	//   - When it comes up, every stem, once: whatever changed before could not
+	//     be sent (a session restored, the Auto-DJ taking over the playing
+	//     deck at start), and Core asks for everything only when our hello is
+	//     news to it -- a restart within its minute is not (2026-10-14).
+	//   - After that, every stem whose mask differs from what Core last heard,
+	//     once; and `answered` even when it did not change, so a refused
+	//     switch is answered too.
+	class BusReports
+	{
+	public:
+		std::vector<int> start (const buses::Masks& now);
+		std::vector<int> changed (const buses::Masks& now, int answered = -1);
+		// Core's recall, and with every hello (a lost datagram mended within
+		// half a minute): every stem, while the link runs.
+		std::vector<int> everything (const buses::Masks& now);
+		bool running() const { return up; }
+
+	private:
+		bool up = false;
+		buses::Masks told {};
+	};
+
 	std::vector<Meter> levelBundle (const Words& words, const std::array<Level, stemMeters>& stems,
 									const std::array<Level, 2>& aux);
 

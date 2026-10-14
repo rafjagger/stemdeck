@@ -44,18 +44,24 @@ void RemoteLink::start (const std::string& path, const juce::String& hash)
 
 	running = true;
 	sayHello();
+	const auto now = mixer.busMasks();
+	report (busReports.start (now), now);
 	startTimerHz (levelsPerSecond);
 }
 
-void RemoteLink::report (int deck, int stem)
+void RemoteLink::busesChanged (const buses::Masks& now, int answered)
 {
-	if (! running)
-		return;
-	std::array<bool, buses::count> on {};
-	for (int bus = 0; bus < buses::count; ++bus)
-		on[(size_t) bus] = players[(size_t) deck]->isStemOnBus (stem, bus);
-	toCore.send (juce::OSCMessage (juce::String (remote::reportAddress (words, deck, stem)),
-								   (juce::int32) remote::maskOf (on)));
+	report (busReports.changed (now, answered), now);
+}
+
+void RemoteLink::report (const std::vector<int>& stems, const buses::Masks& now)
+{
+	for (const auto index : stems)
+	{
+		const auto address = remote::reportAddress (words, index / buses::stemsPerDeck, index % buses::stemsPerDeck);
+		if (! toCore.send (juce::OSCMessage (juce::String (address), (juce::int32) now[(size_t) index])))
+			std::cerr << "StemDeck: could not send " << address << " " << now[(size_t) index] << " to Core" << std::endl;
+	}
 }
 
 void RemoteLink::sendAhead (const preview::Ahead& ahead)
@@ -66,19 +72,13 @@ void RemoteLink::sendAhead (const preview::Ahead& ahead)
 								   (juce::int32) ahead.barsUntilNext, ahead.energy));
 }
 
-void RemoteLink::reportAll()
-{
-	for (int deck = 0; deck < 2; ++deck)
-		for (int stem = 0; stem < StemSet::numStems; ++stem)
-			report (deck, stem);
-}
-
 void RemoteLink::oscMessageReceived (const juce::OSCMessage& message)
 {
 	const auto address = message.getAddressPattern().toString().toStdString();
 	if (remote::isRecall (words, address))
 	{
-		reportAll();
+		const auto now = mixer.busMasks();
+		report (busReports.everything (now), now);
 		return;
 	}
 	if (message.size() != 1 || ! message[0].isInt32())
@@ -88,16 +88,24 @@ void RemoteLink::oscMessageReceived (const juce::OSCMessage& message)
 		return;
 
 	// The same switch a click sets, under the one-stem-per-bus rule; the
-	// screen follows, then Core hears every stem it moved.
-	for (const auto index : mixer.switchBus (command->deck, command->stem, command->bus, command->on))
-		report (index / buses::stemsPerDeck, index % buses::stemsPerDeck);
+	// screen follows, and Core hears every stem it moved through the mixer's
+	// onBusesChanged, as for any other change.
+	mixer.switchBus (command->deck, command->stem, command->bus, command->on);
 }
 
 void RemoteLink::timerCallback()
 {
 	sendLevels();
 	if (++ticks % (levelsPerSecond * helloEverySeconds) == 0)
+	{
 		sayHello();
+		// Every stem again with the hello: a report is one UDP datagram, and
+		// one lost on the way (Core busy, its buffer full) would leave Core's
+		// mirror wrong until the next change of that stem. So it is wrong
+		// for half a minute at most (2026-10-14).
+		const auto now = mixer.busMasks();
+		report (busReports.everything (now), now);
+	}
 }
 
 void RemoteLink::sayHello()

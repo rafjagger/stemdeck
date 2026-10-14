@@ -196,9 +196,11 @@ MainComponent::MainComponent()
 	restoreSession();
 	startTimerHz (60);
 
-	// After the session is restored: a click reports, a restore before the
-	// link runs reports nothing, and Core asks for everything on our hello.
-	mixer.onBusesChanged = [this] (int deck, int stem) { remote.report (deck, stem); };
+	// Every change of the switches goes to Core, from any path; whatever the
+	// restore (and the Auto-DJ taking over at start) changed before the link
+	// runs goes when it starts -- Core asks on our hello only when the hello
+	// is news to it, and a quick restart is not (2026-10-14).
+	mixer.onBusesChanged = [this] (const buses::Masks& now, int answered) { remote.busesChanged (now, answered); };
 	static_assert (AutoDj::auxBus == buses::aux && AutoDj::numStems == buses::stemsPerDeck);
 	mixer.onDjSwitch = [this] (int deck, int stem, int bus, bool on) { autoDj.djSwitched (deck, stem, bus, on); };
 	remote.start (truthPath, truthHash);
@@ -1268,9 +1270,13 @@ void MainComponent::restoreSession()
 			player.setLoop (deck.loop.getStart(), deck.loop.getEnd());
 		player.setPosition (deck.position);
 	}
-	// Both decks restored as stored: an older session may break the
+	// Both decks' switches at once: an older session may break the
 	// one-stem-per-bus rule, which spans the two decks.
-	mixer.normaliseBuses();
+	buses::Masks stored {};
+	for (int d = 0; d < numDecks; ++d)
+		for (int s = 0; s < buses::stemsPerDeck; ++s)
+			stored[(size_t) buses::stemIndex (d, s)] = session->decks[(size_t) d].stems[(size_t) s].buses;
+	mixer.restoreBuses (stored);
 
 	for (int d = 0; d < numDecks; ++d)
 		if (session->decks[(size_t) d].sync && players[(size_t) d]->isLoaded())

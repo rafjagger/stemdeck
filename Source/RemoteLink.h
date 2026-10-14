@@ -31,8 +31,10 @@ public:
 
 	// `path` and `hash`: the truth StemDeck chose at start, and its sha256.
 	void start (const std::string& path, const juce::String& hash);
-	// A stem's switches to Core, after any change. Ignored while off.
-	void report (int deck, int stem);
+	// Every stem's switches as they are now, after any change (MixerPanel::
+	// onBusesChanged): Core hears what changed, and `answered` (-1: none).
+	// Nothing while off; everything once it starts (remote::BusReports).
+	void busesChanged (const buses::Masks& now, int answered);
 	// The preview of the music to Core, which passes it on to Motion. Ignored
 	// while off or when the truth has no word for it.
 	void sendAhead (const preview::Ahead& ahead);
@@ -42,7 +44,7 @@ private:
 	void timerCallback() override;
 	void sayHello();
 	void sendLevels();
-	void reportAll();
+	void report (const std::vector<int>& stems, const buses::Masks& now);
 
 	static constexpr int levelsPerSecond = 25;
 	static constexpr int helloEverySeconds = 30;
@@ -52,6 +54,7 @@ private:
 	std::array<remote::LevelTap, 2>& auxLevels;
 	remote::Words words;
 	remote::MeterGate meterGate;
+	remote::BusReports busReports;
 	juce::String truthHash;
 	juce::OSCReceiver receiver;
 	juce::OSCSender toCore, toDesk;

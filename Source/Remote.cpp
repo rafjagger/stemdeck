@@ -219,4 +219,32 @@ namespace remote
 		const auto n = samples.exchange (0LL);
 		return { p, rmsOf (s, n) };
 	}
+	std::vector<int> BusReports::start (const buses::Masks& now)
+	{
+		up = true;
+		return everything (now);
+	}
+
+	std::vector<int> BusReports::changed (const buses::Masks& now, int answered)
+	{
+		std::vector<int> stems;
+		if (! up)
+			return stems;
+		for (int stem = 0; stem < buses::stemCount; ++stem)
+			if (stem == answered || told[(size_t) stem] != now[(size_t) stem])
+				stems.push_back (stem);
+		told = now;
+		return stems;
+	}
+
+	std::vector<int> BusReports::everything (const buses::Masks& now)
+	{
+		if (! up)
+			return {};
+		told = now;
+		std::vector<int> stems;
+		for (int stem = 0; stem < buses::stemCount; ++stem)
+			stems.push_back (stem);
+		return stems;
+	}
 }

@@ -99,7 +99,9 @@ public:
 	// share of its travel, on the knob's own curve.
 	void nudgeStemGain (int stem, double detents);
 
-	// Knobs, mutes, bus switches and fader, for the session.
+	// Knobs, mutes, bus switches and fader, for the session. A restore
+	// leaves the bus switches to MixerPanel::restoreBuses, which spans both
+	// decks and is where every change is reported.
 	void saveState (DeckSession& state) const;
 	void restoreState (const DeckSession& state);
 
@@ -135,23 +137,28 @@ public:
 	void refresh();
 
 	// One bus switch under the one-stem-per-bus rule (Buses.h), across both
-	// decks: the players and the screen follow. Returns the stems Core must
-	// hear (buses::stemIndex), the switched one always among them.
-	std::vector<int> switchBus (int deck, int stem, int bus, bool on);
+	// decks: the players and the screen follow, and onBusesChanged answers
+	// the switched stem even when the rule refused it.
+	void switchBus (int deck, int stem, int bus, bool on);
 	// Where a switch sends a stem it takes off its channel: AUX, or off
 	// while the Auto-DJ plays (Buses.h).
 	void setSpare (buses::Spare s) { spare = s; }
 	// The Auto-DJ's routing (buses::route), applied as a switch is: the
-	// players and the screen follow, and every stem it moved is reported
-	// through onBusesChanged, as after a click.
+	// players and the screen follow.
 	void route (const std::vector<buses::Route>& routes);
 	// A controller's key for one bus switch: exactly what a click on the
 	// screen key does -- the switch toggles, the rule decides, Core hears.
 	void pressBus (int deck, int stem, int bus);
-	// After a session load: brings both decks' switches into the rule.
-	void normaliseBuses();
-	// Called for every stem a click moved, the clicked one included.
-	std::function<void (int deck, int stem)> onBusesChanged;
+	// A session's switches, as stored: brought into the rule (an older
+	// session may break it, and the rule spans both decks), then applied.
+	void restoreBuses (const buses::Masks& stored);
+	// Every switch as the players have it, stem by stem (buses::stemIndex).
+	buses::Masks busMasks() const;
+	// After every change of any stem's switches, from any path -- a click,
+	// the panel, Core, the Auto-DJ, a restore: the masks as they are now, and
+	// the stem a switch asked for (-1: none), so a refused one is answered.
+	// The one place the masks change is setBusMasks, and it calls this.
+	std::function<void (const buses::Masks& now, int answered)> onBusesChanged;
 	// Called for every switch a DJ made (switchBus: a click, the desk, the
 	// panel), after it was applied -- not for the Auto-DJ's route().
 	std::function<void (int deck, int stem, int bus, bool on)> onDjSwitch;
@@ -170,9 +177,7 @@ public:
 	void resized() override;
 
 private:
-	void busSwitched (int deck, int stem, int bus, bool on);
-	buses::Masks busMasks() const;
-	void setBusMasks (const buses::Masks& masks);
+	void setBusMasks (const buses::Masks& masks, int answered = -1);
 
 	std::array<StemDeckPlayer*, buses::decks> players;
 	buses::Spare spare = buses::Spare::toAux;

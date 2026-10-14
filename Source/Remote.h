@@ -120,7 +120,8 @@ namespace remote
 	public:
 		std::vector<int> start (const buses::Masks& now);
 		std::vector<int> changed (const buses::Masks& now, int answered = -1);
-		// Core's recall: every stem, while the link runs.
+		// Core's recall, and with every hello (a lost datagram mended within
+		// half a minute): every stem, while the link runs.
 		std::vector<int> everything (const buses::Masks& now);
 		bool running() const { return up; }
 

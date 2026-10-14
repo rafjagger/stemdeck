@@ -57,8 +57,11 @@ void RemoteLink::busesChanged (const buses::Masks& now, int answered)
 void RemoteLink::report (const std::vector<int>& stems, const buses::Masks& now)
 {
 	for (const auto index : stems)
-		toCore.send (juce::OSCMessage (juce::String (remote::reportAddress (words, index / buses::stemsPerDeck, index % buses::stemsPerDeck)),
-									   (juce::int32) now[(size_t) index]));
+	{
+		const auto address = remote::reportAddress (words, index / buses::stemsPerDeck, index % buses::stemsPerDeck);
+		if (! toCore.send (juce::OSCMessage (juce::String (address), (juce::int32) now[(size_t) index])))
+			std::cerr << "StemDeck: could not send " << address << " " << now[(size_t) index] << " to Core" << std::endl;
+	}
 }
 
 void RemoteLink::sendAhead (const preview::Ahead& ahead)
@@ -94,7 +97,15 @@ void RemoteLink::timerCallback()
 {
 	sendLevels();
 	if (++ticks % (levelsPerSecond * helloEverySeconds) == 0)
+	{
 		sayHello();
+		// Every stem again with the hello: a report is one UDP datagram, and
+		// one lost on the way (Core busy, its buffer full) would leave Core's
+		// mirror wrong until the next change of that stem. So it is wrong
+		// for half a minute at most (2026-10-14).
+		const auto now = mixer.busMasks();
+		report (busReports.everything (now), now);
+	}
 }
 
 void RemoteLink::sayHello()

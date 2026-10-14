@@ -87,7 +87,7 @@ void RemoteLink::oscMessageReceived (const juce::OSCMessage& message)
 	// The same switch a click sets, under the one-stem-per-bus rule; the
 	// screen follows, and Core hears every stem it moved through the mixer's
 	// onBusesChanged, as for any other change.
-	mixer.switchBus (command->deck, command->stem, command->bus, command->on);
+	mixer.switchBus (command->deck, command->stem, command->bus, command->on, MixerPanel::By::desk);
 }
 
 void RemoteLink::timerCallback()

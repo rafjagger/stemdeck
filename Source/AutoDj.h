@@ -48,6 +48,17 @@
 //     when that bus changes over to the new deck, and AUX off gives a stem
 //     back at once. When its deck stops, or a track is loaded onto it, every
 //     stem of it is AutoDJ's again.
+//   - The desk's selection sticks (deskSwitched; maintainer, 2026-10-14).
+//     A switch from the desk, through Core, that takes a stem off its
+//     channel -- the desk selecting A (analog) there: the stem off bus N,
+//     then onto AUX -- leaves bus N analog: AutoDJ puts nothing onto it, the
+//     handover of stem N included, and leaves the stem where the desk put
+//     it, through its deck stopping, a new track on it and the mixes. That
+//     outranks the deck-stop and load rules above and "never on AUX". It
+//     holds until the desk, or a DJ here, puts a stem on bus N again (that
+//     stem is then the DJ's, as above) or switches that stem again; turning
+//     AutoDJ off and on keeps it. The desk's other switches -- a stem onto a
+//     channel -- are a DJ's switch as before.
 // Next / Prev on the playing deck mixes now: the track beside it onto the
 // other deck and the same handover from the next downbeat, not waiting for
 // the end; the vocals change over and the old deck stops at the overlap's end.
@@ -131,6 +142,9 @@ public:
 	// A switch of a stem's bus by the DJ (a click, the panel, the desk), as
 	// the mixer applied it.
 	void djSwitched (int deck, int stem, int bus, bool on);
+	// ... and one from the desk, through Core (RemoteLink): the same, and a
+	// stem it takes off a desk channel stays where the desk put it (above).
+	void deskSwitched (int deck, int stem, int bus, bool on);
 
 	// Where it is, for the status line.
 	enum class Phase { off, starting, playing, preparing, ready, mixing };
@@ -184,4 +198,7 @@ private:
 	bool routing = false;             // since it took the buses over
 	std::array<int, numStems> source {};                   // the deck whose stem n is on bus n
 	std::array<std::array<bool, numStems>, 2> djStems {};  // left where the DJ put them
+	std::array<std::array<bool, numStems>, 2> deskStems {};  // taken off a channel by the desk: never moved
+	std::array<bool, numStems> analogBus {};                 // set to analog by the desk: nothing put on it
+	std::array<std::array<int, numStems>, 2> lastBus {};      // where each stem was at the last update
 };

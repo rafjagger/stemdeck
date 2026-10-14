@@ -166,6 +166,36 @@ namespace
 			dj.djSwitched (deck, stem, bus, on);
 		}
 
+		// A switch from the desk, through Core: the mixer applies it as any
+		// other, and AutoDJ hears where it came from.
+		void deskSwitch (int deck, int stem, int bus, bool on)
+		{
+			masks = buses::applySwitch (masks, buses::stemIndex (deck, stem), bus, on, buses::Spare::toOff);
+			dj.deskSwitched (deck, stem, bus, on);
+		}
+
+		// The desk selects A (analog) on channel `bus`: Core takes the stem
+		// there off it and onto AUX (the rig's traffic, 2026-10-14).
+		void deskSelectsAnalog (int bus)
+		{
+			for (int d = 0; d < 2; ++d)
+				for (int s = 0; s < 4; ++s)
+					if (maskOf (d, s) == (1u << bus))
+					{
+						deskSwitch (d, s, bus, false);
+						deskSwitch (d, s, buses::aux, true);
+						return;
+					}
+		}
+
+		bool busIsEmpty (int bus) const
+		{
+			for (const auto mask : masks)
+				if (mask == (1u << bus))
+					return false;
+			return true;
+		}
+
 		int routesOf (int deck, int stem, double after) const
 		{
 			int n = 0;
@@ -982,4 +1012,94 @@ TEST (AutoDj, AStemTheDjTookOnTheIncomingDeckIsLeftAlone)
 	rig.runFor (240.0);
 	EXPECT_TRUE (rig.decks[0].playing);
 	EXPECT_TRUE (rig.isOn (0, 0));
+}
+
+// The desk's selection sticks (maintainer, 2026-10-14): a channel the desk
+// set to analog stays analog, and the stem it moved off stays where the desk
+// put it -- through the mix, its deck stopping and a new track on its deck.
+TEST (AutoDj, AChannelTheDeskSetToAnalogStaysAnalog)
+{
+	Rig rig;
+	rig.dj.setEnabled (true);
+	rig.runFor (60.0);
+	ASSERT_TRUE (rig.isOn (0, drums));
+	rig.deskSelectsAnalog (0);
+	ASSERT_EQ (rig.maskOf (0, drums), 1u << buses::aux);
+
+	const auto loadsBefore = rig.loads;
+	int ticksWithBusOneTaken = 0, ticksDrumsNotOnAux = 0;
+	for (double t = 0; t < 2 * 240.0; t += 0.05)
+	{
+		rig.tick();
+		ticksWithBusOneTaken += ! rig.busIsEmpty (0);
+		ticksDrumsNotOnAux += rig.maskOf (0, drums) != (1u << buses::aux);
+	}
+	EXPECT_GE (rig.loads, loadsBefore + 2) << "a mix to B, then a new track on A";
+	EXPECT_EQ (ticksWithBusOneTaken, 0) << "nothing is put on the analog channel";
+	EXPECT_EQ (ticksDrumsNotOnAux, 0) << "the desk's stem stays on AUX";
+	EXPECT_TRUE (rig.isOn (rig.dj.playingDeck(), bass)) << "the other channels mix as before";
+}
+
+TEST (AutoDj, ADeckStoppingDoesNotGiveTheDesksStemBack)
+{
+	Rig rig;
+	rig.decks[1] = { true, true, 50.0, 240.0, 120.0, 0.0, 1.0 };
+	rig.dj.setEnabled (true);
+	rig.runFor (1.0);
+	ASSERT_TRUE (rig.isOn (1, drums));
+	rig.deskSelectsAnalog (0);
+	rig.runFor (1.0);
+
+	rig.decks[1].playing = false;   // the DJ stops deck B
+	for (double t = 0; t < 30.0; t += 0.05)
+	{
+		rig.tick();
+		EXPECT_TRUE (rig.busIsEmpty (0)) << "at " << rig.now;
+		EXPECT_EQ (rig.maskOf (1, drums), 1u << buses::aux) << "at " << rig.now;
+	}
+}
+
+TEST (AutoDj, TheDeskSelectingAStemAgainGivesTheChannelBack)
+{
+	Rig rig;
+	rig.dj.setEnabled (true);
+	rig.runFor (60.0);
+	rig.deskSelectsAnalog (0);
+	rig.runFor (1.0);
+	rig.deskSwitch (0, drums, 0, true);   // the desk puts A's drums back on channel 1
+	rig.runFor (1.0);
+	EXPECT_TRUE (rig.isOn (0, drums));
+
+	tickUntilBPlays (rig);
+	rig.runFor (1.0);
+	EXPECT_TRUE (rig.isOn (1, drums)) << "the handover takes channel 1 for the new drums, as for a DJ's own switch";
+}
+
+TEST (AutoDj, TheDesksAnalogHoldsWithATickBetweenItsTwoSwitches)
+{
+	Rig rig;
+	rig.decks[1] = { true, true, 50.0, 240.0, 120.0, 0.0, 1.0 };
+	rig.dj.setEnabled (true);
+	rig.runFor (1.0);
+	rig.deskSwitch (1, drums, 0, false);
+	rig.tick();
+	rig.deskSwitch (1, drums, buses::aux, true);
+	rig.decks[1].playing = false;
+	rig.runFor (30.0);
+	EXPECT_TRUE (rig.busIsEmpty (0));
+	EXPECT_EQ (rig.maskOf (1, drums), 1u << buses::aux);
+}
+
+TEST (AutoDj, TheDeskPuttingAStemOnAuxFromNowhereHoldsNothing)
+{
+	Rig rig;
+	rig.dj.setEnabled (true);
+	rig.runFor (240.0 - 40.0);   // the next one waits on B, its stems off
+	ASSERT_TRUE (rig.isOff (1, drums));
+	rig.deskSwitch (1, drums, buses::aux, true);
+	tickUntilBPlays (rig);
+	rig.runFor (22.0);
+	rig.runFor (240.0);   // B ends; A again
+	EXPECT_TRUE (rig.isOff (1, drums)) << "a DJ's AUX press as before: AutoDJ's again once its deck stopped";
+	EXPECT_TRUE (rig.isOn (0, drums));
 }

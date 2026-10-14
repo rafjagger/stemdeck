@@ -202,7 +202,13 @@ MainComponent::MainComponent()
 	// is news to it, and a quick restart is not (2026-10-14).
 	mixer.onBusesChanged = [this] (const buses::Masks& now, int answered) { remote.busesChanged (now, answered); };
 	static_assert (AutoDj::auxBus == buses::aux && AutoDj::numStems == buses::stemsPerDeck);
-	mixer.onDjSwitch = [this] (int deck, int stem, int bus, bool on) { autoDj.djSwitched (deck, stem, bus, on); };
+	mixer.onDjSwitch = [this] (int deck, int stem, int bus, bool on, MixerPanel::By by)
+	{
+		if (by == MixerPanel::By::desk)
+			autoDj.deskSwitched (deck, stem, bus, on);
+		else
+			autoDj.djSwitched (deck, stem, bus, on);
+	};
 	remote.start (truthPath, truthHash);
 
 	motionPanel = std::make_unique<PanelDevice>();

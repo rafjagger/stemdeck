@@ -139,7 +139,10 @@ public:
 	// One bus switch under the one-stem-per-bus rule (Buses.h), across both
 	// decks: the players and the screen follow, and onBusesChanged answers
 	// the switched stem even when the rule refused it.
-	void switchBus (int deck, int stem, int bus, bool on);
+	// Who switched: a hand here (a click, the panel) or the desk, through
+	// Core -- the Auto-DJ treats them apart (AutoDj.h).
+	enum class By { hand, desk };
+	void switchBus (int deck, int stem, int bus, bool on, By by = By::hand);
 	// Where a switch sends a stem it takes off its channel: AUX, or off
 	// while the Auto-DJ plays (Buses.h).
 	void setSpare (buses::Spare s) { spare = s; }
@@ -161,7 +164,7 @@ public:
 	std::function<void (const buses::Masks& now, int answered)> onBusesChanged;
 	// Called for every switch a DJ made (switchBus: a click, the desk, the
 	// panel), after it was applied -- not for the Auto-DJ's route().
-	std::function<void (int deck, int stem, int bus, bool on)> onDjSwitch;
+	std::function<void (int deck, int stem, int bus, bool on, By by)> onDjSwitch;
 
 	// The volume faders and the output meters, in the band under the mixer:
 	// made children of `parent`, placed by it.

@@ -13,6 +13,16 @@ TEST (KeeperDecide, TheSameFingerprintNeedsNoFetch)
 	EXPECT_TRUE (truthkeeper::needsFetch (std::string (64, 'b'), std::string (64, 'a')));
 }
 
+// Core's /core/here carries url and fingerprint, and since the boot id a third
+// string; an older Core sends two. Both are read, anything else is not.
+TEST (KeeperDecide, TwoOrThreeStringsAreAnAnnouncement)
+{
+	EXPECT_FALSE (truthkeeper::announcementSize (1));
+	EXPECT_TRUE (truthkeeper::announcementSize (2));
+	EXPECT_TRUE (truthkeeper::announcementSize (3));
+	EXPECT_FALSE (truthkeeper::announcementSize (4));
+}
+
 TEST (KeeperDecide, AnOverrideIsNotFollowed)
 {
 	EXPECT_TRUE (truthkeeper::followsCore (nullptr));

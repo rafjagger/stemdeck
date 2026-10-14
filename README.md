@@ -32,7 +32,7 @@ apt install libjack-jackd2-dev libflac-dev libvorbis-dev libogg-dev librubberban
 ```
 
 It configures a Release build in `build/` on the first run, rebuilds what changed and starts
-StemDeck on JACK, `pw-jack` or ALSA. The binary is `build/StemDeck_artefacts/Release/StemDeck`.
+StemDeck on PipeWire's JACK API (`pw-jack` where it is not system-wide) or ALSA. The binary is `build/StemDeck_artefacts/Release/StemDeck`.
 Details: [Build and start](https://a3-audio.github.io/a3-doc/user/stemdeck.html#stemdeck-build).
 
 The stem creator needs a one-time separator setup (about 1 GB):
@@ -41,6 +41,12 @@ The stem creator needs a one-time separator setup (about 1 GB):
 sudo apt install ffmpeg python3-venv
 tools/setup-separator.sh
 ```
+
+## Audio
+
+PipeWire is the only audio server; StemDeck is a JACK client of it. On a machine without the
+A³ Core, `stemdeck-without-core.xml` (QjackCtl patchbay, started by `qjackctl-stemdeck.service`)
+sends the buses to the Core over AES67 and takes the return back the same way.
 
 ## Tests
 

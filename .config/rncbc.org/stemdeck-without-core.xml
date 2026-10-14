@@ -17,7 +17,7 @@
    <plug>cue_L</plug>
    <plug>cue_R</plug>
   </socket>
-  <socket client="AES67 a3nuc1 out" exclusive="off" name="aes67_from_core" type="jack-audio">
+  <socket client="AES67\ .*\ out" exclusive="off" name="aes67_from_core" type="jack-audio">
    <plug>receive_CH1</plug>
    <plug>receive_CH2</plug>
   </socket>
@@ -27,7 +27,7 @@
    <plug>rec_L</plug>
    <plug>rec_R</plug>
   </socket>
-  <socket client="AES67 a3nuc2 stems" exclusive="off" name="aes67_to_core" type="jack-audio">
+  <socket client="AES67\ .*\ stems" exclusive="off" name="aes67_to_core" type="jack-audio">
    <plug>send_D1L</plug>
    <plug>send_D1R</plug>
    <plug>send_D2L</plug>
@@ -39,7 +39,7 @@
    <plug>send_AUXL</plug>
    <plug>send_AUXR</plug>
   </socket>
-  <socket client="AES67 a3nuc2 stems" exclusive="off" name="aes67_cue_to_core" type="jack-audio">
+  <socket client="AES67\ .*\ stems" exclusive="off" name="aes67_cue_to_core" type="jack-audio">
    <plug>send_CUEL</plug>
    <plug>send_CUER</plug>
   </socket>

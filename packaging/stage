@@ -9,7 +9,7 @@
 # (the builder adds DEBIAN/). Neither writes anywhere else.
 set -euo pipefail
 
-TOOLS=(a3-wait-for-the-screen rig-keep-the-screen.sh setup-separator.sh zita-from-truth.py stemdeck-seed)
+TOOLS=(a3-wait-for-the-screen rig-keep-the-screen.sh setup-separator.sh stemdeck-seed)
 
 usage() {
     echo "usage: $0 build <src> <build> <juce> <jobs> [--test] | files <src> <build> <stage>" >&2

@@ -4,15 +4,15 @@ Description=QjackCtl with StemDeck's patchbay, on a machine without A3 Core
 # its own patchbay, and two QjackCtls must not wire one JACK. The installer
 # installs this unit only without the Core role and takes it away when the
 # Core role is chosen. Its own name, so it never overwrites the Core's.
-After=graphical.target
+After=graphical.target pipewire.service wireplumber.service
 PartOf=a3-main.service
 
 [Service]
 Environment=DISPLAY=:0
 ExecStartPre=/usr/lib/stemdeck/a3-wait-for-the-screen
-# JACK is the machine's own; QjackCtl only connects, it starts no server
-# (no -s). The patchbay reconnects clients as they appear, so StemDeck and
-# zita need not be up first.
+# The graph is PipeWire's; QjackCtl only connects, it starts no server
+# (no -s). The patchbay reconnects clients as they appear, so StemDeck
+# need not be up first.
 ExecStartPre=/usr/bin/jack_wait -w
 ExecStart=/usr/bin/qjackctl -a /usr/share/stemdeck/stemdeck-without-core.xml
 Restart=on-failure

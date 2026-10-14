@@ -1,13 +1,13 @@
-"""StemDeck starts only once JACK runs, and stands on its own.
+"""StemDeck starts only once the audio graph runs, and stands on its own.
 
-After a reboot JACK failed to start (the sound card was late); StemDeck,
-only ordered after it, started without JACK anyway, was stopped, and stayed
-down when JACK came up later (2026-10-02). It was bound to a3-jack for that.
+After a reboot the audio server failed to start (the sound card was late);
+StemDeck, only ordered after it, started without it anyway, was stopped, and
+stayed down when it came up later (2026-10-02).
 
-But a3-jack exists only on a Core, and StemDeck may run on a machine of its
-own: a unit bound to a missing unit is never started ("Unit a3-jack.service
-not found", 2026-10-05). So the unit itself waits for whatever JACK runs
-(jack_wait) and uses only files the stemdeck package ships; the binding to a3-jack
+The audio server is PipeWire (its JACK API is system-wide); there is no
+jackd. A unit bound to a unit of the Core that is missing is never started
+(2026-10-05), so StemDeck is ordered after PipeWire and waits for the graph
+(jack_wait) and uses only files the stemdeck package ships; the binding
 comes from the Core, as a drop-in the a3-core package ships."""
 
 import configparser
@@ -16,6 +16,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 UNIT = REPO / ".config/systemd/user/stemdeck.service"
+UNITS = sorted(UNIT.parent.glob("*.service"))
 
 
 def section(name):
@@ -34,12 +35,28 @@ class StemDeckNeedsJack(unittest.TestCase):
     def test_it_waits_for_jack(self):
         self.assertIn("/usr/bin/jack_wait -w", exec_lines())
 
-    def test_a_jack_start_brings_it_up(self):
-        """On a Core every a3-jack start pulls it up (after re-enabling); on
-        a machine without a3-jack the entry is a harmless link."""
-        wanted = section("Install").get("WantedBy", "").split()
-        self.assertIn("a3-jack.service", wanted)
-        self.assertIn("default.target", wanted)
+    def test_it_is_ordered_after_pipewire(self):
+        after = section("Unit").get("After", "").split()
+        self.assertIn("pipewire.service", after)
+        self.assertIn("wireplumber.service", after)
+
+    def test_it_is_wanted_by_the_session_only(self):
+        self.assertEqual(["default.target"], section("Install").get("WantedBy", "").split())
+
+    def test_no_unit_names_jackd_or_a_jack_unit(self):
+        for unit in UNITS:
+            text = "\n".join(l for l in unit.read_text().splitlines() if not l.startswith("#"))
+            for forbidden in ("a3-jack", "jackd", "zita", "LD_LIBRARY_PATH"):
+                with self.subTest(unit=unit.name, forbidden=forbidden):
+                    self.assertNotIn(forbidden, text)
+
+    def test_qjackctl_is_ordered_after_pipewire_too(self):
+        parser = configparser.ConfigParser(strict=False, interpolation=None)
+        parser.optionxform = str
+        parser.read_string((UNIT.parent / "qjackctl-stemdeck.service").read_text())
+        after = parser["Unit"].get("After", "").split()
+        self.assertIn("pipewire.service", after)
+        self.assertIn("wireplumber.service", after)
 
 
 class StemDeckStandsAlone(unittest.TestCase):

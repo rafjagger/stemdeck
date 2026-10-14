@@ -3,6 +3,7 @@
 #include "AutoDj.h"
 #include "StemHandover.h"
 #include "Buses.h"
+#include "Remote.h"
 
 #include <cmath>
 #include <optional>
@@ -1102,4 +1103,81 @@ TEST (AutoDj, TheDeskPuttingAStemOnAuxFromNowhereHoldsNothing)
 	rig.runFor (240.0);   // B ends; A again
 	EXPECT_TRUE (rig.isOff (1, drums)) << "a DJ's AUX press as before: AutoDJ's again once its deck stopped";
 	EXPECT_TRUE (rig.isOn (0, drums));
+}
+
+// The rig, 2026-10-14 18:24: AutoDJ mixing B into A; A's drums have taken
+// bus 1 when the desk selects A on channel 1 (A's drums to AUX). The
+// handover goes on -- other, bass, vocals -- and B stops. A's drums stay on
+// AUX, and Core hears every change StemDeck makes, once.
+TEST (AutoDj, TheDesksStemStaysOnAuxThroughTheRestOfTheHandover)
+{
+	Rig rig;
+	remote::BusReports reports;
+	buses::Masks core {};
+	auto hear = [&] (int answered = -1)
+	{
+		for (const auto stem : reports.changed (rig.masks, answered))
+			core[(size_t) stem] = rig.masks[(size_t) stem];
+	};
+	for (const auto stem : reports.start (rig.masks))
+		core[(size_t) stem] = rig.masks[(size_t) stem];
+
+	rig.dj.setEnabled (true);
+	rig.runFor (0.2);
+	hear();
+	rig.runFor (240.0);   // A's track, then the mix into B: B plays alone
+	hear();
+	while (! (rig.decks[0].playing && rig.decks[1].playing))   // the mix from B back into A
+	{
+		rig.tick();
+		hear();
+	}
+	ASSERT_EQ (rig.dj.playingDeck(), 1);
+	rig.runFor (1.0);
+	hear();
+	ASSERT_TRUE (rig.isOn (0, drums)) << "A's drums took bus 1";
+
+	rig.deskSwitch (0, drums, 0, false);
+	hear (buses::stemIndex (0, drums));
+	rig.deskSwitch (0, drums, buses::aux, true);
+	hear (buses::stemIndex (0, drums));
+	ASSERT_EQ (rig.maskOf (0, drums), 1u << buses::aux);
+
+	int ticksOffAux = 0, ticksCoreWrong = 0;
+	for (double t = 0; t < 40.0; t += 0.05)
+	{
+		rig.tick();
+		hear();
+		ticksOffAux += rig.maskOf (0, drums) != (1u << buses::aux);
+		ticksCoreWrong += core != rig.masks;
+	}
+	EXPECT_FALSE (rig.decks[1].playing) << "the mix ended";
+	EXPECT_EQ (ticksOffAux, 0) << "the desk's stem stays on AUX";
+	EXPECT_TRUE (rig.busIsEmpty (0));
+	EXPECT_EQ (ticksCoreWrong, 0);
+}
+
+// The same, as on the rig: AutoDJ switched on while B plays near its end, the
+// mix into A at once, and Core's two switches a tick apart.
+TEST (AutoDj, TheDesksStemStaysOnAuxWhenAutoDjCameOnLateInTheTrack)
+{
+	Rig rig;
+	rig.decks[1] = { true, true, 240.0 - 45.0, 240.0, 120.0, 0.5, 1.0 };
+	rig.dj.setEnabled (true);
+	while (! (rig.decks[0].playing && rig.isOn (0, drums)))
+		rig.tick();
+	rig.runFor (1.0);
+	rig.deskSwitch (0, drums, 0, false);
+	rig.tick();
+	rig.deskSwitch (0, drums, buses::aux, true);
+
+	int ticksOffAux = 0;
+	for (double t = 0; t < 60.0; t += 0.05)
+	{
+		rig.tick();
+		ticksOffAux += rig.maskOf (0, drums) != (1u << buses::aux);
+	}
+	EXPECT_FALSE (rig.decks[1].playing) << "the mix ended";
+	EXPECT_EQ (ticksOffAux, 0);
+	EXPECT_TRUE (rig.busIsEmpty (0));
 }

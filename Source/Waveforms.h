@@ -78,6 +78,8 @@ public:
 	void mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) override;
 
 private:
+	double trackSpan() const;
+
 	StemDeckPlayer& player;
 	StemThumbnails& thumbnails;
 	const int deckIndex;

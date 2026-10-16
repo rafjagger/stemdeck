@@ -1,5 +1,6 @@
 #include "Waveforms.h"
 #include "Theme.h"
+#include "WaveformColumns.h"
 #include "WaveformScale.h"
 
 namespace
@@ -32,6 +33,52 @@ namespace
 
 			if (thumbnail.getTotalLength() > 0.0)
 				thumbnail.drawChannel (g, lane.reduced (0.0f, 1.0f).toNearestInt(), visibleStart, visibleEnd, 0, thumbnails.getDisplayGain (s));
+		}
+	}
+
+	// The scrolling view's stems, one rectangle per column of the track-anchored
+	// grid (see WaveformColumns.h). Columns before the start and after the end
+	// of the track stay empty.
+	void drawStemColumns (juce::Graphics& g, StemThumbnails& thumbnails, const StemDeckPlayer& player,
+						  juce::Rectangle<int> area, const waveformColumns::Grid& grid)
+	{
+		const auto length = player.getLength();
+		const auto laneHeight = (float) area.getHeight() / (float) StemSet::numStems;
+
+		for (int s = 0; s < StemSet::numStems; ++s)
+		{
+			auto& thumbnail = thumbnails[s];
+			if (thumbnail.getTotalLength() <= 0.0)
+				continue;
+
+			const auto lane = juce::Rectangle<float> ((float) area.getX(), (float) area.getY() + laneHeight * (float) s,
+													  (float) area.getWidth(), laneHeight).reduced (0.0f, 1.0f).toNearestInt().toFloat();
+			const auto midY = lane.getCentreY();
+			const auto halfHeight = thumbnails.getDisplayGain (s) * lane.getHeight() * 0.5f;
+
+			juce::RectangleList<float> waveform;
+			waveform.ensureStorageAllocated (area.getWidth());
+
+			for (int x = 0; x < area.getWidth(); ++x)
+			{
+				const auto k = grid.originColumn + x;
+				const auto start = waveformColumns::columnStart (k, grid);
+				if (start < 0.0 || start >= length)
+					continue;
+
+				float low = 0.0f, high = 0.0f;
+				thumbnail.getApproximateMinMax (start, waveformColumns::columnEnd (k, grid), 0, low, high);
+				if (high <= low)
+					continue;
+
+				// The same 0.3 px of extra ink as AudioThumbnail::drawChannel.
+				const auto top = juce::jmax (midY - high * halfHeight - 0.3f, lane.getY());
+				const auto bottom = juce::jmin (midY - low * halfHeight + 0.3f, lane.getBottom());
+				waveform.addWithoutMerging ({ (float) (area.getX() + x), top, 1.0f, bottom - top });
+			}
+
+			g.setColour (player.isStemMuted (s) ? Theme::textDim.withAlpha (0.35f) : Theme::stem (s));
+			g.fillRectList (waveform);
 		}
 	}
 
@@ -203,12 +250,13 @@ void ScrollingWaveform::paint (juce::Graphics& g)
 	const auto bounds = getLocalBounds().toFloat();
 	g.fillAll (Theme::background);
 
-	const auto position = player.getPosition();
-	const auto trackSpan = waveformScale::trackSpan (visibleSeconds, player.getEffectiveRate());
-	const auto startTime = position - trackSpan / 2.0;
-	const auto endTime = position + trackSpan / 2.0;
-	const auto pixelsPerSecond = (double) bounds.getWidth() / trackSpan;
-	const auto timeToX = [&] (double t) { return (float) ((t - startTime) * pixelsPerSecond); };
+	// Track-anchored columns that move by whole pixels: a peak keeps its
+	// column while it scrolls, so it cannot sparkle (WaveformColumns.h).
+	const auto columns = waveformColumns::gridFor (player.getPosition(), trackSpan(), getWidth(), bounds.getCentreX());
+	const auto startTime = waveformColumns::columnStart (columns.originColumn, columns);
+	const auto endTime = waveformColumns::columnStart (columns.originColumn + getWidth(), columns);
+	const auto pixelsPerSecond = 1.0 / columns.secondsPerColumn;
+	const auto timeToX = [&] (double t) { return (float) juce::roundToInt (waveformColumns::timeToX (t, columns)); };
 
 	// Lane separators
 	g.setColour (Theme::panel);
@@ -230,7 +278,7 @@ void ScrollingWaveform::paint (juce::Graphics& g)
 				const auto x = timeToX (grid.firstBeat + beat * grid.beatLength());
 				const bool barStart = ((beat % 4) + 4) % 4 == 0;
 				g.setColour (juce::Colours::white.withAlpha (barStart ? 0.35f : 0.12f));
-				g.fillRect (x - (barStart ? 1.0f : 0.5f), 0.0f, barStart ? 2.0f : 1.0f, bounds.getHeight());
+				g.fillRect (x - (barStart ? 1.0f : 0.0f), 0.0f, barStart ? 2.0f : 1.0f, bounds.getHeight());
 			}
 		}
 
@@ -245,7 +293,7 @@ void ScrollingWaveform::paint (juce::Graphics& g)
 			g.drawVerticalLine (juce::roundToInt (x1), 0.0f, bounds.getHeight());
 		}
 
-		drawStemLanes (g, thumbnails, player, bounds, startTime, endTime);
+		drawStemColumns (g, thumbnails, player, getLocalBounds(), columns);
 
 		const auto cueX = timeToX (player.getCuePoint());
 		if (cueX >= -6.0f && cueX <= bounds.getWidth() + 6.0f)
@@ -280,6 +328,15 @@ void ScrollingWaveform::paint (juce::Graphics& g)
 	}
 }
 
+// The deck's tempo, without the sync nudge and the jog bend: those change
+// every frame by a hair, and the view would rescale -- and resample every
+// column -- with them. Synced decks have the same speed-adjusted tempo, so
+// their beats still lie equally far apart.
+double ScrollingWaveform::trackSpan() const
+{
+	return waveformScale::trackSpan (visibleSeconds, player.getSpeed());
+}
+
 void ScrollingWaveform::mouseDown (const juce::MouseEvent&)
 {
 	dragStartPosition = player.getPosition();
@@ -290,7 +347,7 @@ void ScrollingWaveform::mouseDrag (const juce::MouseEvent& e)
 	if (! player.isLoaded())
 		return;
 
-	const auto secondsPerPixel = waveformScale::trackSpan (visibleSeconds, player.getEffectiveRate()) / juce::jmax (1, getWidth());
+	const auto secondsPerPixel = trackSpan() / juce::jmax (1, getWidth());
 	player.setPosition (dragStartPosition - e.getDistanceFromDragStartX() * secondsPerPixel);
 	repaint();
 }

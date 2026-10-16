@@ -61,7 +61,7 @@ public:
 	// Grid Adjust, as on a CDJ-3000: GRID turns it on; the jog wheel then moves
 	// the grid, and <1/2 1/2> <1 1> (the one a beat) SNAP (the downbeat onto the cue) SHIFT (take the
 	// phase aligned by ear against the sync leader) RESET (as analysed) edit it.
-	enum class GridAction { shift, halfBack, halfForward, oneBack, oneForward, snapToCue, downbeatAtPlayhead, shiftToLeader, reset };
+	enum class GridAction { shift, halfBack, halfForward, oneBack, oneForward, doubleTempo, halveTempo, snapToCue, downbeatAtPlayhead, shiftToLeader, reset };
 
 	// The parts in the band: made children of `parent`, placed by it.
 	void addBandPartsTo (juce::Component& parent);
@@ -97,6 +97,7 @@ private:
 	juce::TextButton halfBackButton { juce::String::fromUTF8 ("\xe2\x80\xb9" "\xc2\xbd") }, halfForwardButton { juce::String::fromUTF8 ("\xc2\xbd" "\xe2\x80\xba") };
 	juce::TextButton snapButton { "SNAP" }, shiftButton { "SHIFT" }, resetGridButton { "RESET" };
 	juce::TextButton downbeatButton { "SET 1" };
+	juce::TextButton doubleTempoButton { juce::String::fromUTF8 ("\xc3\x97" "2") }, halveTempoButton { juce::String::fromUTF8 ("\xc2\xbd") };
 	juce::TextButton oneBackButton { juce::String::fromUTF8 ("\xe2\x97\x80" " 1") }, oneForwardButton { juce::String::fromUTF8 ("1 " "\xe2\x96\xb6") };
 	void setGridMode (bool on);
 	void showPitchValue();

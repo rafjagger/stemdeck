@@ -105,7 +105,7 @@ namespace surface
 		Rect transportTile, previous, cue, play, next;
 		Rect loopOff, repeat, sync, master, vinyl, grid;
 		std::array<Rect, 5> gridNudge;   // <1/2  <1  SET 1  1>  1/2>
-		std::array<Rect, 3> gridEdit;    // SNAP  SHIFT  RESET
+		std::array<Rect, 5> gridEdit;    // SNAP  SHIFT  RESET  x2  1/2
 	};
 	DeckColumn deckColumn (Rect local, bool gridOn, int deckIndex, Metrics metrics);
 

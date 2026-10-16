@@ -123,3 +123,53 @@ TEST (GridEdit, NoTempoNoOneToMove)
 {
 	EXPECT_DOUBLE_EQ (GridEdit::moveOne (Grid {}, true).firstBeat, 0.0);
 }
+
+// x2 / 1/2: the analysis found half or double time (2026-10-16). The downbeat
+// stays where it is; only the beats between change.
+TEST (GridEdit, DoublingKeepsTheDownbeatAndPutsABeatBetween)
+{
+	const auto doubled = GridEdit::doubleTempo (at120);
+	EXPECT_DOUBLE_EQ (doubled.bpm, 240.0);
+	EXPECT_NEAR (doubled.firstBeat, at120.firstBeat, 1e-9) << "the downbeat has not moved";
+
+	const auto beatAt = [] (Grid g, int n) { return g.firstBeat + n * 60.0 / g.bpm; };
+	EXPECT_NEAR (beatAt (doubled, 1), (beatAt (at120, 0) + beatAt (at120, 1)) / 2, 1e-9) << "halfway between two old beats";
+	EXPECT_NEAR (beatAt (doubled, 2), beatAt (at120, 1), 1e-9) << "the old beats are still beats";
+}
+
+TEST (GridEdit, HalvingKeepsTheDownbeatAndDropsEverySecondBeat)
+{
+	const auto halved = GridEdit::halveTempo (at120);
+	EXPECT_DOUBLE_EQ (halved.bpm, 60.0);
+	EXPECT_NEAR (halved.firstBeat, at120.firstBeat, 1e-9) << "the downbeat has not moved";
+
+	const auto beatAt = [] (Grid g, int n) { return g.firstBeat + n * 60.0 / g.bpm; };
+	EXPECT_NEAR (beatAt (halved, 1), beatAt (at120, 2), 1e-9) << "the old beat 2 is the new beat 1; the old beat 1 is gone";
+}
+
+TEST (GridEdit, DoubleThenHalveGivesTheGridBack)
+{
+	const auto back = GridEdit::halveTempo (GridEdit::doubleTempo (at120));
+	EXPECT_DOUBLE_EQ (back.bpm, at120.bpm);
+	EXPECT_NEAR (back.firstBeat, at120.firstBeat, 1e-9);
+}
+
+TEST (GridEdit, NoTempoNothingToDoubleOrHalve)
+{
+	EXPECT_DOUBLE_EQ (GridEdit::doubleTempo (Grid {}).bpm, 0.0);
+	EXPECT_DOUBLE_EQ (GridEdit::halveTempo (Grid {}).bpm, 0.0);
+}
+
+TEST (GridEdit, TempoChangesKeepTheFirstBeatWithinOneBar)
+{
+	// firstBeat 1.9 s is inside the 2 s bar at 120; at 240 a bar is 1 s, at 60 it is 4 s.
+	const Grid late { 120.0, 1.9 };
+	const auto doubled = GridEdit::doubleTempo (late);
+	EXPECT_GE (doubled.firstBeat, 0.0);
+	EXPECT_LT (doubled.firstBeat, 4 * 60.0 / doubled.bpm) << "within the new, shorter bar";
+	EXPECT_NEAR (doubled.firstBeat, 0.9, 1e-9) << "whole bars moved off: the same downbeat";
+
+	const auto halved = GridEdit::halveTempo (late);
+	EXPECT_GE (halved.firstBeat, 0.0);
+	EXPECT_LT (halved.firstBeat, 4 * 60.0 / halved.bpm);
+}

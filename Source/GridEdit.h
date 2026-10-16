@@ -28,6 +28,12 @@ namespace GridEdit
 	// they are -- for when the analysis picked the wrong one.
 	Grid moveOne (Grid grid, bool later);
 
+	// x2 / 1/2: the analysis found half or double time. The downbeat stays
+	// where it is (firstBeat unchanged); a beat is inserted between every two,
+	// or every second one dropped. Without a tempo there is nothing to change.
+	Grid doubleTempo (Grid grid);
+	Grid halveTempo (Grid grid);
+
 	// SNAP GRID (CUE): the downbeat onto the cue point.
 	Grid snapToCue (Grid grid, double cueSeconds);
 

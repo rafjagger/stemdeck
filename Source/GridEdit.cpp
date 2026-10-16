@@ -33,6 +33,22 @@ namespace GridEdit
 		return shift (grid, (later ? 1.0 : -1.0) * 60.0 / grid.bpm);
 	}
 
+	Grid doubleTempo (Grid grid)
+	{
+		if (grid.bpm <= 0.0)
+			return grid;
+		grid.bpm *= 2.0;
+		return normalised (grid);   // the bar got shorter: firstBeat may now lie past it
+	}
+
+	Grid halveTempo (Grid grid)
+	{
+		if (grid.bpm <= 0.0)
+			return grid;
+		grid.bpm /= 2.0;
+		return normalised (grid);
+	}
+
 	Grid snapToCue (Grid grid, double cueSeconds)
 	{
 		grid.firstBeat = cueSeconds;

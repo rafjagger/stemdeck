@@ -400,6 +400,8 @@ TEST (SurfaceLayout, DeckKeysAreAtLeastFingerHighOnTheRig)
 		EXPECT_GE (key.h, 28);
 	for (const auto& key : c.gridNudge)
 		EXPECT_GE (key.h, 22);
+	for (const auto& key : c.gridEdit)
+		EXPECT_GE (key.h, 22);
 	EXPECT_GE (surface::band (s.band, s.metrics).deck[0].range.h, 26);
 }
 
@@ -510,4 +512,19 @@ TEST (SurfaceLayout, RectSlicing)
 	EXPECT_TRUE (r.isEmpty());
 	EXPECT_FALSE ((Rect { 0, 0, 10, 10 }).intersects (Rect { 10, 0, 10, 10 })) << "touching is not overlapping";
 	EXPECT_TRUE ((Rect { 0, 0, 10, 10 }).contains (Rect { 2, 2, 8, 8 }));
+}
+
+// SNAP SHIFT RESET x2 1/2: five keys under the five nudge keys, so the column
+// of each stays put and the two tempo keys sit at the right end.
+TEST (SurfaceLayout, GridEditRowHasFiveKeysUnderTheNudgeKeys)
+{
+	const auto s = surface::sections (rigWidth, rigHeight);
+	const auto c = surface::deckColumn (Rect { 0, 0, s.deck[0].w, s.deck[0].h }, true, 0, s.metrics);
+
+	ASSERT_EQ (c.gridEdit.size(), 5u);
+	for (size_t i = 0; i < c.gridEdit.size(); ++i)
+	{
+		EXPECT_EQ (c.gridEdit[i].x, c.gridNudge[i].x) << "key " << i;
+		EXPECT_EQ (c.gridEdit[i].w, c.gridNudge[i].w) << "key " << i;
+	}
 }

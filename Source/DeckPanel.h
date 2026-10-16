@@ -81,6 +81,8 @@ private:
 	const int deckIndex;
 	bool previewingFromCue = false;
 	bool cueButtonWasDown = false;
+	bool cueHeld = false;
+	void updateCueLight();
 	bool analysing = false;
 	bool settingTempoFromSync = false;
 	double tempoRange = 0.08;

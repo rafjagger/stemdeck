@@ -1,4 +1,5 @@
 #include "DeckPanel.h"
+#include "CueLight.h"
 #include "Theme.h"
 #include "SyncLabels.h"
 #include "SurfaceJuce.h"
@@ -45,7 +46,7 @@ DeckPanel::DeckPanel (StemDeckPlayer& p, StemThumbnails& thumbnails, int index)
 		}
 	};
 	cueButton.setColour (juce::TextButton::textColourOffId, Theme::cue);
-	// Lit while CUE is held, from whichever source: cuePressed()/cueReleased() set it.
+	// Lit like a CDJ's CUE (CueLight.h); updateCueLight() sets the toggle state.
 	cueButton.setColour (juce::TextButton::buttonOnColourId, Theme::cue);
 	cueButton.setColour (juce::TextButton::textColourOnId, juce::Colours::black);
 	playButton.onClick = [this] { togglePlay(); };
@@ -247,7 +248,8 @@ void DeckPanel::togglePlay()
 
 void DeckPanel::cuePressed()
 {
-	cueButton.setToggleState (true, juce::dontSendNotification);
+	cueHeld = true;
+	updateCueLight();
 
 	if (! player.isLoaded())
 		return;
@@ -270,7 +272,8 @@ void DeckPanel::cuePressed()
 
 void DeckPanel::cueReleased()
 {
-	cueButton.setToggleState (false, juce::dontSendNotification);
+	cueHeld = false;
+	updateCueLight();
 
 	if (previewingFromCue)
 	{
@@ -278,6 +281,17 @@ void DeckPanel::cueReleased()
 		player.pause();
 		player.setPosition (player.getCuePoint());
 	}
+}
+
+void DeckPanel::updateCueLight()
+{
+	const auto light = cuelight::cueLight (player.isLoaded(), player.isPlaying(), cueHeld,
+										   player.getPosition(), player.getCuePoint());
+	const bool lit = light == cuelight::CueLight::steady
+					 || (light == cuelight::CueLight::blink
+						 && cuelight::blinkPhaseOn (juce::Time::getMillisecondCounterHiRes() / 1000.0));
+
+	cueButton.setToggleState (lit, juce::dontSendNotification);
 }
 
 void DeckPanel::refresh()
@@ -300,6 +314,7 @@ void DeckPanel::refresh()
 	}
 
 	playButton.setToggleState (player.isPlaying(), juce::dontSendNotification);
+	updateCueLight();
 	loopOffButton.setToggleState (player.hasLoop(), juce::dontSendNotification);
 	loopOffButton.setEnabled (player.hasLoop());
 	overview.refresh();

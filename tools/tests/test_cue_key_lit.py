@@ -1,5 +1,5 @@
-"""The on-screen CUE key shows CUE, whoever pressed it (keyboard, SCS.3d,
-panel all call DeckPanel::cuePressed()): it is lit exactly while CUE is held.
+"""The on-screen CUE key lights like a CDJ's CUE (CueLight.h, unit-tested),
+whoever pressed CUE (keyboard, SCS.3d, panel all call DeckPanel::cuePressed()).
 
 DeckPanel is JUCE and not in the test runner, so the wiring is read from the
 source."""
@@ -18,22 +18,23 @@ def body(name):
     return match.group(1)
 
 
-LIGHT = r"cueButton\.setToggleState\s*\(\s*{}\s*,\s*juce::dontSendNotification\s*\)"
-
-
-class CueKeyIsLitWhileHeld(unittest.TestCase):
-    def test_press_lights_the_key_before_any_early_return(self):
+class CueKeyFollowsTheLight(unittest.TestCase):
+    def test_press_holds_and_updates_before_any_early_return(self):
         pressed = body("cuePressed")
-        lit = re.search(LIGHT.format("true"), pressed)
-        self.assertTrue(lit, "cuePressed() must light the key")
-        self.assertLess(lit.start(), pressed.index("return"),
-                        "an unloaded deck still shows the key held")
+        self.assertLess(pressed.index("cueHeld = true"), pressed.index("updateCueLight"))
+        self.assertLess(pressed.index("updateCueLight"), pressed.index("return"))
 
-    def test_release_darkens_the_key_before_any_condition(self):
+    def test_release_lets_go_and_updates_before_any_condition(self):
         released = body("cueReleased")
-        dark = re.search(LIGHT.format("false"), released)
-        self.assertTrue(dark, "cueReleased() must darken the key")
-        self.assertLess(dark.start(), released.index("if"))
+        self.assertLess(released.index("cueHeld = false"), released.index("updateCueLight"))
+        self.assertLess(released.index("updateCueLight"), released.index("if"))
+
+    def test_the_light_is_set_without_notification(self):
+        light = body("updateCueLight")
+        self.assertRegex(light, r"cueButton\.setToggleState \(lit, juce::dontSendNotification\)")
+
+    def test_the_ui_refresh_drives_it(self):
+        self.assertIn("updateCueLight();", body("refresh"))
 
     def test_lit_colours_are_readable(self):
         self.assertIn("cueButton.setColour (juce::TextButton::buttonOnColourId, Theme::cue)", TEXT)

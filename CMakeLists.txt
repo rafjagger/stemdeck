@@ -68,6 +68,7 @@ target_sources(StemDeck PRIVATE
     Source/TempoAnalysis.cpp
     Source/Sections.cpp
     Source/Preview.cpp
+    Source/CueLight.cpp
     Source/SectionAnalysis.cpp
     Source/BarPhase.cpp
     Source/CachedGrid.cpp

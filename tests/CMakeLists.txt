@@ -4,6 +4,7 @@ add_executable(stemdeck-tests
     CueLight.cpp
     ${CMAKE_SOURCE_DIR}/Source/CueLight.cpp
     WaveformScale.cpp
+    WaveformColumns.cpp
     BarPhase.cpp
     ${CMAKE_SOURCE_DIR}/Source/BarPhase.cpp
     CachedGrid.cpp

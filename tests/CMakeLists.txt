@@ -1,6 +1,8 @@
 find_package(GTest REQUIRED)
 add_executable(stemdeck-tests
     Smoke.cpp
+    CueLight.cpp
+    ${CMAKE_SOURCE_DIR}/Source/CueLight.cpp
     WaveformScale.cpp
     BarPhase.cpp
     ${CMAKE_SOURCE_DIR}/Source/BarPhase.cpp

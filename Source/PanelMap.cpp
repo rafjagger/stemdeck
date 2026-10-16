@@ -9,13 +9,12 @@ namespace panel
 	{
 		constexpr int columnsPerDeck = columns / buses::decks;
 		constexpr int cueRow = 0, playRow = 1;
-		// The levels a key can be at: full while on, a quarter for a muted
-		// stem, a twelfth -- the resting glow in the deck's colour -- otherwise;
-		// each well over a stop from the next. The twelfth is also what keeps
-		// 32 resting keys and 12 lit ones inside the budget (PanelMap test
-		// WorstCaseFitsTheBudgetWithoutScaling).
-		constexpr int mutedShare = 4;
-		constexpr int baseShare = 12;
+		// The levels a key can be at: full while on, half for a muted stem, and
+		// at rest the deck colour with its brightest channel at 214 of 255 --
+		// the brightest channel of A3 Motion's idle key (buttonLeds.idle
+		// r31 g214 b205). Rest and on then differ in colour, as on Motion.
+		constexpr int mutedShare = 2;
+		constexpr int restBrightest = 214;
 
 		int deckOfColumn (int col) { return col / columnsPerDeck; }
 		int outerColumn (int deck) { return deck == 0 ? 0 : columns - 1; }
@@ -204,27 +203,10 @@ namespace panel
 		return { channel (c.r), channel (c.g), channel (c.b) };
 	}
 
-	Leds withinBudget (const Leds& leds)
-	{
-		int total = 0;
-		for (const auto& c : leds)
-			total += c.r + c.g + c.b;
-		if (total <= budget)
-			return leds;
-
-		// Rounded down, every channel: the total cannot round up past the budget.
-		Leds result;
-		for (size_t i = 0; i < leds.size(); ++i)
-			result[i] = scaled (leds[i], budget, total);
-		return result;
-	}
-
 	Rgb base (Rgb colour)
 	{
-		return scaled (vivid (colour), 1, baseShare);
+		return scaled (vivid (colour), restBrightest, 255);
 	}
-
-	Leds render (const LedState& state) { return withinBudget (compose (state)); }
 
 	Leds compose (const LedState& state)
 	{
@@ -232,7 +214,7 @@ namespace panel
 
 		for (int deck = 0; deck < buses::decks; ++deck)
 		{
-			// Every key of the half glows in the deck's colour; what is on
+			// Every key of the half rests in the deck's colour; what is on
 			// lights over it in its own.
 			const auto rest = base (state.deckColours[(size_t) deck]);
 			for (int stem = 0; stem < buses::stemsPerDeck; ++stem)

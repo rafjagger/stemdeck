@@ -35,7 +35,7 @@ PanelDevice::~PanelDevice()
 
 void PanelDevice::show (const panel::LedState& state)
 {
-	const auto leds = panel::render (state);
+	const auto leds = panel::compose (state);
 	const std::lock_guard<std::mutex> lock (ledLock);
 	wanted = leds;
 }

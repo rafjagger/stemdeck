@@ -20,9 +20,9 @@
 //
 // A pad switches its stem onto that bus or off it, through the mixer's own
 // switch (MixerPanel::pressBus) -- what a click on the screen key does. Every
-// key of a half glows at rest in its deck's colour, so the halves read as A
+// key of a half rests lit in its deck's colour, so the halves read as A
 // and B, and lights over that while it is on: a pad in its stem's colour while
-// the stem is on that bus (a quarter while muted), CUE and PLAY in theirs. Over each half, four encoders -- two columns of two -- turn
+// the stem is on that bus (half while muted), CUE and PLAY in theirs. Over each half, four encoders -- two columns of two -- turn
 // the four stems' gains in reading order; a push mutes the stem. The inner
 // pot of each half is the deck's fader; the outer pots are left free.
 namespace panel
@@ -73,19 +73,10 @@ namespace panel
 	//==============================================================================
 	using Leds = std::array<Rgb, ledCount>;
 
-	// The LED budget: the sum of every LED's r + g + b never above eight LEDs
-	// at full white -- what the panel's supply carries with its other loads,
-	// about 370 mA.
-	constexpr int budget = 8 * 3 * 255;
-
 	// A UI colour as an LED should show it: the hue kept, the saturation
 	// tripled (capped), at full brightness. The stems' pastels otherwise wash
 	// out to nearly white on an RGB LED. Black stays black.
 	Rgb vivid (Rgb colour);
-
-	// Every LED scaled down by one factor until the total is within budget;
-	// unchanged when it already is.
-	Leds withinBudget (const Leds& leds);
 
 	struct LedState
 	{
@@ -94,14 +85,15 @@ namespace panel
 		std::array<Rgb, buses::stemsPerDeck> stemColours {};
 		std::array<bool, buses::decks> playing {}, atCue {};
 		Rgb playColour, cueColour;
-		std::array<Rgb, buses::decks> deckColours {};   // every key's resting glow, by half
+		std::array<Rgb, buses::decks> deckColours {};   // every key's resting colour, by half
 	};
 
-	// A key's resting glow in `colour` (its deck's): vivid, at a twelfth.
+	// A key's resting light in `colour` (its deck's): vivid, the brightest
+	// channel at Motion's idle level (214).
 	Rgb base (Rgb colour);
 
-	// Every LED as wanted, by its id in the chain, before the budget.
+	// Every LED as wanted, by its id in the chain. Sent as it is: the current
+	// limit is the panel firmware's (LED_BUDGET_MA, all LEDs scaled evenly
+	// above it), the same fuse A3 Motion runs on.
 	Leds compose (const LedState& state);
-	// The same within budget: what the panel is sent.
-	Leds render (const LedState& state);
 }

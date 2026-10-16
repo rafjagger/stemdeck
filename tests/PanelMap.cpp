@@ -263,7 +263,7 @@ TEST (PanelMap, TheInnerPotIsTheFaderOnceMoved)
 
 //==============================================================================
 // Pastel UI colours wash out to near white on RGB LEDs: the hue is kept, the
-// saturation pushed up, the brightness to full -- the budget scales after.
+// saturation pushed up, the brightness to full.
 TEST (PanelMap, VividKeepsTheHueAndSaturates)
 {
 	for (const auto c : stemColours)
@@ -280,21 +280,6 @@ TEST (PanelMap, VividKeepsTheHueAndSaturates)
 	EXPECT_LT (saturation (panel::vivid ({ 200, 195, 190 })), 0.25) << "near grey stays near grey";
 }
 
-TEST (PanelMap, TheBudgetCapsTheTotalAndKeepsTheBalance)
-{
-	panel::Leds leds {};
-	for (int i = 0; i < 8; ++i)
-		leds[(size_t) i] = { 255, 255, 255 };
-	EXPECT_EQ (panel::withinBudget (leds), leds) << "eight at full is the budget";
-
-	for (auto& c : leds)
-		c = { 255, 128, 0 };
-	const auto scaled = panel::withinBudget (leds);
-	EXPECT_LE (load (scaled), panel::budget);
-	EXPECT_GT (load (scaled), panel::budget * 9 / 10);
-	EXPECT_NEAR (scaled[0].g / (double) scaled[0].r, 128.0 / 255.0, 0.02);
-}
-
 // A pad lights in its stem's colour at full on the bus the stem is on; every
 // other key of a deck's half rests in the deck's colour -- the halves read as
 // A and B before anything is pressed.
@@ -302,7 +287,7 @@ TEST (PanelMap, ActivePadsOverTheDecksBase)
 {
 	auto state = allOnAux();
 	state.masks[(size_t) buses::stemIndex (0, 2)] = 1u << 0;
-	const auto leds = panel::render (state);
+	const auto leds = panel::compose (state);
 
 	EXPECT_EQ (at (leds, { 4, 1 }), panel::vivid (stemColours[2])) << "deck A stem 3 on bus 1, at full";
 	EXPECT_EQ (at (leds, { 4, 0 }), panel::base (deckColours[0])) << "and its AUX at deck A's base";
@@ -318,7 +303,7 @@ TEST (PanelMap, EveryKeyRestsInItsDecksColour)
 	auto state = allOnAux();
 	state.masks.fill (1u << 0);
 	state.masks = buses::normalise (state.masks);   // stem A1 on bus 1, the rest on AUX
-	const auto leds = panel::render (state);
+	const auto leds = panel::compose (state);
 	for (int i = 0; i < panel::buttonCount; ++i)
 	{
 		const auto cell = panel::buttonCell (i);
@@ -332,27 +317,40 @@ TEST (PanelMap, EveryKeyRestsInItsDecksColour)
 	}
 }
 
-// The base is a glow, not a light: well under the active level.
-TEST (PanelMap, TheBaseIsAGlow)
+// A3 Motion's resting key (buttonLeds.idle, r31 g214 b205) has its brightest
+// channel at 214. The deck colour rests at that level: same brightness, the
+// colour tells the halves apart. A saturated hue spends fewer channels than
+// Motion's cyan (sum 450), so the sum is held to 60-100 % of it, not equal.
+TEST (PanelMap, TheRestLevelIsMotionsIdleBrightness)
 {
-	for (const auto c : stemColours)
+	constexpr int motionIdleBrightest = 214, motionIdleSum = 450;
+	for (const auto c : deckColours)
 	{
-		const auto full = panel::vivid (c), glow = panel::base (c);
-		EXPECT_GT (sum (glow), 0);
-		EXPECT_LE (sum (glow) * 10, sum (full));
+		const auto rest = panel::base (c);
+		EXPECT_NEAR (std::max ({ rest.r, rest.g, rest.b }), motionIdleBrightest, 1);
+		EXPECT_GE (sum (rest) * 10, motionIdleSum * 6);
+		EXPECT_LE (sum (rest), motionIdleSum);
+		EXPECT_NEAR (hue (rest), hue (c), 3.0);
 	}
 }
 
-// A muted stem's pad stands clearly above the base glow around it, and
-// clearly below an open stem.
-TEST (PanelMap, MutedStandsBetweenBaseAndFull)
+// On against rest is a difference in colour, not in level: the stem's own
+// colour at full is never darker than the deck colour at rest.
+TEST (PanelMap, OnIsFullAndNotDimmerThanRest)
+{
+	for (const auto c : stemColours)
+		EXPECT_GE (std::max ({ panel::vivid (c).r, panel::vivid (c).g, panel::vivid (c).b }),
+				   std::max ({ panel::base (deckColours[0]).r, panel::base (deckColours[0]).g, panel::base (deckColours[0]).b }));
+}
+
+// A muted stem's pad is half of an open one, channel by channel.
+TEST (PanelMap, MutedIsHalfOfOn)
 {
 	auto state = allOnAux();
 	state.muted[(size_t) buses::stemIndex (1, 0)] = true;
-	const auto leds = panel::render (state);
-	const auto muted = at (leds, { 2, 9 }), glow = at (leds, { 2, 5 }), open = at (leds, { 2, 0 });
-	EXPECT_GE (sum (muted) * 10, sum (glow) * 25) << "muted at least 2.5 x the base";
-	EXPECT_LE (sum (muted) * 2, sum (open));
+	const auto leds = panel::compose (state);
+	const auto muted = at (leds, { 2, 9 }), open = panel::vivid (stemColours[0]);
+	EXPECT_EQ (muted, (panel::Rgb { (std::uint8_t) (open.r / 2), (std::uint8_t) (open.g / 2), (std::uint8_t) (open.b / 2) }));
 }
 
 // Active CUE and PLAY keep their own colours over the deck's base.
@@ -361,41 +359,17 @@ TEST (PanelMap, TransportLightsOverTheDecksBase)
 	auto state = allOnAux();
 	state.playing = { true, false };
 	state.atCue = { false, true };
-	const auto leds = panel::render (state);
+	const auto leds = panel::compose (state);
 	EXPECT_EQ (at (leds, { 1, 0 }), panel::vivid (state.playColour));
 	EXPECT_EQ (at (leds, { 0, 0 }), panel::base (deckColours[0]));
 	EXPECT_EQ (at (leds, { 1, 9 }), panel::base (deckColours[1]));
 	EXPECT_EQ (at (leds, { 0, 9 }), panel::vivid (state.cueColour));
 }
 
-// The worst the stems' own colours can do -- every stem open on a bus, each
-// deck's CUE or PLAY lit, every other key at its base -- fits the budget as
-// composed: the scale-down is a safety net, not part of normal use.
-TEST (PanelMap, WorstCaseFitsTheBudgetWithoutScaling)
-{
-	const std::array<std::array<bool, 2>, 4> transport { { { false, false }, { true, false }, { false, true }, { true, true } } };
-	const std::array<unsigned, 3> placements { 1u << buses::aux, 1u << 0, 1u << 3 };
-
-	int worst = 0;
-	for (const auto& playing : transport)
-		for (const auto& cue : transport)
-			for (const auto mask : placements)
-			{
-				auto state = allOnAux();
-				state.masks.fill (mask);
-				state.masks = buses::normalise (state.masks);
-				state.playing = playing;
-				state.atCue = cue;
-				const auto leds = panel::compose (state);
-				worst = std::max (worst, load (leds));
-				EXPECT_EQ (panel::render (state), leds) << "no scale-down";
-			}
-	EXPECT_LE (worst, panel::budget);
-	RecordProperty ("worstLoad", worst);
-}
-
-// Brighter colours than the stems' still never go over: the safety net.
-TEST (PanelMap, AnythingStaysWithinTheBudget)
+// The firmware's fuse (LED_BUDGET_MA 1300, scaling all LEDs evenly) is the
+// only current limit, as for A3 Motion: compose() is what is sent, with no
+// scale-down of its own, even far above the old 370 mA budget.
+TEST (PanelMap, AFullPanelIsComposedAtFullLevel)
 {
 	auto state = allOnAux();
 	state.playing = { true, true };
@@ -404,5 +378,10 @@ TEST (PanelMap, AnythingStaysWithinTheBudget)
 		c = { 255, 255, 255 };
 	state.playColour = state.cueColour = { 255, 255, 255 };
 	state.deckColours = { { { 255, 255, 255 }, { 255, 255, 255 } } };
-	EXPECT_LE (load (panel::render (state)), panel::budget);
+	state.masks.fill (1u << 0);
+	state.masks = buses::normalise (state.masks);
+
+	const auto composed = panel::compose (state);
+	EXPECT_GT (load (composed), 8 * 3 * 255) << "above the old own budget";
+	EXPECT_EQ (at (composed, { 2, 1 }), (panel::Rgb { 255, 255, 255 })) << "a lit key at full";
 }

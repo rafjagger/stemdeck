@@ -45,6 +45,9 @@ DeckPanel::DeckPanel (StemDeckPlayer& p, StemThumbnails& thumbnails, int index)
 		}
 	};
 	cueButton.setColour (juce::TextButton::textColourOffId, Theme::cue);
+	// Lit while CUE is held, from whichever source: cuePressed()/cueReleased() set it.
+	cueButton.setColour (juce::TextButton::buttonOnColourId, Theme::cue);
+	cueButton.setColour (juce::TextButton::textColourOnId, juce::Colours::black);
 	playButton.onClick = [this] { togglePlay(); };
 	playButton.setColour (juce::TextButton::buttonOnColourId, Theme::play);
 	loopOffButton.onClick = [this] { player.clearLoop(); };
@@ -244,6 +247,8 @@ void DeckPanel::togglePlay()
 
 void DeckPanel::cuePressed()
 {
+	cueButton.setToggleState (true, juce::dontSendNotification);
+
 	if (! player.isLoaded())
 		return;
 
@@ -265,6 +270,8 @@ void DeckPanel::cuePressed()
 
 void DeckPanel::cueReleased()
 {
+	cueButton.setToggleState (false, juce::dontSendNotification);
+
 	if (previewingFromCue)
 	{
 		previewingFromCue = false;

@@ -6,9 +6,11 @@
 #include "OscTruth.h"
 #include "Remote.h"
 #include "Preview.h"
+#include "RemotePointer.h"
 #include "StemDeckPlayer.h"
 
 #include <array>
+#include <functional>
 #include <string>
 
 // StemDeck by remote control from the A3 Mixer, through Core (spec
@@ -39,12 +41,18 @@ public:
 	// while off or when the truth has no word for it.
 	void sendAhead (const preview::Ahead& ahead);
 
+	// The pro-DJ LIVE state as StemDeck shows it (the lease included), once per
+	// change. Never fires while the truth lacks the `prodj.live` word.
+	std::function<void (bool)> onLiveChanged;
+
 private:
 	void oscMessageReceived (const juce::OSCMessage& message) override;
 	void timerCallback() override;
 	void sayHello();
 	void sendLevels();
 	void report (const std::vector<int>& stems, const buses::Masks& now);
+	void inject (const std::vector<remote::Inject>& injects);
+	void reportLiveChange (double nowMs);
 
 	static constexpr int levelsPerSecond = 25;
 	static constexpr int helloEverySeconds = 30;
@@ -55,6 +63,8 @@ private:
 	remote::Words words;
 	remote::MeterGate meterGate;
 	remote::BusReports busReports;
+	remote::RemotePointerGate pointerGate;
+	bool liveShown = false;
 	juce::String truthHash;
 	juce::OSCReceiver receiver;
 	juce::OSCSender toCore, toDesk;

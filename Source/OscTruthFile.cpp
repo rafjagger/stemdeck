@@ -75,8 +75,14 @@ namespace osctruth
 		// The preview's word not through patternOf: a truth without it must
 		// keep the remote control.
 		const auto ahead = truth["addresses"]["stemdeck.ahead"]["pattern"].toString().toStdString();
+		// Likewise the pro-DJ's pointer and its LIVE switch: both empty means
+		// StemDeck listens to neither and shows no badge.
+		const auto optionalPattern = [&truth] (const char* key) {
+			return truth["addresses"][key]["pattern"].toString().toStdString();
+		};
 		return { patternOf ("stemdeck.bus"), patternOf ("stemdeck.buses"), patternOf ("stemdeck.recall"),
-				 patternOf ("vu"), patternOf ("device.hello"), meters, ahead };
+				 patternOf ("vu"), patternOf ("device.hello"), meters, ahead,
+				 optionalPattern ("stemdeck.pointer"), optionalPattern ("prodj.live") };
 	}
 
 	MeterParameters readMeterParameters (const std::string& path, std::string& error)

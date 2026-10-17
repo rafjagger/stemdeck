@@ -135,6 +135,17 @@ MainComponent::MainComponent()
 	deviceStatus.setColour (juce::Label::textColourId, Theme::textDim);
 	addAndMakeVisible (deviceStatus);
 
+	liveBadge.setJustificationType (juce::Justification::centred);
+	liveBadge.setColour (juce::Label::textColourId, Theme::cue);
+	liveBadge.setColour (juce::Label::outlineColourId, Theme::cue);
+	liveBadge.setInterceptsMouseClicks (false, false);
+	addChildComponent (liveBadge);
+	remote.onLiveChanged = [this] (bool live)
+	{
+		liveBadge.setVisible (live);
+		resized();
+	};
+
 	recButton.setMouseClickGrabsKeyboardFocus (false);
 	recButton.setColour (juce::TextButton::buttonOnColourId, Theme::mute);
 	recButton.onClick = [this] { toggleRecording(); };
@@ -1790,6 +1801,14 @@ void MainComponent::resized()
 	topBar.removeFromRight (gap);
 	pioPlayer.setBounds (topBar.removeFromRight (share (117)));
 	pioStatus.setBounds (topBar.removeFromRight (share (286)));
+	if (liveBadge.isVisible())
+	{
+		// Next to the device line, a share of the bar like its neighbours.
+		topBar.removeFromRight (gap);
+		const auto badge = topBar.removeFromRight (share (170));
+		liveBadge.setBounds (badge.reduced (0, recMeterInset));
+		liveBadge.setFont (juce::FontOptions (liveBadge.getHeight() * 0.5f).withStyle ("Bold"));
+	}
 	deviceStatus.setBounds (topBar);
 
 	waveA.setBounds (surface::toJuce (layout.waveA));

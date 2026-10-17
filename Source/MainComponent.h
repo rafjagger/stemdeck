@@ -164,6 +164,8 @@ private:
 	juce::TextButton workspacesButton { juce::String::fromUTF8 ("\xe2\x96\xbe") };
 	WorkspacePanel workspacePanel;
 	juce::Label deviceStatus;
+	// "PRO-DJ LIVE" while the pro-DJ app may move the room (RemoteLink::onLiveChanged).
+	juce::Label liveBadge { {}, "PRO-DJ LIVE" };
 	int statusCountdown = 0;
 	std::array<juce::Rectangle<int>, numDecks> deckTiles;   // each deck's tile in the band
 	std::array<surface::DeckLine, numDecks> deckLines;   // each deck's colour line around its volume fader

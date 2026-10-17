@@ -2,6 +2,7 @@
 
 #include "Buses.h"
 #include "OscTruthFile.h"
+#include "PointerInjector.h"
 
 #include <iostream>
 
@@ -72,9 +73,51 @@ void RemoteLink::sendAhead (const preview::Ahead& ahead)
 								   (juce::int32) ahead.barsUntilNext, ahead.energy));
 }
 
+namespace
+{
+	double nowMs() { return juce::Time::getMillisecondCounterHiRes(); }
+}
+
+void RemoteLink::inject (const std::vector<remote::Inject>& injects)
+{
+	auto* window = mixer.getTopLevelComponent();
+	if (window == nullptr)
+		return;
+	for (const auto& one : injects)
+		remote::injectPointer (*window, one, (juce::int64) juce::Time::currentTimeMillis());
+}
+
+void RemoteLink::reportLiveChange (double now)
+{
+	const auto live = pointerGate.isLive (now);
+	if (live == liveShown)
+		return;
+	liveShown = live;
+	if (onLiveChanged)
+		onLiveChanged (live);
+}
+
 void RemoteLink::oscMessageReceived (const juce::OSCMessage& message)
 {
 	const auto address = message.getAddressPattern().toString().toStdString();
+	// The pro-DJ words are optional: an empty word names no address.
+	if (! words.live.empty() && address == words.live)
+	{
+		if (message.size() == 1 && message[0].isInt32())
+		{
+			const auto now = nowMs();
+			inject (pointerGate.live (message[0].getInt32() != 0, now));
+			reportLiveChange (now);
+		}
+		return;
+	}
+	if (! words.pointer.empty() && address == words.pointer)
+	{
+		if (message.size() == 3 && message[0].isInt32() && message[1].isFloat32() && message[2].isFloat32())
+			if (const auto event = remote::parsePointer (message[0].getInt32(), message[1].getFloat32(), message[2].getFloat32()))
+				inject (pointerGate.pointer (*event, nowMs()));
+		return;
+	}
 	if (remote::isRecall (words, address))
 	{
 		const auto now = mixer.busMasks();
@@ -95,6 +138,9 @@ void RemoteLink::oscMessageReceived (const juce::OSCMessage& message)
 
 void RemoteLink::timerCallback()
 {
+	const auto clock = nowMs();
+	inject (pointerGate.tick (clock));
+	reportLiveChange (clock);
 	sendLevels();
 	if (++ticks % (levelsPerSecond * helloEverySeconds) == 0)
 	{

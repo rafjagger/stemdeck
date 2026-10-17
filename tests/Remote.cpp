@@ -2,6 +2,11 @@
 
 #include "Remote.h"
 #include "AutoDj.h"
+#include "OscTruthFile.h"
+
+#include <filesystem>
+#include <fstream>
+#include <unistd.h>
 
 #include <array>
 #include <cmath>
@@ -479,4 +484,43 @@ TEST (Remote, TheRecallSendsEveryStemAndKeepsCount)
 	reports.start (masks);
 	EXPECT_EQ (reports.everything (masks).size(), (size_t) buses::stemCount);
 	EXPECT_TRUE (reports.changed (masks).empty());
+}
+
+// The pointer and the LIVE word are optional: the truth gets them later, and
+// an older one must keep every other word and leave these empty.
+namespace
+{
+	std::string truthWith (const std::string& extra)
+	{
+		const auto path = std::filesystem::temp_directory_path() / ("stemdeck-words-" + std::to_string (::getpid()) + ".json");
+		std::ofstream (path) << R"({"addresses": {
+			"stemdeck.bus": {"pattern": "/stemdeck/{deck}/{stem}/bus/{bus}"},
+			"stemdeck.buses": {"pattern": "/stemdeck/{deck}/{stem}/buses"},
+			"stemdeck.recall": {"pattern": "/stemdeck/recall"},
+			"vu": {"pattern": "/vu/{n}"},
+			"device.hello": {"pattern": "/device/hello"})" << extra << "}}";
+		return path.string();
+	}
+}
+
+TEST (Remote, OptionalPointerWords)
+{
+	std::string error;
+	const auto old = truthWith ("");
+	const auto without = osctruth::readRemoteWords (old, error);
+	std::filesystem::remove (old);
+	EXPECT_TRUE (error.empty()) << error;
+	EXPECT_EQ (without.bus, "/stemdeck/{deck}/{stem}/bus/{bus}");
+	EXPECT_EQ (without.hello, "/device/hello");
+	EXPECT_TRUE (without.pointer.empty());
+	EXPECT_TRUE (without.live.empty());
+
+	const auto made = truthWith (R"(, "stemdeck.pointer": {"pattern": "/stemdeck/pointer"},
+								   "prodj.live": {"pattern": "/prodj/live"})");
+	const auto with = osctruth::readRemoteWords (made, error);
+	std::filesystem::remove (made);
+	EXPECT_TRUE (error.empty()) << error;
+	EXPECT_EQ (with.pointer, "/stemdeck/pointer");
+	EXPECT_EQ (with.live, "/prodj/live");
+	EXPECT_EQ (with.bus, "/stemdeck/{deck}/{stem}/bus/{bus}");
 }

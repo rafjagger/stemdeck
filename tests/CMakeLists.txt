@@ -25,6 +25,9 @@ add_executable(stemdeck-tests
     OscTruth.cpp
     ${CMAKE_SOURCE_DIR}/Source/OscTruth.cpp
     Remote.cpp
+    RemotePointer.cpp
+    ${CMAKE_SOURCE_DIR}/Source/RemotePointer.cpp
+    ${CMAKE_SOURCE_DIR}/Source/OscTruthFile.cpp
     TruthKeeper.cpp
     ${CMAKE_SOURCE_DIR}/Source/Remote.cpp
     PioneerClock.cpp
@@ -111,3 +114,27 @@ target_compile_features(stemdeck-tests PRIVATE cxx_std_17)
 target_link_libraries(stemdeck-tests PRIVATE GTest::gtest GTest::gtest_main PkgConfig::RUBBERBAND stemdeck-tests-juce)
 include(GoogleTest)
 gtest_discover_tests(stemdeck-tests)
+
+# The injector hands a touch to a real window, so these tests need JUCE's GUI
+# and an X server. Without a DISPLAY ctest starts them under xvfb-run (never
+# by unsetting DISPLAY: JUCE then falls back to :0.0, the rig's screen).
+add_executable(stemdeck-gui-tests
+    PointerInjector.cpp
+    ${CMAKE_SOURCE_DIR}/Source/PointerInjector.cpp
+    ${CMAKE_SOURCE_DIR}/Source/RemotePointer.cpp)
+target_include_directories(stemdeck-gui-tests PRIVATE ${CMAKE_SOURCE_DIR}/Source)
+target_compile_features(stemdeck-gui-tests PRIVATE cxx_std_17)
+target_compile_definitions(stemdeck-gui-tests PRIVATE
+    JUCE_USE_CURL=0 JUCE_WEB_BROWSER=0 JUCE_STANDALONE_APPLICATION=0 JUCE_MODAL_LOOPS_PERMITTED=1)
+target_link_libraries(stemdeck-gui-tests PRIVATE GTest::gtest GTest::gtest_main
+    juce::juce_gui_basics juce::juce_recommended_config_flags)
+add_dependencies(stemdeck-gui-tests stemdeck-gtest-stamp)
+target_compile_options(stemdeck-gui-tests PRIVATE -include ${gtest_stamp_header})
+
+# Always under xvfb-run when it exists, even with a DISPLAY set: on the rig
+# that would be the live screen, and the test opens a window.
+find_program(XVFB_RUN xvfb-run)
+if(XVFB_RUN)
+    set_target_properties(stemdeck-gui-tests PROPERTIES CROSSCOMPILING_EMULATOR "${XVFB_RUN};-a")
+endif()
+gtest_discover_tests(stemdeck-gui-tests)

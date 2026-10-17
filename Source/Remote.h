@@ -24,6 +24,10 @@ namespace remote
 		// The preview of the music, the `stemdeck.ahead` word. Optional: empty
 		// in a truth from before it, and then StemDeck sends no preview.
 		std::string ahead;
+		// The pro-DJ pointer and the pro-DJ LIVE switch (`stemdeck.pointer`,
+		// `prodj.live`). Optional likewise: empty in a truth from before them,
+		// and then StemDeck listens to neither and shows no badge.
+		std::string pointer, live;
 	};
 
 	// One switch, 0-based inside StemDeck: deck 0-1, stem 0-3, bus 0-4 (1-4, AUX).

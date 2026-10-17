@@ -35,6 +35,14 @@ namespace osctruth
 		std::string coreHost, mixerHost;
 		int corePort = -1, mixerPort = -1, ownPort = -1;
 
+		// Core's vu-relay, where the meters also go so Core can pass them on
+		// to a remote Motion and to every desk (spec virtual-desk). Optional:
+		// a truth from before has no such listener.
+		std::string vuRelayHost;
+		int vuRelayPort = -1;
+
+		bool hasVuRelay() const { return ! vuRelayHost.empty() && vuRelayPort > 0; }
+
 		bool complete() const
 		{
 			return ! coreHost.empty() && ! mixerHost.empty() && corePort > 0 && mixerPort > 0 && ownPort > 0;

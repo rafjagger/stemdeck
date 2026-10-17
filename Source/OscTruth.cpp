@@ -29,6 +29,12 @@ namespace osctruth
 		Endpoints e;
 		for (const auto& listener : listeners)
 		{
+			if (listener.program == "core" && listener.role == "vu-relay")
+			{
+				e.vuRelayHost = hostOf (listener.host);
+				e.vuRelayPort = listener.port;
+				continue;
+			}
 			if (listener.role != "osc")
 				continue;
 			if (listener.program == "core")

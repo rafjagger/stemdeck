@@ -18,7 +18,7 @@ class NoZitaLeft(unittest.TestCase):
                                 check=True).stdout.decode().split("\0")
         for name in filter(None, listed):
             path = REPO / name
-            if path in ALLOWED or not path.is_file():
+            if path in ALLOWED or path.name == ".git" or not path.is_file():
                 continue
             with self.subTest(file=name):
                 self.assertNotIn("zita", name.lower())

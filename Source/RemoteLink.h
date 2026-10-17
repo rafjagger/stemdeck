@@ -67,7 +67,8 @@ private:
 	bool liveShown = false;
 	juce::String truthHash;
 	juce::OSCReceiver receiver;
-	juce::OSCSender toCore, toDesk;
+	juce::OSCSender toCore, toDesk, toRelay;
+	bool relayConnected = false;
 	bool running = false;
 	int ticks = 0;
 

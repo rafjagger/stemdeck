@@ -42,6 +42,7 @@ void RemoteLink::start (const std::string& path, const juce::String& hash)
 	receiver.addListener (this);
 	toCore.connect (endpoints.coreHost, endpoints.corePort);
 	toDesk.connect (endpoints.mixerHost, endpoints.mixerPort);
+	relayConnected = endpoints.hasVuRelay() && toRelay.connect (endpoints.vuRelayHost, endpoints.vuRelayPort);
 
 	running = true;
 	sayHello();
@@ -188,4 +189,6 @@ void RemoteLink::sendLevels()
 		bundle.addElement (juce::OSCMessage (juce::String (meter.address), level.peak, level.rms));
 	}
 	toDesk.send (bundle);
+	if (relayConnected)
+		toRelay.send (bundle);
 }

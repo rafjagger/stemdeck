@@ -117,3 +117,31 @@ TEST (OscTruth, AZeroHoldIsASetting)
 {
 	EXPECT_FLOAT_EQ (osctruth::meterParametersFrom ({ { "peak_hold_seconds", 0.0 } }).peakHoldSeconds, 0.0f);
 }
+
+// A desk on any machine shows the stem meters too (spec virtual-desk): they
+// go to Core's vu-relay as well, on the Core machine, and Core passes them on
+// to every desk and to a remote Motion. An older truth without the listener
+// still runs: the relay is then simply not fed.
+TEST (OscTruth, TheEndpointsKnowTheVuRelay)
+{
+	const std::vector<osctruth::Listener> l {
+		{ "core", "osc", "any", 9000 }, { "core", "vu-relay", "local", 9003 },
+		{ "mixer", "osc", "mixer", 7772 }, { "stemdeck", "osc", "any", 7780 } };
+	const std::map<std::string, std::string> hosts {
+		{ "core", "192.168.8.10" }, { "mixer", "192.168.8.11" }, { "local", "127.0.0.1" } };
+	const auto e = osctruth::endpointsFrom (l, hosts);
+	EXPECT_TRUE (e.hasVuRelay());
+	EXPECT_EQ (e.vuRelayHost, "127.0.0.1");
+	EXPECT_EQ (e.vuRelayPort, 9003);
+	EXPECT_TRUE (e.complete());
+}
+
+TEST (OscTruth, ATruthWithoutTheRelayStillHasEndpoints)
+{
+	const std::vector<osctruth::Listener> l {
+		{ "core", "osc", "any", 9000 }, { "mixer", "osc", "mixer", 7772 }, { "stemdeck", "osc", "any", 7780 } };
+	const std::map<std::string, std::string> hosts { { "core", "192.168.8.10" }, { "mixer", "192.168.8.11" } };
+	const auto e = osctruth::endpointsFrom (l, hosts);
+	EXPECT_FALSE (e.hasVuRelay());
+	EXPECT_TRUE (e.complete());
+}

@@ -137,3 +137,41 @@ TEST_F (PointerInjector, AnInjectOutsideTheWindowIsIgnored)
 	juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
 	EXPECT_TRUE (catcher.seen.empty());
 }
+
+TEST_F (PointerInjector, AnUpOutsideTheWindowStillReleasesTheTouch)
+{
+	ASSERT_NE (catcher.getPeer(), nullptr);
+	const auto inside = shareOf ({ 50.f, 60.f });
+	const auto outside = shareOf ({ 500.f, 60.f });
+	remote::injectPointer (catcher, { remote::PointerEvent::Phase::down, inside.x, inside.y }, 1000);
+	remote::injectPointer (catcher, { remote::PointerEvent::Phase::move, outside.x, outside.y }, 1005);
+	remote::injectPointer (catcher, { remote::PointerEvent::Phase::up, outside.x, outside.y }, 1010);
+	juce::MessageManager::getInstance()->runDispatchLoopUntil (100);
+
+	ASSERT_GE (catcher.seen.size(), 2u);
+	const auto& last = catcher.seen.back();
+	EXPECT_FALSE (last.down);
+	EXPECT_EQ (last.type, juce::MouseInputSource::InputSourceType::touch);
+	EXPECT_EQ (last.index, remote::remoteTouchIndex);
+	// Clamped to the window's right edge, same row.
+	EXPECT_NEAR (last.where.x, 200.f, 1.5f);
+	EXPECT_NEAR (last.where.y, 60.f, 1.f);
+
+	// The injected source is up now: a stray move changes nothing.
+	const auto count = catcher.seen.size();
+	remote::injectPointer (catcher, { remote::PointerEvent::Phase::move, inside.x, inside.y }, 1020);
+	juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+	EXPECT_EQ (catcher.seen.size(), count);
+}
+
+TEST_F (PointerInjector, ADownOutsideTheWindowStartsNothing)
+{
+	ASSERT_NE (catcher.getPeer(), nullptr);
+	const auto outside = shareOf ({ 500.f, 60.f });
+	const auto inside = shareOf ({ 50.f, 60.f });
+	remote::injectPointer (catcher, { remote::PointerEvent::Phase::down, outside.x, outside.y }, 1000);
+	remote::injectPointer (catcher, { remote::PointerEvent::Phase::move, inside.x, inside.y }, 1005);
+	remote::injectPointer (catcher, { remote::PointerEvent::Phase::up, inside.x, inside.y }, 1010);
+	juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+	EXPECT_TRUE (catcher.seen.empty());
+}

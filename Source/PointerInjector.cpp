@@ -12,6 +12,18 @@ namespace remote
 		return onScreen - window.getPosition();
 	}
 
+	std::optional<juce::Point<float>> localPointFor (PointerEvent::Phase phase, bool touchDown, juce::Point<float> share,
+													 juce::Rectangle<float> screen, juce::Rectangle<float> window)
+	{
+		if (phase == PointerEvent::Phase::down)
+			return screenToWindow (share, screen, window);
+		if (! touchDown)
+			return std::nullopt;
+		const juce::Point<float> onScreen { screen.getX() + share.x * screen.getWidth(),
+											screen.getY() + share.y * screen.getHeight() };
+		return window.getConstrainedPoint (onScreen) - window.getPosition();
+	}
+
 	void injectPointer (juce::Component& topLevel, const Inject& inject, juce::int64 timeMs)
 	{
 		auto* peer = topLevel.getPeer();
@@ -23,9 +35,12 @@ namespace remote
 		if (display == nullptr)
 			return;
 
-		const auto local = screenToWindow ({ inject.x, inject.y }, display->logicalBounds.toFloat(), window.toFloat());
+		static bool touchDown = false;
+		const auto local = localPointFor (inject.phase, touchDown, { inject.x, inject.y },
+										  display->logicalBounds.toFloat(), window.toFloat());
 		if (! local)
 			return;
+		touchDown = inject.phase != PointerEvent::Phase::up;
 
 		const auto mods = inject.phase == PointerEvent::Phase::up
 							  ? juce::ModifierKeys()

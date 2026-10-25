@@ -62,8 +62,8 @@ private:
 };
 
 //==============================================================================
-// Channel strip of one deck: a knob per stem, with one switch per bus (1-4,
-// AUX -- one stem per bus, the rest on AUX, Buses.h), a cue switch and mute in one row; the
+// Channel strip of one deck: a knob per stem, with two switches, its own
+// channel and AUX (one stem per bus, the rest on AUX, Buses.h), a cue switch and mute in one row; the
 // four rows tight, a matrix of keys. The stems' names are on the overview's
 // lanes, not here.
 // Its channel fader, which shows the deck's level in its slot, stands in the

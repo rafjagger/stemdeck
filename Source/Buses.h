@@ -6,8 +6,8 @@
 
 // The output buses and who reaches them. Pure: no JUCE, testable.
 //
-// Five stereo buses, 1-4 and AUX, all feeding A³ Core. Every stem has one
-// switch per bus, and since 2026-10-07 is on one bus at most. Since
+// Five stereo buses, 1-4 and AUX, all feeding A³ Core. Every stem has two
+// switches, its own channel and AUX, and since 2026-10-07 is on one bus at most. Since
 // 2026-10-25 stem n of either deck reaches only bus n and AUX (mayUse); a
 // channel carries one deck's stem n at most, and a stem a switch takes off
 // its channel goes to AUX (applySwitch, normalise). A switch onto a channel

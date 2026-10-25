@@ -396,14 +396,6 @@ TEST (Buses, WhileTheAutoDjPlaysTheDjCanStillUseAux)
 	EXPECT_EQ (back[2], buses::offMask);
 }
 
-// A deck's switches left to right, on the screen and on the A³ Motion panel
-// alike: AUX on the deck's outer side, the channels in their order inside it.
-TEST (Buses, AuxStandsOnTheDecksOuterSide)
-{
-	EXPECT_EQ (buses::columnOrder (0), (std::array<int, buses::count> { buses::aux, 0, 1, 2, 3 }));
-	EXPECT_EQ (buses::columnOrder (1), (std::array<int, buses::count> { 0, 1, 2, 3, buses::aux }));
-}
-
 // CUE is a send beside the buses, not a sixth bus: it has no bit in a stem's
 // mask, so the one-stem-per-bus rule, the Auto-DJ's routing and what Core is
 // told never see it.

@@ -16,6 +16,23 @@ namespace panel
 		constexpr int mutedShare = 2;
 		constexpr int restBrightest = 214;
 
+		// A stem row's five slots in the screen row's order, deck B's left to
+		// right; deck A is the same row from the right. The last is the dark
+		// column, where the screen row has its knob.
+		enum Slot { channelSlot, auxSlot, cueSlot, muteSlot, darkSlot, slotCount };
+		static_assert (slotCount == columns / buses::decks);
+
+		int slotOfColumn (int deck, int col)
+		{
+			const auto position = col - deck * (columns / buses::decks);
+			return deck == 0 ? slotCount - 1 - position : position;
+		}
+		int columnOfSlot (int deck, int slot)
+		{
+			const auto position = deck == 0 ? slotCount - 1 - slot : slot;
+			return deck * (columns / buses::decks) + position;
+		}
+
 		int deckOfColumn (int col) { return col / columnsPerDeck; }
 		int outerColumn (int deck) { return deck == 0 ? 0 : columns - 1; }
 
@@ -55,6 +72,25 @@ namespace panel
 					 (std::uint8_t) (c.b * numerator / denominator) };
 		}
 
+		// Which slot of its row a pad control sits in; -1 for a route the stem
+		// may not use.
+		int slotOfControl (const Control& control)
+		{
+			switch (control.kind)
+			{
+				case Control::Kind::stemCue:  return cueSlot;
+				case Control::Kind::stemMute: return muteSlot;
+				case Control::Kind::route:
+					if (! buses::mayUse (buses::stemIndex (control.deck, control.stem), control.bus))
+						return -1;
+					return control.bus == buses::aux ? auxSlot : channelSlot;
+				case Control::Kind::none:
+				case Control::Kind::cue:
+				case Control::Kind::play: return -1;
+			}
+			return -1;
+		}
+
 		void light (Leds& leds, const Control& control, Rgb colour)
 		{
 			const auto led = ledAt (cellOf (control));
@@ -76,11 +112,14 @@ namespace panel
 			return c;
 		}
 		c.stem = cell.row - firstPadRow;
-		c.bus = buses::columnOrder (c.deck)[(size_t) (cell.col - c.deck * columnsPerDeck)];
-		if (! buses::mayUse (buses::stemIndex (c.deck, c.stem), c.bus))
-			return {};
-		c.kind = Control::Kind::route;
-		return c;
+		switch (slotOfColumn (c.deck, cell.col))
+		{
+			case channelSlot: c.kind = Control::Kind::route; c.bus = buses::channelOf (buses::stemIndex (c.deck, c.stem)); return c;
+			case auxSlot:     c.kind = Control::Kind::route; c.bus = buses::aux; return c;
+			case cueSlot:     c.kind = Control::Kind::stemCue; return c;
+			case muteSlot:    c.kind = Control::Kind::stemMute; return c;
+			default:          return {};
+		}
 	}
 
 	Cell cellOf (const Control& control)
@@ -93,14 +132,13 @@ namespace panel
 			case Control::Kind::cue:  return { cueRow, outerColumn (control.deck) };
 			case Control::Kind::play: return { playRow, outerColumn (control.deck) };
 			case Control::Kind::route:
+			case Control::Kind::stemCue:
+			case Control::Kind::stemMute:
 			{
-				const auto order = buses::columnOrder (control.deck);
-				const auto it = std::find (order.begin(), order.end(), control.bus);
-				if (it == order.end() || control.stem < 0 || control.stem >= buses::stemsPerDeck)
+				if (control.stem < 0 || control.stem >= buses::stemsPerDeck)
 					return { -1, -1 };
-				if (! buses::mayUse (buses::stemIndex (control.deck, control.stem), control.bus))
-					return { -1, -1 };
-				return { firstPadRow + control.stem, control.deck * columnsPerDeck + (int) (it - order.begin()) };
+				const auto slot = slotOfControl (control);
+				return slot < 0 ? Cell { -1, -1 } : Cell { firstPadRow + control.stem, columnOfSlot (control.deck, slot) };
 			}
 			case Control::Kind::none: break;
 		}
@@ -146,6 +184,8 @@ namespace panel
 					if (e.released)
 						add (Event::Type::cueUp);
 					break;
+				case Control::Kind::stemCue:  if (e.pressed) add (Event::Type::stemCue); break;
+				case Control::Kind::stemMute: if (e.pressed) add (Event::Type::mute); break;
 				case Control::Kind::none: break;
 			}
 		}
@@ -233,6 +273,8 @@ namespace panel
 					const auto isOn = (state.masks[index] & (1u << bus)) != 0;
 					light (leds, { Control::Kind::route, deck, stem, bus }, isOn ? on : rest);
 				}
+				light (leds, { Control::Kind::stemCue, deck, stem }, state.cued[index] ? vivid (state.cueColour) : rest);
+				light (leds, { Control::Kind::stemMute, deck, stem }, state.muted[index] ? vivid (state.muteColour) : rest);
 			}
 
 			const auto transport = [&] (Control::Kind kind, bool isOn, Rgb colour)

@@ -286,6 +286,12 @@ void ChannelStrip::toggleMute (int stem)
 		b->setToggleState (! b->getToggleState(), juce::sendNotificationSync);
 }
 
+void ChannelStrip::toggleCue (int stem)
+{
+	if (auto* b = cueButtons[stem])
+		b->setToggleState (! b->getToggleState(), juce::sendNotificationSync);
+}
+
 void ChannelStrip::refresh()
 {
 	for (int s = 0; s < StemSet::numStems; ++s)

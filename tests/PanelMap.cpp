@@ -51,6 +51,15 @@ namespace
 		EXPECT_EQ (c.bus, bus) << cell.row << "," << cell.col;
 	}
 
+	void expectStemKey (Cell cell, Control::Kind kind, int deck, int stem)
+	{
+		const auto c = panel::controlAt (cell);
+		EXPECT_EQ (c.kind, kind) << cell.row << "," << cell.col;
+		EXPECT_EQ (c.deck, deck) << cell.row << "," << cell.col;
+		EXPECT_EQ (c.stem, stem) << cell.row << "," << cell.col;
+		EXPECT_EQ (panel::cellOf (c), cell);
+	}
+
 	double saturation (panel::Rgb c)
 	{
 		const auto hi = std::max ({ c.r, c.g, c.b }), lo = std::min ({ c.r, c.g, c.b });
@@ -102,45 +111,55 @@ namespace
 }
 
 //==============================================================================
-// Each deck's half: the four stems as rows (the pads' rows 2-5), the buses
-// as columns in the screen's order -- deck A AUX 1 2 3 4 from the left edge,
-// deck B 1 2 3 4 AUX to the right edge; AUX is the end column.
-TEST (PanelMap, PadsAreTheRoutingMatrix)
+// Each deck's half: the four stems as rows (the pads' rows 2-5), the screen
+// row's order column for column -- deck B channel, AUX, CUE, MUTE, dark; deck A
+// the mirror: dark, MUTE, CUE, AUX, channel. The dark column is where the
+// screen row has its knob (the deck's outer one).
+TEST (PanelMap, PadsAreTheScreenRowColumnForColumn)
 {
-	expectRoute ({ 2, 0 }, 0, 0, buses::aux);
-	expectRoute ({ 2, 1 }, 0, 0, 0);
-	expectRoute ({ 3, 2 }, 0, 1, 1);
-	expectRoute ({ 5, 4 }, 0, 3, 3);
-	expectRoute ({ 2, 5 }, 1, 0, 0);
-	expectRoute ({ 4, 7 }, 1, 2, 2);
-	expectRoute ({ 5, 9 }, 1, 3, buses::aux);
-
-	// The far left and far right columns: AUX of stems 1-4, top to bottom.
 	for (int stem = 0; stem < buses::stemsPerDeck; ++stem)
 	{
-		expectRoute ({ panel::firstPadRow + stem, 0 }, 0, stem, buses::aux);
-		expectRoute ({ panel::firstPadRow + stem, 9 }, 1, stem, buses::aux);
+		const auto row = panel::firstPadRow + stem;
+		expectRoute ({ row, 4 }, 0, stem, stem);
+		expectRoute ({ row, 3 }, 0, stem, buses::aux);
+		expectStemKey ({ row, 2 }, Control::Kind::stemCue, 0, stem);
+		expectStemKey ({ row, 1 }, Control::Kind::stemMute, 0, stem);
+		EXPECT_EQ (panel::controlAt ({ row, 0 }).kind, Control::Kind::none) << "deck A's dark column";
+
+		expectRoute ({ row, 5 }, 1, stem, stem);
+		expectRoute ({ row, 6 }, 1, stem, buses::aux);
+		expectStemKey ({ row, 7 }, Control::Kind::stemCue, 1, stem);
+		expectStemKey ({ row, 8 }, Control::Kind::stemMute, 1, stem);
+		EXPECT_EQ (panel::controlAt ({ row, 9 }).kind, Control::Kind::none) << "deck B's dark column";
 	}
 }
 
-// The grid keeps buses::columnOrder, but only a stem's own channel and AUX
-// act; a pad anywhere else is no control.
-TEST (PanelMap, OnlyAStemsOwnChannelAndAuxAct)
+// Only a stem's own channel and AUX route; the other pads of its row are its
+// CUE, its MUTE and the one dark column.
+TEST (PanelMap, EachStemRowHoldsFiveColumnsFourFunctions)
 {
 	for (int deck = 0; deck < buses::decks; ++deck)
 		for (int stem = 0; stem < buses::stemsPerDeck; ++stem)
 		{
-			std::vector<int> buttons;
+			std::vector<int> routes;
+			int cues = 0, mutes = 0, dark = 0;
 			for (int col = 0; col < 5; ++col)
 			{
 				const auto c = panel::controlAt ({ panel::firstPadRow + stem, deck * 5 + col });
-				if (c.kind == Control::Kind::route)
-					buttons.push_back (c.bus);
-				else
-					EXPECT_EQ (c.kind, Control::Kind::none);
+				switch (c.kind)
+				{
+					case Control::Kind::route:    routes.push_back (c.bus); break;
+					case Control::Kind::stemCue:  ++cues; break;
+					case Control::Kind::stemMute: ++mutes; break;
+					case Control::Kind::none:     ++dark; break;
+					default: ADD_FAILURE(); break;
+				}
 			}
-			std::sort (buttons.begin(), buttons.end());
-			EXPECT_EQ (buttons, (std::vector<int> { stem, buses::aux })) << deck << "," << stem;
+			std::sort (routes.begin(), routes.end());
+			EXPECT_EQ (routes, (std::vector<int> { stem, buses::aux })) << deck << "," << stem;
+			EXPECT_EQ (cues, 1);
+			EXPECT_EQ (mutes, 1);
+			EXPECT_EQ (dark, 1);
 		}
 }
 
@@ -165,6 +184,22 @@ TEST (PanelMap, EveryRouteHasExactlyOnePad)
 	EXPECT_EQ (routes, buses::decks * buses::stemsPerDeck * 2);
 }
 
+TEST (PanelMap, EveryStemCueAndMuteHasExactlyOnePad)
+{
+	int cues = 0, mutes = 0;
+	for (int i = 0; i < panel::buttonCount; ++i)
+	{
+		const auto cell = panel::buttonCell (i);
+		const auto c = panel::controlAt (cell);
+		if (c.kind != Control::Kind::stemCue && c.kind != Control::Kind::stemMute)
+			continue;
+		++(c.kind == Control::Kind::stemCue ? cues : mutes);
+		EXPECT_EQ (panel::cellOf (c), cell);
+	}
+	EXPECT_EQ (cues, buses::decks * buses::stemsPerDeck);
+	EXPECT_EQ (mutes, buses::decks * buses::stemsPerDeck);
+}
+
 // The end columns' top two keys: the deck's CUE over its PLAY, as on a CDJ.
 TEST (PanelMap, EndColumnsTopKeysAreCueAndPlay)
 {
@@ -181,24 +216,46 @@ TEST (PanelMap, EndColumnsTopKeysAreCueAndPlay)
 TEST (PanelMap, APadSwitchesOnItsPressOnly)
 {
 	panel::InputDecoder decoder;
-	const auto pressed = decoder.feed (pressing ({ 3, 2 }));
+	const auto pressed = decoder.feed (pressing ({ 3, 4 }));
 	ASSERT_EQ (pressed.size(), 1u);
 	EXPECT_EQ (pressed[0].type, Event::Type::route);
 	EXPECT_EQ (pressed[0].deck, 0);
 	EXPECT_EQ (pressed[0].stem, 1);
 	EXPECT_EQ (pressed[0].bus, 1);
 
-	EXPECT_TRUE (decoder.feed (pressing ({ 3, 2 })).empty()) << "held is not pressed again";
+	EXPECT_TRUE (decoder.feed (pressing ({ 3, 4 })).empty()) << "held is not pressed again";
 	EXPECT_TRUE (decoder.feed (idleFrame()).empty()) << "the release does nothing";
-	EXPECT_EQ (decoder.feed (pressing ({ 3, 2 })).size(), 1u);
+	EXPECT_EQ (decoder.feed (pressing ({ 3, 4 })).size(), 1u);
+}
+
+// A stem's CUE pad toggles its cue on the press only; its MUTE pad mutes it
+// like the encoder push, the same event.
+TEST (PanelMap, AStemCuePadAndMutePadSendTheirEvents)
+{
+	panel::InputDecoder decoder;
+	auto events = decoder.feed (pressing ({ 4, 7 }));
+	ASSERT_EQ (events.size(), 1u);
+	EXPECT_EQ (events[0].type, Event::Type::stemCue);
+	EXPECT_EQ (events[0].deck, 1);
+	EXPECT_EQ (events[0].stem, 2);
+	EXPECT_TRUE (decoder.feed (pressing ({ 4, 7 })).empty());
+	EXPECT_TRUE (decoder.feed (idleFrame()).empty());
+
+	events = decoder.feed (pressing ({ 3, 1 }));
+	ASSERT_EQ (events.size(), 1u);
+	EXPECT_EQ (events[0].type, Event::Type::mute);
+	EXPECT_EQ (events[0].deck, 0);
+	EXPECT_EQ (events[0].stem, 1);
+
+	EXPECT_TRUE (decoder.feed (pressing ({ 3, 0 })).empty()) << "the dark column does nothing";
 }
 
 // A press and release inside one poll arrives as a click: still one switch.
 TEST (PanelMap, AClickIsOnePress)
 {
 	panel::InputDecoder decoder;
-	EXPECT_EQ (decoder.feed (pressing ({ 2, 9 }, KeyState::click)).size(), 1u);
-	EXPECT_TRUE (decoder.feed (pressing ({ 2, 9 }, KeyState::bounce)).empty());
+	EXPECT_EQ (decoder.feed (pressing ({ 2, 5 }, KeyState::click)).size(), 1u);
+	EXPECT_TRUE (decoder.feed (pressing ({ 2, 5 }, KeyState::bounce)).empty());
 }
 
 TEST (PanelMap, CueIsHeldPlayToggles)
@@ -317,9 +374,9 @@ TEST (PanelMap, ActivePadsOverTheDecksBase)
 	state.masks[(size_t) buses::stemIndex (0, 2)] = 1u << 2;
 	const auto leds = panel::compose (state);
 
-	EXPECT_EQ (at (leds, { 4, 3 }), panel::vivid (stemColours[2])) << "deck A stem 3 on bus 3, at full";
-	EXPECT_EQ (at (leds, { 4, 0 }), panel::base (deckColours[0])) << "and its AUX at deck A's base";
-	EXPECT_EQ (at (leds, { 2, 9 }), panel::vivid (stemColours[0])) << "deck B stem 1 on AUX";
+	EXPECT_EQ (at (leds, { 4, 4 }), panel::vivid (stemColours[2])) << "deck A stem 3 on bus 3, at full";
+	EXPECT_EQ (at (leds, { 4, 3 }), panel::base (deckColours[0])) << "and its AUX at deck A's base";
+	EXPECT_EQ (at (leds, { 2, 6 }), panel::vivid (stemColours[0])) << "deck B stem 1 on AUX";
 	EXPECT_EQ (at (leds, { 2, 5 }), panel::base (deckColours[1]));
 }
 
@@ -341,17 +398,41 @@ TEST (PanelMap, EveryKeyRestsInItsDecksColour)
 		EXPECT_FALSE (dark (colour)) << cell.row << "," << cell.col;
 		const auto on = control.kind == Control::Kind::route
 					 && (state.masks[(size_t) buses::stemIndex (control.deck, control.stem)] & (1u << control.bus)) != 0;
+		// nothing is cued or muted in this state, so those pads rest
 		if (! on)
 			EXPECT_EQ (colour, panel::base (deckColours[(size_t) (cell.col < 5 ? 0 : 1)])) << cell.row << "," << cell.col;
 	}
 }
 
-// A foreign pad does nothing, so it shows nothing -- not even the rest light.
-TEST (PanelMap, ForeignPadsAreDark)
+// The dark column does nothing, so it shows nothing -- not even the rest
+// light. The pads beside it are live.
+TEST (PanelMap, TheDarkColumnIsDark)
 {
 	const auto leds = panel::compose (allOnAux());
-	EXPECT_TRUE (dark (at (leds, { 2, 3 }))) << "deck A stem 1, bus 3";
-	EXPECT_FALSE (dark (at (leds, { 2, 1 }))) << "deck A stem 1, bus 1 is its own";
+	for (int stem = 0; stem < buses::stemsPerDeck; ++stem)
+	{
+		EXPECT_TRUE (dark (at (leds, { panel::firstPadRow + stem, 0 })));
+		EXPECT_TRUE (dark (at (leds, { panel::firstPadRow + stem, 9 })));
+		EXPECT_FALSE (dark (at (leds, { panel::firstPadRow + stem, 1 })));
+		EXPECT_FALSE (dark (at (leds, { panel::firstPadRow + stem, 8 })));
+	}
+}
+
+// A stem's CUE pad lights in the cue colour while the stem is cued, like the
+// screen's C key; its MUTE pad in the mute colour while it is muted. Both
+// rest in the deck's colour otherwise.
+TEST (PanelMap, CueAndMutePadsShowTheirState)
+{
+	auto state = allOnAux();
+	state.muteColour = { 0xd8, 0x4a, 0x4a };
+	state.cued[(size_t) buses::stemIndex (0, 1)] = true;
+	state.muted[(size_t) buses::stemIndex (1, 2)] = true;
+	const auto leds = panel::compose (state);
+
+	EXPECT_EQ (at (leds, { 3, 2 }), panel::vivid (state.cueColour)) << "deck A stem 2 cued";
+	EXPECT_EQ (at (leds, { 3, 7 }), panel::base (deckColours[1])) << "deck B stem 2 is not";
+	EXPECT_EQ (at (leds, { 4, 8 }), panel::vivid (state.muteColour)) << "deck B stem 3 muted";
+	EXPECT_EQ (at (leds, { 4, 1 }), panel::base (deckColours[0]));
 }
 
 // A3 Motion's resting key (buttonLeds.idle, r31 g214 b205) has its brightest
@@ -386,7 +467,7 @@ TEST (PanelMap, MutedIsHalfOfOn)
 	auto state = allOnAux();
 	state.muted[(size_t) buses::stemIndex (1, 0)] = true;
 	const auto leds = panel::compose (state);
-	const auto muted = at (leds, { 2, 9 }), open = panel::vivid (stemColours[0]);
+	const auto muted = at (leds, { 2, 6 }), open = panel::vivid (stemColours[0]);
 	EXPECT_EQ (muted, (panel::Rgb { (std::uint8_t) (open.r / 2), (std::uint8_t) (open.g / 2), (std::uint8_t) (open.b / 2) }));
 }
 
@@ -420,5 +501,5 @@ TEST (PanelMap, AFullPanelIsComposedAtFullLevel)
 
 	const auto composed = panel::compose (state);
 	EXPECT_GT (load (composed), 8 * 3 * 255) << "above the old own budget";
-	EXPECT_EQ (at (composed, { 2, 1 }), (panel::Rgb { 255, 255, 255 })) << "a lit key at full";
+	EXPECT_EQ (at (composed, { 2, 4 }), (panel::Rgb { 255, 255, 255 })) << "a lit key at full";
 }

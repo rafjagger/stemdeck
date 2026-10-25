@@ -74,6 +74,7 @@ public:
 	ChannelStrip (StemDeckPlayer& player, int deckIndex);
 
 	void toggleMute (int stem);
+	void toggleCue (int stem);
 	void refresh(); // meters, called by the main timer
 	void setMeterParameters (MeterParameters parameters)
 	{

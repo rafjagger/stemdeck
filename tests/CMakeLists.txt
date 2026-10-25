@@ -138,3 +138,9 @@ if(XVFB_RUN)
     set_target_properties(stemdeck-gui-tests PROPERTIES CROSSCOMPILING_EMULATOR "${XVFB_RUN};-a")
 endif()
 gtest_discover_tests(stemdeck-gui-tests)
+
+# a3-engine's IEM nodes, compiled into StemDeck's own JUCE (stemdeck-juce).
+add_executable(stemdeck-spatial-tests spatial/IemInStemDeck.cpp)
+target_compile_features(stemdeck-spatial-tests PRIVATE cxx_std_17)
+target_link_libraries(stemdeck-spatial-tests PRIVATE GTest::gtest GTest::gtest_main a3-iem-sd)
+gtest_discover_tests(stemdeck-spatial-tests)

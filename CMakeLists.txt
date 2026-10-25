@@ -29,6 +29,47 @@ pkg_check_modules(JACK REQUIRED IMPORTED_TARGET jack)
 # Key lock: Rubber Band's real-time stretcher (librubberband-dev; at run time librubberband3).
 pkg_check_modules(RUBBERBAND REQUIRED IMPORTED_TARGET rubberband)
 
+# a3-engine's IEM nodes (spatial audio), compiled into this binary by its own
+# recipe from a pinned submodule. IEM is built against the same JUCE as the app.
+set(STEMDECK_A3_ENGINE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/a3-engine
+    CACHE PATH "a3-engine checkout (submodule) whose IEM nodes StemDeck compiles")
+if(NOT EXISTS ${STEMDECK_A3_ENGINE_DIR}/third_party/IEMPluginSuite/MultiEncoder/Source/PluginProcessor.cpp)
+    message(FATAL_ERROR "third_party/a3-engine is not initialised: git submodule update --init third_party/a3-engine, "
+        "then in it (not --recursive): git submodule update --init third_party/IEMPluginSuite")
+endif()
+
+# JUCE's way for module code outside an app: a library of its own that carries
+# the modules and their definitions -- the one JUCE of the app, the IEM nodes
+# and the spatial tests. The modules are PRIVATE: a juce:: target hands its
+# module .cpp files to every target that links it publicly, so each consumer
+# would compile its own copy of JUCE.
+add_library(stemdeck-juce STATIC)
+target_link_libraries(stemdeck-juce
+    PRIVATE
+        juce::juce_audio_utils
+        juce::juce_audio_formats
+        juce::juce_audio_processors
+        juce::juce_cryptography
+        juce::juce_osc
+        juce::juce_dsp
+        juce::juce_opengl
+        juce::juce_recommended_config_flags
+        PkgConfig::AUDIO_CODECS)
+# JUCE_MODAL_LOOPS_PERMITTED is IEM's global definition; it changes module
+# code, so it has to be on the library that compiles the modules.
+target_compile_definitions(stemdeck-juce PUBLIC
+    JUCE_STANDALONE_APPLICATION=1
+    JUCE_WEB_BROWSER=0
+    JUCE_USE_CURL=0
+    JUCE_JACK=0 # JACK output is handled by JackOutput (fixed 8 ports)
+    JUCE_MODAL_LOOPS_PERMITTED=1)
+target_compile_definitions(stemdeck-juce INTERFACE $<TARGET_PROPERTY:stemdeck-juce,COMPILE_DEFINITIONS>)
+target_include_directories(stemdeck-juce INTERFACE $<TARGET_PROPERTY:stemdeck-juce,INCLUDE_DIRECTORIES>)
+
+include(${STEMDECK_A3_ENGINE_DIR}/cmake/A3IemNodes.cmake)
+include(${STEMDECK_A3_ENGINE_DIR}/third_party/IEMPluginSuite/Versions.cmake)   # only set()s the plug-in versions
+a3_add_iem_nodes("-sd" stemdeck-juce)
+
 juce_add_gui_app(StemDeck
     PRODUCT_NAME "StemDeck")
 
@@ -117,18 +158,13 @@ target_sources(StemDeck PRIVATE
     Source/PanelDevice.cpp)
 
 target_compile_definitions(StemDeck PRIVATE
-    JUCE_WEB_BROWSER=0
-    JUCE_USE_CURL=0
-    JUCE_JACK=0 # JACK output is handled by JackOutput (fixed 8 ports)
     JUCE_APPLICATION_NAME_STRING="$<TARGET_PROPERTY:StemDeck,JUCE_PRODUCT_NAME>"
     JUCE_APPLICATION_VERSION_STRING="$<TARGET_PROPERTY:StemDeck,JUCE_VERSION>")
 
 target_link_libraries(StemDeck
     PRIVATE
-        juce::juce_audio_utils
-        juce::juce_cryptography
-        juce::juce_osc
-        juce::juce_dsp
+        stemdeck-juce
+        a3-iem-sd
         PkgConfig::AUDIO_CODECS
         PkgConfig::JACK
         PkgConfig::RUBBERBAND

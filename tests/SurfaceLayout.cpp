@@ -425,7 +425,7 @@ TEST (SurfaceLayout, StemRowsFormAMatrix)
 				EXPECT_EQ (key.y, row.mute.y);
 				EXPECT_EQ (key.h, row.mute.h);
 			}
-			EXPECT_GT (row.mute.x, row.channel.right());
+			EXPECT_NE (row.mute.x, row.channel.x);
 			EXPECT_TRUE (row.frame.contains (row.mute));
 
 			if (r + 1 < strip.stems.size())
@@ -448,10 +448,10 @@ TEST (SurfaceLayout, StemRowsFormAMatrix)
 }
 
 // A stem reaches only its own channel and AUX (Buses.h mayUse), so its row is
-// its channel, AUX, cue and mute: deck A [knob] CUE AUX n M, deck B [knob]
-// n AUX CUE M -- AUX and CUE on the deck's outer side as on the panel, mute
-// last.
-TEST (SurfaceLayout, AStemRowIsItsChannelAuxCueAndMute)
+// its channel, knob, AUX, cue and mute: deck B n, knob, AUX, CUE, M left to
+// right, deck A mirrored (M, CUE, AUX, knob, n) -- the knob between the
+// channel and the buses.
+TEST (SurfaceLayout, AStemRowIsItsChannelKnobAuxCueAndMute)
 {
 	for (const auto& [w, h] : windows)
 	{
@@ -462,11 +462,10 @@ TEST (SurfaceLayout, AStemRowIsItsChannelAuxCueAndMute)
 			const auto strip = surface::channelStrip (Rect { 0, 0, strips[(size_t) d].w, strips[(size_t) d].h }, d);
 			for (const auto& row : strip.stems)
 			{
-				const std::array<Rect, 4> leftToRight = d == 0 ? std::array<Rect, 4> { row.cue, row.aux, row.channel, row.mute }
-															   : std::array<Rect, 4> { row.channel, row.aux, row.cue, row.mute };
-				EXPECT_LE (row.knob.right(), leftToRight.front().x) << "deck " << d;
+				const std::array<Rect, 5> leftToRight = d == 0 ? std::array<Rect, 5> { row.mute, row.cue, row.aux, row.knob, row.channel }
+															   : std::array<Rect, 5> { row.channel, row.knob, row.aux, row.cue, row.mute };
 				for (size_t k = 0; k + 1 < leftToRight.size(); ++k)
-					EXPECT_LE (leftToRight[k].right(), leftToRight[k + 1].x) << "deck " << d << ": key " << k << " left of key " << k + 1;
+					EXPECT_LE (leftToRight[k].right(), leftToRight[k + 1].x) << "deck " << d << ": part " << k << " left of part " << k + 1;
 
 				const std::array<Rect, 5> all { row.knob, row.cue, row.aux, row.channel, row.mute };
 				for (size_t a = 0; a < all.size(); ++a)
@@ -477,6 +476,8 @@ TEST (SurfaceLayout, AStemRowIsItsChannelAuxCueAndMute)
 				}
 				EXPECT_EQ (row.cue.w, row.channel.w);
 				EXPECT_EQ (row.aux.w, row.channel.w);
+				EXPECT_EQ (row.mute.w, row.channel.w);
+				EXPECT_EQ (row.knob.w, row.knob.h) << "the knob stays square";
 			}
 		}
 	}

@@ -300,11 +300,12 @@ namespace surface
 		const auto gap = area.w / 56;
 		area.removeFromTop (gap);
 
-		// [knob] [the channel, AUX and cue  M], four rows tight under each
-		// other: a matrix. The knob a seventh of the row, the four keys share
-		// the rest and are as tall as the row, a hairline apart.
+		// n, knob, AUX, CUE, M on deck B, mirrored on deck A: the knob sits
+		// between the stem's channel and its other buses. Four rows tight
+		// under each other: a matrix. The knob a seventh of the row, the four
+		// keys share the rest and are as tall as the row, a hairline apart.
 		const auto knobSize = area.w / 7;
-		const auto keyWidth = (area.w - knobSize - 2 * gap) / 4;
+		const auto keyWidth = (area.w - knobSize) / 4;
 		const auto rows = (int) strip.stems.size();
 		const auto rowHeight = area.h / rows;
 
@@ -312,25 +313,26 @@ namespace surface
 		{
 			row.frame = area.removeFromTop (rowHeight);
 			auto inner = row.frame;
-			row.knob = inner.removeFromLeft (knobSize).withSizeKeepingCentre (knobSize, knobSize);
-			inner.removeFromLeft (gap);
-			inner = inner.reduced (0, hairline (rowHeight));
+			const auto keyHeightInset = hairline (rowHeight);
 
-			const auto key = [&] { return inner.removeFromLeft (keyWidth).reduced (hairline (keyWidth), 0); };
-			if (deckIndex == 0)
+			const auto key = [&] (bool fromLeft)
 			{
-				row.cue = key();
-				row.aux = key();
-				row.channel = key();
-			}
-			else
+				auto slot = fromLeft ? inner.removeFromLeft (keyWidth) : inner.removeFromRight (keyWidth);
+				return slot.reduced (hairline (keyWidth), keyHeightInset);
+			};
+			const auto knob = [&] (bool fromLeft)
 			{
-				row.channel = key();
-				row.aux = key();
-				row.cue = key();
-			}
-			inner.removeFromLeft (gap);
-			row.mute = inner.removeFromLeft (keyWidth).reduced (hairline (keyWidth), 0);
+				auto slot = fromLeft ? inner.removeFromLeft (knobSize) : inner.removeFromRight (knobSize);
+				return slot.withSizeKeepingCentre (knobSize, knobSize);
+			};
+
+			// Deck B reads left to right; deck A is the same row from the right.
+			const auto fromLeft = deckIndex != 0;
+			row.channel = key (fromLeft);
+			row.knob = knob (fromLeft);
+			row.aux = key (fromLeft);
+			row.cue = key (fromLeft);
+			row.mute = key (fromLeft);
 		}
 		return strip;
 	}

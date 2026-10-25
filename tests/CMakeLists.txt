@@ -82,8 +82,11 @@ add_executable(stemdeck-tests
     KeyLockStretcher.cpp
     ${CMAKE_SOURCE_DIR}/Source/KeyLockStretcher.cpp
     Session.cpp
-    ${CMAKE_SOURCE_DIR}/Source/Session.cpp)
-target_include_directories(stemdeck-tests PRIVATE ${CMAKE_SOURCE_DIR}/Source)
+    ${CMAKE_SOURCE_DIR}/Source/Session.cpp
+    SpatialLaw.cpp
+    ${CMAKE_SOURCE_DIR}/Source/SpatialLaw.cpp
+    ${CMAKE_SOURCE_DIR}/third_party/a3-engine/src/a3-engine/Laws.cpp)
+target_include_directories(stemdeck-tests PRIVATE ${CMAKE_SOURCE_DIR}/Source ${CMAKE_SOURCE_DIR}/third_party/a3-engine/src)
 
 # The session is XML: juce_core, and nothing else of JUCE, comes into the
 # tests -- as a library of its own, JUCE's way for module code outside an app.
@@ -143,4 +146,6 @@ gtest_discover_tests(stemdeck-gui-tests)
 add_executable(stemdeck-spatial-tests spatial/IemInStemDeck.cpp)
 target_compile_features(stemdeck-spatial-tests PRIVATE cxx_std_17)
 target_link_libraries(stemdeck-spatial-tests PRIVATE GTest::gtest GTest::gtest_main a3-iem-sd)
+add_dependencies(stemdeck-spatial-tests stemdeck-gtest-stamp)
+target_compile_options(stemdeck-spatial-tests PRIVATE -include ${gtest_stamp_header})
 gtest_discover_tests(stemdeck-spatial-tests)

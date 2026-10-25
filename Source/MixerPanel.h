@@ -116,8 +116,13 @@ private:
 	StemDeckPlayer& player;
 	const int deckIndex;
 
+	// A stem's two bus switches: its own channel, then AUX -- the only buses
+	// it may use (Buses.h mayUse).
+	static constexpr int switchesPerStem = 2;
+	std::array<int, switchesPerStem> switchBuses (int stem) const;
+
 	juce::OwnedArray<juce::Slider> knobs;
-	juce::OwnedArray<juce::TextButton> muteButtons, cueButtons, busButtons;   // busButtons: stem * buses::count + bus
+	juce::OwnedArray<juce::TextButton> muteButtons, cueButtons, busButtons;   // busButtons: stem * switchesPerStem + k, bus switchBuses (stem)[k]
 	juce::Slider fader { juce::Slider::LinearVertical, juce::Slider::NoTextBox };
 	juce::OwnedArray<LevelMeter> stemMeters;   // behind the fader, one per stem
 

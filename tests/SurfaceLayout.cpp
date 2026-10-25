@@ -92,8 +92,9 @@ namespace
 				const auto stemName = prefix + "stem" + std::to_string (stem) + ".";
 				mixer.controls.push_back ({ stemName + "knob", at (row.knob), true });
 				mixer.controls.push_back ({ stemName + "mute", at (row.mute), true });
-				for (size_t bus = 0; bus < row.buses.size(); ++bus)
-					mixer.controls.push_back ({ stemName + "bus" + std::to_string (bus), at (row.buses[bus]), true });
+				mixer.controls.push_back ({ stemName + "cue", at (row.cue), true });
+				mixer.controls.push_back ({ stemName + "channel", at (row.channel), true });
+				mixer.controls.push_back ({ stemName + "aux", at (row.aux), true });
 			}
 		}
 		all.push_back (mixer);
@@ -405,9 +406,9 @@ TEST (SurfaceLayout, DeckKeysAreAtLeastFingerHighOnTheRig)
 	EXPECT_GE (surface::band (s.band, s.metrics).deck[0].range.h, 26);
 }
 
-// The mixer's stem rows: the knob half its old size, the bus switches and
-// mute in one row, the four rows tight under each other -- a matrix of 4 x 6
-// keys per deck, the two decks' matrices apart.
+// The mixer's stem rows: the knob half its old size, the stem's channel, AUX,
+// cue and mute in one row, the four rows tight under each other -- a matrix
+// of keys per deck, the two decks' matrices apart.
 TEST (SurfaceLayout, StemRowsFormAMatrix)
 {
 	for (const auto& [w, h] : windows)
@@ -419,20 +420,21 @@ TEST (SurfaceLayout, StemRowsFormAMatrix)
 		for (size_t r = 0; r < strip.stems.size(); ++r)
 		{
 			const auto& row = strip.stems[r];
-			for (const auto& bus : row.buses)
+			for (const auto& key : { row.cue, row.aux, row.channel })
 			{
-				EXPECT_EQ (bus.y, row.buses[0].y);
-				EXPECT_EQ (bus.h, row.mute.h);
+				EXPECT_EQ (key.y, row.mute.y);
+				EXPECT_EQ (key.h, row.mute.h);
 			}
-			EXPECT_GT (row.mute.x, row.buses.back().right());
+			EXPECT_NE (row.mute.x, row.channel.x);
 			EXPECT_TRUE (row.frame.contains (row.mute));
 
 			if (r + 1 < strip.stems.size())
 			{
 				const auto& next = strip.stems[r + 1];
 				EXPECT_EQ (row.frame.bottom(), next.frame.y) << "no gap between the rows";
-				for (size_t k = 0; k < row.buses.size(); ++k)
-					EXPECT_EQ (row.buses[k].x, next.buses[k].x) << "columns line up";
+				EXPECT_EQ (row.channel.x, next.channel.x) << "columns line up";
+				EXPECT_EQ (row.aux.x, next.aux.x) << "columns line up";
+				EXPECT_EQ (row.cue.x, next.cue.x) << "columns line up";
 			}
 		}
 		EXPECT_GT (strips[1].x - strips[0].right(), 0) << "deck A's and deck B's matrices apart";
@@ -442,12 +444,14 @@ TEST (SurfaceLayout, StemRowsFormAMatrix)
 	const auto strips = surface::mixerStrips (Rect { 0, 0, s.mixer.w, s.mixer.h });
 	const auto strip = surface::channelStrip (Rect { 0, 0, strips[0].w, strips[0].h }, 0);
 	EXPECT_LE (strip.stems[0].knob.w, 28) << "half the 48 px knob";
-	EXPECT_GE (strip.stems[0].buses[0].h, 30) << "the keys grew into the freed height";
+	EXPECT_GE (strip.stems[0].channel.h, 30) << "the keys grew into the freed height";
 }
 
-// The keys in the same order as the panel's pads: deck A [knob] AUX 1 2 3 4
-// M, deck B [knob] 1 2 3 4 AUX M -- AUX on the deck's outer side, mute last.
-TEST (SurfaceLayout, StemRowsPutAuxOnTheOuterSide)
+// A stem reaches only its own channel and AUX (Buses.h mayUse), so its row is
+// its channel, knob, AUX, cue and mute: deck B n, knob, AUX, CUE, M left to
+// right, deck A mirrored (M, CUE, AUX, knob, n) -- the knob between the
+// channel and the buses.
+TEST (SurfaceLayout, AStemRowIsItsChannelKnobAuxCueAndMute)
 {
 	for (const auto& [w, h] : windows)
 	{
@@ -458,47 +462,38 @@ TEST (SurfaceLayout, StemRowsPutAuxOnTheOuterSide)
 			const auto strip = surface::channelStrip (Rect { 0, 0, strips[(size_t) d].w, strips[(size_t) d].h }, d);
 			for (const auto& row : strip.stems)
 			{
-				const std::array<int, 5> leftToRight = d == 0 ? std::array<int, 5> { buses::aux, 0, 1, 2, 3 }
-															  : std::array<int, 5> { 0, 1, 2, 3, buses::aux };
+				const std::array<Rect, 5> leftToRight = d == 0 ? std::array<Rect, 5> { row.knob, row.mute, row.cue, row.aux, row.channel }
+															   : std::array<Rect, 5> { row.channel, row.aux, row.cue, row.mute, row.knob };
 				for (size_t k = 0; k + 1 < leftToRight.size(); ++k)
-					EXPECT_LE (row.buses[(size_t) leftToRight[k]].right(), row.buses[(size_t) leftToRight[k + 1]].x)
-						<< "deck " << d << ": column " << k << " left of column " << k + 1;
-				EXPECT_LE (row.knob.right(), row.buses[(size_t) leftToRight.front()].x);
-				EXPECT_GE (row.mute.x, row.buses[(size_t) leftToRight.back()].right());
+					EXPECT_LE (leftToRight[k].right(), leftToRight[k + 1].x) << "deck " << d << ": part " << k << " left of part " << k + 1;
+
+				const std::array<Rect, 5> all { row.knob, row.cue, row.aux, row.channel, row.mute };
+				for (size_t a = 0; a < all.size(); ++a)
+				{
+					EXPECT_TRUE (row.frame.contains (all[a])) << "deck " << d << ": part " << a;
+					for (size_t b = a + 1; b < all.size(); ++b)
+						EXPECT_FALSE (all[a].intersects (all[b])) << "deck " << d << ": parts " << a << " and " << b;
+				}
+				EXPECT_EQ (row.cue.w, row.channel.w);
+				EXPECT_EQ (row.aux.w, row.channel.w);
+				EXPECT_EQ (row.mute.w, row.channel.w);
+				EXPECT_EQ (row.knob.w, row.knob.h) << "the knob stays square";
 			}
 		}
 	}
 }
 
-// CUE sits on the deck's outer side beside AUX, before the mute: deck A
-// [knob] CUE AUX 1 2 3 4 M, deck B [knob] 1 2 3 4 AUX CUE M -- mirrored like AUX.
-TEST (SurfaceLayout, CueKeyIsOutsideAuxAndMirrored)
+// With two switches instead of five the keys take the room: on the rig a
+// channel key is more than a sixth of the row (before, about an eighth).
+TEST (SurfaceLayout, AStemRowGivesItsKeysTheRoom)
 {
-	for (const auto& [w, h] : windows)
+	const auto s = surface::sections (rigWidth, rigHeight);
+	const auto strips = surface::mixerStrips (Rect { 0, 0, s.mixer.w, s.mixer.h });
+	for (int d = 0; d < 2; ++d)
 	{
-		const auto s = surface::sections (w, h);
-		const auto strips = surface::mixerStrips (Rect { 0, 0, s.mixer.w, s.mixer.h });
-		for (int d = 0; d < 2; ++d)
-		{
-			const auto strip = surface::channelStrip (Rect { 0, 0, strips[(size_t) d].w, strips[(size_t) d].h }, d);
-			for (const auto& row : strip.stems)
-			{
-				EXPECT_EQ (row.cue.y, row.buses[0].y);
-				EXPECT_EQ (row.cue.h, row.buses[0].h);
-				EXPECT_EQ (row.cue.w, row.buses[0].w);
-				if (d == 0)
-				{
-					EXPECT_LE (row.knob.right(), row.cue.x);
-					EXPECT_LE (row.cue.right(), row.buses[buses::aux].x);
-				}
-				else
-				{
-					EXPECT_LE (row.buses[buses::aux].right(), row.cue.x);
-					EXPECT_LE (row.cue.right(), row.mute.x);
-				}
-				EXPECT_TRUE (row.frame.contains (row.cue));
-			}
-		}
+		const auto strip = surface::channelStrip (Rect { 0, 0, strips[(size_t) d].w, strips[(size_t) d].h }, d);
+		for (const auto& row : strip.stems)
+			EXPECT_GT (row.channel.w, row.frame.w / 6) << "deck " << d;
 	}
 }
 

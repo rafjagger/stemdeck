@@ -11,25 +11,30 @@
 // JUCE, testable.
 //
 // The panel splits down the middle, deck A on the left half, B on the right,
-// each half five columns wide -- the deck's routing matrix as the screen
-// shows it, in the same order (buses::columnOrder):
+// each half five columns wide. A stem's row reads like the screen's, column
+// for column:
 //
 //   row 0     CUE   (pots / encoders over the pads)               CUE
 //   row 1     PLAY                                                PLAY
-//   rows 2-5  AUX  1  2  3  4   |   1  2  3  4  AUX     a row per stem, 1-4
+//   rows 2-5  .  M  C  AUX  n   |   n  AUX  C  M  .      a row per stem, 1-4
 //
-// A pad switches its stem onto that bus or off it, through the mixer's own
-// switch (MixerPanel::pressBus) -- what a click on the screen key does. Every
-// key of a half rests lit in its deck's colour, so the halves read as A
-// and B, and lights over that while it is on: a pad in its stem's colour while
-// the stem is on that bus (half while muted), CUE and PLAY in theirs. Over each half, four encoders -- two columns of two -- turn
-// the four stems' gains in reading order; a push mutes the stem. The inner
-// pot of each half is the deck's fader; the outer pots are left free.
+// n is the stem's own channel, AUX the return, C its cue and M its mute; the
+// dot is the dark column where the screen row has its knob -- no control,
+// no light. A pad switches its stem onto that bus or off it, through the
+// mixer's own switch (MixerPanel::pressBus), toggles its cue, or its mute
+// (what the encoder's push does) -- what a click on the screen key does.
+// A stem's pads light as the screen keys of its row do: the channel pad in the
+// stem's colour while on, the AUX pad in AUX's, the cue pad in the cue colour
+// while the stem is cued, the mute pad in the mute colour while it is muted,
+// and the screen key's own dim grey when off. Only CUE and PLAY rest in the
+// deck's colour, so the halves still read as A and B, and light in theirs. Over each half, four encoders -- two columns of two -- turn the
+// four stems' gains in reading order; a push mutes the stem. The inner pot of
+// each half is the deck's fader; the outer pots are left free.
 namespace panel
 {
 	struct Control
 	{
-		enum class Kind { none, route, cue, play };
+		enum class Kind { none, route, cue, play, stemCue, stemMute };
 		Kind kind = Kind::none;
 		int deck = -1, stem = -1, bus = -1;
 	};
@@ -45,7 +50,7 @@ namespace panel
 
 	struct Event
 	{
-		enum class Type { route, cueDown, cueUp, play, gain, mute, fader };
+		enum class Type { route, cueDown, cueUp, play, stemCue, gain, mute, fader };
 		Type type = Type::route;
 		int deck = -1, stem = -1, bus = -1;
 		double value = 0.0;   // gain: encoder detents, + clockwise; fader: 0..1 of its travel
@@ -81,10 +86,11 @@ namespace panel
 	struct LedState
 	{
 		buses::Masks masks {};
-		std::array<bool, buses::stemCount> muted {};
+		std::array<bool, buses::stemCount> muted {}, cued {};
 		std::array<Rgb, buses::stemsPerDeck> stemColours {};
 		std::array<bool, buses::decks> playing {}, atCue {};
-		Rgb playColour, cueColour;
+		Rgb playColour, cueColour, muteColour, auxColour;
+		Rgb offColour;   // a stem pad that is off: the screen key's own, shown as it is
 		std::array<Rgb, buses::decks> deckColours {};   // every key's resting colour, by half
 	};
 

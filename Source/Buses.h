@@ -6,10 +6,12 @@
 
 // The output buses and who reaches them. Pure: no JUCE, testable.
 //
-// Five stereo buses, 1-4 and AUX, all feeding A³ Core. Every stem has one
-// switch per bus, and since 2026-10-07 is on one bus at most: each of the
-// buses 1-4 carries at most one of the eight stems, and a stem a switch takes
-// off its channel goes to AUX (applySwitch, normalise). A stem can also be
+// Five stereo buses, 1-4 and AUX, all feeding A³ Core. Every stem has two
+// switches, its own channel and AUX, and since 2026-10-07 is on one bus at most. Since
+// 2026-10-25 stem n of either deck reaches only bus n and AUX (mayUse); a
+// channel carries one deck's stem n at most, and a stem a switch takes off
+// its channel goes to AUX (applySwitch, normalise). A switch onto a channel
+// that is not the stem's own is refused. A stem can also be
 // off -- on no bus, silent: the Auto-DJ's place for a stem not yet, or no
 // longer, playing (route). A manual switch never puts a stem off and leaves an
 // off stem off; while the Auto-DJ plays, the place a switch sends a stem to
@@ -80,39 +82,35 @@ namespace buses
 		return bus == aux ? "AUX" : std::to_string (bus + 1);
 	}
 
-	// A deck's switches left to right, on the screen and on the A³ Motion
-	// panel alike: AUX on the deck's outer side -- the left for A, the right
-	// for B -- so the two decks' matrices mirror each other where AUX is and
-	// a hand finds a stem's channels in the same order on both.
-	inline std::array<int, count> columnOrder (int deck)
-	{
-		if (deck == 0)
-			return { aux, 0, 1, 2, 3 };
-		return { 0, 1, 2, 3, aux };
-	}
-
 	// JACK port base names: deck1 .. deck4 (kept from the four-bus days), aux.
 	inline std::string portName (int bus)
 	{
 		return bus == aux ? "aux" : "deck" + std::to_string (bus + 1);
 	}
 
-	// The eight stems the rule spans, deck by deck: a desk channel can play
-	// any stem of either deck.
+	// The eight stems the rule spans, deck by deck: a desk channel plays
+	// its own stem n of either deck.
 	constexpr int decks = 2;
 	constexpr int stemsPerDeck = 4;
 	constexpr int stemCount = decks * stemsPerDeck;
 
 	constexpr int stemIndex (int deck, int stem) { return deck * stemsPerDeck + stem; }
 
+	// The one desk bus (0-3) a stem (a stemIndex, 0-7) may play on.
+	constexpr int channelOf (int stem) { return stem % stemsPerDeck; }
+
+	// Whether a stem may be on a bus at all: its own channel, or AUX.
+	constexpr bool mayUse (int stem, int bus) { return bus == aux || bus == channelOf (stem); }
+
 	using Masks = std::array<unsigned, stemCount>;
 
 	constexpr unsigned spareMask (Spare spare) { return spare == Spare::toAux ? 1u << aux : offMask; }
 
-	// Any state brought into the rule. In stem order (deck A stems 1-4, then
-	// deck B stems 1-4) the first stem on a bus keeps it; a stem on several
-	// keeps the lowest one still free; an off stem stays off; every other
-	// stem goes to the spare place.
+	// Any state brought into the rule. A stem's foreign channel bits are
+	// ignored. In stem order (deck A stems 1-4, then deck B stems 1-4) the
+	// first stem on a channel keeps it, if it is the stem's own and still
+	// free; an off stem stays off; every other stem (AUX, a foreign channel,
+	// its own channel taken) goes to AUX or the spare place.
 	inline Masks normalise (const Masks& masks, Spare spare = Spare::toAux)
 	{
 		Masks result {};
@@ -121,15 +119,11 @@ namespace buses
 		{
 			const auto onAux = (masks[stem] & (1u << aux)) != 0;
 			result[stem] = masks[stem] == offMask ? offMask : onAux ? 1u << aux : spareMask (spare);
-			for (int bus = 0; bus < aux; ++bus)
-			{
-				const auto bit = 1u << bus;
-				if ((masks[stem] & bit) == 0 || (taken & bit) != 0)
-					continue;
-				result[stem] = bit;
-				taken |= bit;
-				break;
-			}
+			const auto own = 1u << channelOf ((int) stem);
+			if ((masks[stem] & own) == 0 || (taken & own) != 0)
+				continue;
+			result[stem] = own;
+			taken |= own;
 		}
 		return result;
 	}
@@ -138,11 +132,11 @@ namespace buses
 	// N's previous stem to the spare place; a stem taken off its bus goes
 	// there too; AUX on takes the stem off its channel; AUX off is refused,
 	// since a switch never puts a stem off. While the Auto-DJ plays (spare
-	// off), AUX off puts the stem off instead. A switch out of range changes
-	// nothing.
+	// off), AUX off puts the stem off instead. A switch out of range, or onto a
+	// channel that is not the stem's own, changes nothing.
 	inline Masks applySwitch (const Masks& masks, int stem, int bus, bool on, Spare spare = Spare::toAux)
 	{
-		if (stem < 0 || stem >= stemCount || bus < 0 || bus >= count)
+		if (stem < 0 || stem >= stemCount || bus < 0 || bus >= count || ! mayUse (stem, bus))
 			return masks;
 
 		auto result = normalise (masks, spare);
@@ -170,9 +164,9 @@ namespace buses
 		return result;
 	}
 
-	// The Auto-DJ's routing: a stem onto bus 1-4, or off. A stem it puts on a
-	// bus takes that bus's previous stem off, never to AUX. In order; one out
-	// of range is skipped.
+	// The Auto-DJ's routing: a stem onto its own bus 1-4, or off. A stem it
+	// puts on a bus takes that bus's previous stem off, never to AUX. In
+	// order; one out of range, or onto a channel not the stem's own, is skipped.
 	constexpr int off = -1;
 	struct Route
 	{
@@ -185,6 +179,8 @@ namespace buses
 		for (const auto& r : routes)
 		{
 			if (r.stem < 0 || r.stem >= stemCount || r.bus < off || r.bus >= aux)
+				continue;
+			if (r.bus != off && r.bus != channelOf (r.stem))
 				continue;
 			if (r.bus == off)
 			{

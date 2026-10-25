@@ -112,16 +112,14 @@ namespace surface
 	// How tall a deck column is for keys `keyHeight` high.
 	int deckColumnHeight (int keyHeight, Metrics metrics);
 
-	// One stem's row in a channel strip: the knob, the bus switches, the cue
-	// switch and the mute -- `buses` by bus, placed in the deck's columnOrder
-	// (Buses.h), so deck A reads AUX 1 2 3 4 and deck B 1 2 3 4 AUX, as on the
-	// panel. The cue key lies outside AUX on the deck's outer side, so deck A
-	// reads CUE AUX 1 2 3 4 M and deck B 1 2 3 4 AUX CUE M. The rows lie
-	// tight under each other: a matrix of keys.
+	// One stem's row in a channel strip: its own channel and AUX (the only
+	// buses it may use, Buses.h mayUse), the knob, the cue switch and the
+	// mute. Deck B reads n, AUX, CUE, M, knob left to right (the knob on the
+	// outer side); deck A is mirrored: knob, M, CUE, AUX, n. The rows lie tight under each other: a
+	// matrix of keys.
 	struct StemRow
 	{
-		Rect frame, knob, cue, mute;
-		std::array<Rect, buses::count> buses;
+		Rect frame, knob, cue, channel, aux, mute;
 	};
 
 	// A channel strip above the band, in its own coordinates: the header and

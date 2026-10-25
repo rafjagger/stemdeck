@@ -300,11 +300,12 @@ namespace surface
 		const auto gap = area.w / 56;
 		area.removeFromTop (gap);
 
-		// [knob] [the five switches and cue  M], four rows tight under each
-		// other: a matrix. The knob a seventh of the row, the seven keys share
-		// the rest and are as tall as the row, a hairline apart.
+		// n, AUX, CUE, M, knob on deck B, mirrored on deck A: the knob sits
+		// on the deck's outer side. Four rows tight
+		// under each other: a matrix. The knob a seventh of the row, the four
+		// keys share the rest and are as tall as the row, a hairline apart.
 		const auto knobSize = area.w / 7;
-		const auto switchWidth = (area.w - knobSize - 2 * gap) / 7;
+		const auto keyWidth = (area.w - knobSize) / 4;
 		const auto rows = (int) strip.stems.size();
 		const auto rowHeight = area.h / rows;
 
@@ -312,19 +313,26 @@ namespace surface
 		{
 			row.frame = area.removeFromTop (rowHeight);
 			auto inner = row.frame;
-			row.knob = inner.removeFromLeft (knobSize).withSizeKeepingCentre (knobSize, knobSize);
-			inner.removeFromLeft (gap);
-			inner = inner.reduced (0, hairline (rowHeight));
+			const auto keyHeightInset = hairline (rowHeight);
 
-			const auto key = [&] { return inner.removeFromLeft (switchWidth).reduced (hairline (switchWidth), 0); };
-			if (deckIndex == 0)
-				row.cue = key();
-			for (const auto bus : buses::columnOrder (deckIndex))
-				row.buses[(size_t) bus] = key();
-			if (deckIndex != 0)
-				row.cue = key();
-			inner.removeFromLeft (gap);
-			row.mute = inner.reduced (hairline (switchWidth), 0);
+			const auto key = [&] (bool fromLeft)
+			{
+				auto slot = fromLeft ? inner.removeFromLeft (keyWidth) : inner.removeFromRight (keyWidth);
+				return slot.reduced (hairline (keyWidth), keyHeightInset);
+			};
+			const auto knob = [&] (bool fromLeft)
+			{
+				auto slot = fromLeft ? inner.removeFromLeft (knobSize) : inner.removeFromRight (knobSize);
+				return slot.withSizeKeepingCentre (knobSize, knobSize);
+			};
+
+			// Deck B reads left to right; deck A is the same row from the right.
+			const auto fromLeft = deckIndex != 0;
+			row.channel = key (fromLeft);
+			row.aux = key (fromLeft);
+			row.cue = key (fromLeft);
+			row.mute = key (fromLeft);
+			row.knob = knob (fromLeft);
 		}
 		return strip;
 	}

@@ -267,15 +267,24 @@ TEST (Remote, BelowMinusNinetyDbIsSilence)
 	EXPECT_EQ (gate.next (hiss), remote::MeterGate::send);
 }
 
+// Stem n plays only on channel n (or AUX): anything else is refused, not remapped.
+TEST (Remote, ASwitchOntoAnotherChannelIsRefused)
+{
+	EXPECT_FALSE (remote::parseSwitch (words, "/stemdeck/2/4/bus/1", 1).has_value());
+	EXPECT_FALSE (remote::parseSwitch (words, "/stemdeck/1/2/bus/3", 0).has_value());
+	EXPECT_TRUE (remote::parseSwitch (words, "/stemdeck/2/4/bus/4", 1).has_value());
+	EXPECT_TRUE (remote::parseSwitch (words, "/stemdeck/1/2/bus/5", 1).has_value());
+}
+
 // A switch from Core obeys the one-stem-per-bus rule, and what goes back to
 // Core is the state after the rule: the stem that lost the bus reports AUX.
 TEST (Remote, ARemoteSwitchObeysTheRuleAndTheReportShowsIt)
 {
 	buses::Masks masks;
 	masks.fill (1u << buses::aux);
-	masks[(size_t) buses::stemIndex (0, 1)] = 1u << 0;   // A2 on bus 1
+	masks[(size_t) buses::stemIndex (0, 0)] = 1u << 0;   // A1 on bus 1
 
-	const auto command = remote::parseSwitch (words, "/stemdeck/2/4/bus/1", 1);   // B4 onto bus 1
+	const auto command = remote::parseSwitch (words, "/stemdeck/2/1/bus/1", 1);   // B1 onto bus 1
 	ASSERT_TRUE (command.has_value());
 	const auto stem = buses::stemIndex (command->deck, command->stem);
 	const auto after = buses::applySwitch (masks, stem, command->bus, command->on);
@@ -286,8 +295,8 @@ TEST (Remote, ARemoteSwitchObeysTheRuleAndTheReportShowsIt)
 							  after[(size_t) index]);
 
 	const std::vector<std::pair<std::string, unsigned>> expected {
-		{ "/stemdeck/1/2/buses", 1u << buses::aux },
-		{ "/stemdeck/2/4/buses", 1u << 0 },
+		{ "/stemdeck/1/1/buses", 1u << buses::aux },
+		{ "/stemdeck/2/1/buses", 1u << 0 },
 	};
 	EXPECT_EQ (reports, expected);
 }

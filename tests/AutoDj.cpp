@@ -940,28 +940,43 @@ TEST (AutoDj, AuxOffGivesTheStemBackToAutoDj)
 	EXPECT_TRUE (rig.isOn (0, 2)) << "and AutoDJ puts it where it plays: bus 3";
 }
 
-TEST (AutoDj, ADjBusMoveIsRespectedUntilThatBusChangesHands)
+// A switch onto a channel that is not the stem's own is refused by the mixer
+// (and applySwitch); a stray call must not make the stem the DJ's.
+TEST (AutoDj, ARefusedSwitchLeavesTheStemToAutoDj)
 {
 	Rig rig;
 	rig.dj.setEnabled (true);
 	rig.runFor (60.0);
-	rig.djSwitch (0, 3, 1, true);   // A's vocals onto bus 2; A's bass goes off
+	rig.dj.djSwitched (0, 3, 1, true);   // A's vocals onto bus 2: foreign
 	rig.runFor (1.0);
-	EXPECT_EQ (rig.maskOf (0, 3), 1u << 1);
-	EXPECT_TRUE (rig.isOff (0, 1)) << "AutoDJ does not push the DJ's stem off bus 2";
-	EXPECT_EQ (rig.maskOf (0, 3), 1u << 1);
-	EXPECT_EQ (rig.ticksWithTwoOnABus, 0);
+	EXPECT_TRUE (rig.isOn (0, 3));
+	rig.runFor (240.0 - 40.0 - 61.0);   // the next one waits on B
+	rig.dj.djSwitched (1, 0, 2, true);   // B's drums onto bus 3: foreign
 
+	tickUntilBPlays (rig);
+	while (rig.decks[0].playing)
+		rig.tick();
+	rig.runFor (2.0);   // the vocals' downbeat, where the mix ends
+	ASSERT_TRUE (rig.everRouted (1, 3, 3));
+	EXPECT_TRUE (rig.isOff (0, 3)) << "AutoDJ still moves A4: off as B4 takes bus 4";
+	EXPECT_TRUE (rig.everRouted (1, 0, 0)) << "and B1 comes onto bus 1: it was never the DJ's";
+	EXPECT_EQ (rig.ticksWithTwoOnABus, 0);
+}
+
+TEST (AutoDj, AStemTheDjPutBackOnItsOwnBusIsGivenBackAtItsHandover)
+{
+	Rig rig;
+	rig.dj.setEnabled (true);
+	rig.runFor (60.0);
+	rig.djSwitch (0, 1, buses::aux, true);
+	rig.runFor (1.0);
+	rig.djSwitch (0, 1, 1, true);   // A2 back on bus 2 by hand
 	tickUntilBPlays (rig);
 	while (! rig.everRouted (1, 1, 1) && rig.decks[0].playing)
 		rig.tick();
-	ASSERT_TRUE (rig.everRouted (1, 1, 1)) << "the bass handover takes bus 2 for the new bass";
-	EXPECT_TRUE (rig.isOn (1, 1));
-	EXPECT_TRUE (rig.isOn (0, 3)) << "the old vocals, given back, sing on bus 4";
-	rig.runFor (22.0);
+	ASSERT_TRUE (rig.everRouted (1, 1, 1));
+	EXPECT_TRUE (rig.isOff (0, 1));
 	EXPECT_EQ (rig.ticksWithTwoOnABus, 0);
-	for (int stem = 0; stem < 4; ++stem)
-		EXPECT_TRUE (rig.isOn (1, stem));
 }
 
 TEST (AutoDj, AStemTheDjTookOnTheIncomingDeckIsLeftAlone)

@@ -81,14 +81,14 @@ void AutoDj::takeOver (int deck)
 	source.fill (deck);
 }
 
-// Bus `stem` goes over to the new deck. A stem of the old deck the DJ put on
-// that bus goes back to AutoDJ, which then places it as it places the rest.
+// Bus `stem` goes over to the new deck. The old deck's own stem the DJ put
+// back on that bus goes back to AutoDJ, which then places it as it places the
+// rest.
 void AutoDj::handOver (const std::array<DeckView, 2>& decks, int stem)
 {
 	const auto old = source[(size_t) stem];
-	for (int s = 0; s < numStems; ++s)
-		if (decks[(size_t) old].bus[(size_t) s] == stem)
-			djStems[(size_t) old][(size_t) s] = false;
+	if (decks[(size_t) old].bus[(size_t) stem] == stem)
+		djStems[(size_t) old][(size_t) stem] = false;
 	source[(size_t) stem] = 1 - current;
 	mix.handedOver[(size_t) stem] = true;
 }
@@ -101,8 +101,8 @@ void AutoDj::routeEveryStem (Commands& out, const std::array<DeckView, 2>& decks
 	std::array<bool, numStems> heldByDj {};
 	for (size_t d = 0; d < 2; ++d)
 		for (size_t s = 0; s < (size_t) numStems; ++s)
-			if (djStems[d][s] && decks[d].bus[s] >= 0 && decks[d].bus[s] < numStems)
-				heldByDj[(size_t) decks[d].bus[s]] = true;
+			if (djStems[d][s] && decks[d].bus[s] == (int) s)
+				heldByDj[s] = true;
 
 	for (int d = 0; d < 2; ++d)
 		for (int s = 0; s < numStems; ++s)
@@ -120,6 +120,9 @@ void AutoDj::routeEveryStem (Commands& out, const std::array<DeckView, 2>& decks
 void AutoDj::djSwitched (int deck, int stem, int bus, bool on)
 {
 	if (deck < 0 || deck > 1 || stem < 0 || stem >= numStems)
+		return;
+	// Only the stem's own bus and AUX exist for it; a refused switch is not the DJ's.
+	if (bus != stem && bus != auxBus)
 		return;
 	// AUX off: "not on the return" -- back to AutoDJ, which knows where it plays.
 	djStems[(size_t) deck][(size_t) stem] = ! (bus == auxBus && ! on);

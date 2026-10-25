@@ -62,8 +62,8 @@ private:
 };
 
 //==============================================================================
-// Channel strip of one deck: a knob per stem, with one switch per bus (1-4,
-// AUX -- one stem per bus, the rest on AUX, Buses.h), a cue switch and mute in one row; the
+// Channel strip of one deck: a knob per stem, with two switches, its own
+// channel and AUX (one stem per bus, the rest on AUX, Buses.h), a cue switch and mute in one row; the
 // four rows tight, a matrix of keys. The stems' names are on the overview's
 // lanes, not here.
 // Its channel fader, which shows the deck's level in its slot, stands in the
@@ -74,6 +74,7 @@ public:
 	ChannelStrip (StemDeckPlayer& player, int deckIndex);
 
 	void toggleMute (int stem);
+	void toggleCue (int stem);
 	void refresh(); // meters, called by the main timer
 	void setMeterParameters (MeterParameters parameters)
 	{
@@ -116,8 +117,13 @@ private:
 	StemDeckPlayer& player;
 	const int deckIndex;
 
+	// A stem's two bus switches: its own channel, then AUX -- the only buses
+	// it may use (Buses.h mayUse).
+	static constexpr int switchesPerStem = 2;
+	std::array<int, switchesPerStem> switchBuses (int stem) const;
+
 	juce::OwnedArray<juce::Slider> knobs;
-	juce::OwnedArray<juce::TextButton> muteButtons, cueButtons, busButtons;   // busButtons: stem * buses::count + bus
+	juce::OwnedArray<juce::TextButton> muteButtons, cueButtons, busButtons;   // busButtons: stem * switchesPerStem + k, bus switchBuses (stem)[k]
 	juce::Slider fader { juce::Slider::LinearVertical, juce::Slider::NoTextBox };
 	juce::OwnedArray<LevelMeter> stemMeters;   // behind the fader, one per stem
 

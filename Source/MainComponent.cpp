@@ -967,6 +967,7 @@ void MainComponent::handlePanel (const panel::Event& e)
 		case Type::cueDown: deck.cuePressed(); break;
 		case Type::cueUp:   deck.cueReleased(); break;
 		case Type::play:    deck.togglePlay(); break;
+		case Type::stemCue: strip.toggleCue (e.stem); break;
 		case Type::gain:    strip.nudgeStemGain (e.stem, e.value); break;
 		case Type::mute:    strip.toggleMute (e.stem); break;
 		case Type::fader:   strip.setFaderTravel (e.value); break;
@@ -987,6 +988,7 @@ void MainComponent::showPanel()
 			const auto index = (size_t) buses::stemIndex (d, s);
 			state.masks[index] = player.getStemBuses (s);
 			state.muted[index] = mixer.strip (d).isMuted (s);
+			state.cued[index] = player.isStemCued (s);
 		}
 		state.playing[(size_t) d] = player.isPlaying();
 		state.atCue[(size_t) d] = player.isLoaded() && ! player.isPlaying()
@@ -996,6 +998,9 @@ void MainComponent::showPanel()
 		state.stemColours[(size_t) s] = toRgb (Theme::stem (s));
 	state.playColour = toRgb (Theme::play);
 	state.cueColour = toRgb (Theme::cue);
+	state.muteColour = toRgb (Theme::mute);
+	state.auxColour = toRgb (Theme::aux);
+	state.offColour = toRgb (Theme::panelRaised);
 	for (int d = 0; d < numDecks; ++d)
 		state.deckColours[(size_t) d] = toRgb (Theme::deck (d));
 	motionPanel->show (state);

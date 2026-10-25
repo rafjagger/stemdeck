@@ -42,10 +42,11 @@
 //     audible start. Until the levels are there, the file's start and end;
 //     a mix waits up to a few seconds for the new track's.
 //   - A DJ's switch while it plays is his (djSwitched): AutoDJ leaves that
-//     stem where he put it -- on AUX, on another bus, off -- and puts nothing
-//     onto a bus he put a stem on. That lasts while the stem's deck plays,
-//     except that a stem of the old deck he put on a desk bus is given back
-//     when that bus changes over to the new deck, and AUX off gives a stem
+//     stem where he put it -- on AUX, on its own bus, off -- and puts nothing
+//     onto a bus he put a stem on. A switch to any other bus is refused and
+//     changes nothing. That lasts while the stem's deck plays, except that a
+//     stem of the old deck he put back on its own bus is given back when
+//     that bus changes over to the new deck, and AUX off gives a stem
 //     back at once. When its deck stops, or a track is loaded onto it, every
 //     stem of it is AutoDJ's again.
 // Next / Prev on the playing deck mixes now: the track beside it onto the

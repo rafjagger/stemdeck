@@ -103,6 +103,8 @@ namespace remote
 		const auto deck = fields->at ("deck"), stem = fields->at ("stem"), bus = fields->at ("bus");
 		if (! within (deck, 1, decks) || ! within (stem, 1, stemsPerDeck) || ! within (bus, 1, buses::count))
 			return std::nullopt;
+		if (! buses::mayUse (buses::stemIndex (deck - 1, stem - 1), bus - 1))
+			return std::nullopt;   // stem n plays only on channel n or AUX
 		return Switch { deck - 1, stem - 1, bus - 1, value == 1 };
 	}
 

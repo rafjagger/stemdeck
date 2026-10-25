@@ -188,7 +188,7 @@ ChannelStrip::ChannelStrip (StemDeckPlayer& p, int index) : player (p), deckInde
 		cue->setTooltip ("Stem to the cue outputs (pre-listen, before mute and fader)");
 		addAndMakeVisible (cue);
 
-		for (int bus = 0; bus < buses::count; ++bus)
+		for (const auto bus : switchBuses (s))
 		{
 			const auto label = bus == buses::aux ? juce::String ("A") : juce::String (bus + 1);
 			auto* button = busButtons.add (new juce::TextButton (label));
@@ -236,9 +236,10 @@ void ChannelStrip::saveState (DeckSession& state) const
 		stem.muted = muteButtons[s]->getToggleState();
 		stem.cue = cueButtons[s]->getToggleState();
 		stem.buses = 0;
-		for (int bus = 0; bus < buses::count; ++bus)
-			if (busButtons[s * buses::count + bus]->getToggleState())
-				stem.buses |= 1u << bus;
+		const auto stemBuses = switchBuses (s);
+		for (int k = 0; k < switchesPerStem; ++k)
+			if (busButtons[s * switchesPerStem + k]->getToggleState())
+				stem.buses |= 1u << stemBuses[(size_t) k];
 	}
 	state.faderDb = fader.getValue();
 }
@@ -256,10 +257,16 @@ void ChannelStrip::restoreState (const DeckSession& state)
 	fader.setValue (state.faderDb, juce::sendNotificationSync);
 }
 
+std::array<int, ChannelStrip::switchesPerStem> ChannelStrip::switchBuses (int stem) const
+{
+	return { buses::channelOf (buses::stemIndex (deckIndex, stem)), buses::aux };
+}
+
 void ChannelStrip::showBuses (int stem)
 {
-	for (int bus = 0; bus < buses::count; ++bus)
-		busButtons[stem * buses::count + bus]->setToggleState (player.isStemOnBus (stem, bus), juce::dontSendNotification);
+	const auto stemBuses = switchBuses (stem);
+	for (int k = 0; k < switchesPerStem; ++k)
+		busButtons[stem * switchesPerStem + k]->setToggleState (player.isStemOnBus (stem, stemBuses[(size_t) k]), juce::dontSendNotification);
 }
 
 void ChannelStrip::nudgeStemGain (int stem, double detents)
@@ -276,6 +283,12 @@ void ChannelStrip::nudgeStemGain (int stem, double detents)
 void ChannelStrip::toggleMute (int stem)
 {
 	if (auto* b = muteButtons[stem])
+		b->setToggleState (! b->getToggleState(), juce::sendNotificationSync);
+}
+
+void ChannelStrip::toggleCue (int stem)
+{
+	if (auto* b = cueButtons[stem])
 		b->setToggleState (! b->getToggleState(), juce::sendNotificationSync);
 }
 
@@ -311,8 +324,8 @@ void ChannelStrip::resized()
 		knobs[s]->setBounds (surface::toJuce (row.knob));
 		muteButtons[s]->setBounds (surface::toJuce (row.mute));
 		cueButtons[s]->setBounds (surface::toJuce (row.cue));
-		for (int bus = 0; bus < buses::count; ++bus)
-			busButtons[s * buses::count + bus]->setBounds (surface::toJuce (row.buses[(size_t) bus]));
+		busButtons[s * switchesPerStem + 0]->setBounds (surface::toJuce (row.channel));
+		busButtons[s * switchesPerStem + 1]->setBounds (surface::toJuce (row.aux));
 	}
 }
 
@@ -408,6 +421,13 @@ void MixerPanel::setBusMasks (const buses::Masks& masks, int answered)
 void MixerPanel::switchBus (int deck, int stem, int bus, bool on)
 {
 	const auto switched = buses::stemIndex (deck, stem);
+	// Refused before anything is touched: a switch the rule forbids must not
+	// reach the masks, the report or the Auto-DJ's "the DJ moved it".
+	if (! buses::mayUse (switched, bus))
+	{
+		strip (deck).showBuses (stem);   // a clicked button toggles back
+		return;
+	}
 	const auto after = buses::applySwitch (busMasks(), switched, bus, on, spare);
 	// Every strip re-shown, also when nothing changed: a refused click (AUX
 	// off) has already toggled its button and must toggle back.

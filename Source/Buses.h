@@ -99,8 +99,8 @@ namespace buses
 		return bus == aux ? "aux" : "deck" + std::to_string (bus + 1);
 	}
 
-	// The eight stems the rule spans, deck by deck: a desk channel can play
-	// any stem of either deck.
+	// The eight stems the rule spans, deck by deck: a desk channel plays
+	// its own stem n of either deck.
 	constexpr int decks = 2;
 	constexpr int stemsPerDeck = 4;
 	constexpr int stemCount = decks * stemsPerDeck;

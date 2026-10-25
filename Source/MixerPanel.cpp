@@ -408,6 +408,13 @@ void MixerPanel::setBusMasks (const buses::Masks& masks, int answered)
 void MixerPanel::switchBus (int deck, int stem, int bus, bool on)
 {
 	const auto switched = buses::stemIndex (deck, stem);
+	// Refused before anything is touched: a switch the rule forbids must not
+	// reach the masks, the report or the Auto-DJ's "the DJ moved it".
+	if (! buses::mayUse (switched, bus))
+	{
+		strip (deck).showBuses (stem);   // a clicked button toggles back
+		return;
+	}
 	const auto after = buses::applySwitch (busMasks(), switched, bus, on, spare);
 	// Every strip re-shown, also when nothing changed: a refused click (AUX
 	// off) has already toggled its button and must toggle back.

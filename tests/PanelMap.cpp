@@ -102,6 +102,9 @@ namespace
 		state.stemColours = stemColours;
 		state.playColour = { 0x3e, 0xc4, 0x6d };
 		state.cueColour = { 0xe8, 0xa3, 0x3d };
+		state.muteColour = { 0xd0, 0x45, 0x45 };
+		state.auxColour = { 0x9b, 0x6b, 0xff };
+		state.offColour = { 0x26, 0x28, 0x2c };
 		state.deckColours = deckColours;
 		return state;
 	}
@@ -375,14 +378,15 @@ TEST (PanelMap, ActivePadsOverTheDecksBase)
 	const auto leds = panel::compose (state);
 
 	EXPECT_EQ (at (leds, { 4, 4 }), panel::vivid (stemColours[2])) << "deck A stem 3 on bus 3, at full";
-	EXPECT_EQ (at (leds, { 4, 3 }), panel::base (deckColours[0])) << "and its AUX at deck A's base";
-	EXPECT_EQ (at (leds, { 2, 6 }), panel::vivid (stemColours[0])) << "deck B stem 1 on AUX";
-	EXPECT_EQ (at (leds, { 2, 5 }), panel::base (deckColours[1]));
+	EXPECT_EQ (at (leds, { 4, 3 }), state.offColour) << "and its AUX off, as the screen key is";
+	EXPECT_EQ (at (leds, { 2, 6 }), panel::vivid (state.auxColour)) << "deck B stem 1 on AUX, in AUX's own colour";
+	EXPECT_EQ (at (leds, { 2, 5 }), state.offColour);
 }
 
-// At rest no live key is dark, and every one wears its half's deck colour:
-// the outer columns' CUE and PLAY included. A foreign pad is dark.
-TEST (PanelMap, EveryKeyRestsInItsDecksColour)
+// A stem's pads (channel, AUX, CUE, MUTE) are the screen's keys: off they
+// show the screen key's off colour, not their deck's; CUE and PLAY, the
+// transport keys, rest in the deck colour.
+TEST (PanelMap, StemPadsAreOffLikeTheScreenKeys)
 {
 	auto state = allOnAux();
 	state.masks.fill (1u << 0);
@@ -395,12 +399,15 @@ TEST (PanelMap, EveryKeyRestsInItsDecksColour)
 		const auto control = panel::controlAt (cell);
 		if (control.kind == Control::Kind::none)
 			continue;
-		EXPECT_FALSE (dark (colour)) << cell.row << "," << cell.col;
+		if (control.kind == Control::Kind::cue || control.kind == Control::Kind::play)
+		{
+			EXPECT_EQ (colour, panel::base (deckColours[(size_t) (cell.col < 5 ? 0 : 1)])) << cell.row << "," << cell.col;
+			continue;
+		}
 		const auto on = control.kind == Control::Kind::route
 					 && (state.masks[(size_t) buses::stemIndex (control.deck, control.stem)] & (1u << control.bus)) != 0;
-		// nothing is cued or muted in this state, so those pads rest
 		if (! on)
-			EXPECT_EQ (colour, panel::base (deckColours[(size_t) (cell.col < 5 ? 0 : 1)])) << cell.row << "," << cell.col;
+			EXPECT_EQ (colour, state.offColour) << cell.row << "," << cell.col;
 	}
 }
 
@@ -420,7 +427,7 @@ TEST (PanelMap, TheDarkColumnIsDark)
 
 // A stem's CUE pad lights in the cue colour while the stem is cued, like the
 // screen's C key; its MUTE pad in the mute colour while it is muted. Both
-// rest in the deck's colour otherwise.
+// are off otherwise.
 TEST (PanelMap, CueAndMutePadsShowTheirState)
 {
 	auto state = allOnAux();
@@ -430,9 +437,9 @@ TEST (PanelMap, CueAndMutePadsShowTheirState)
 	const auto leds = panel::compose (state);
 
 	EXPECT_EQ (at (leds, { 3, 2 }), panel::vivid (state.cueColour)) << "deck A stem 2 cued";
-	EXPECT_EQ (at (leds, { 3, 7 }), panel::base (deckColours[1])) << "deck B stem 2 is not";
+	EXPECT_EQ (at (leds, { 3, 7 }), state.offColour) << "deck B stem 2 is not";
 	EXPECT_EQ (at (leds, { 4, 8 }), panel::vivid (state.muteColour)) << "deck B stem 3 muted";
-	EXPECT_EQ (at (leds, { 4, 1 }), panel::base (deckColours[0]));
+	EXPECT_EQ (at (leds, { 4, 1 }), state.offColour);
 }
 
 // A3 Motion's resting key (buttonLeds.idle, r31 g214 b205) has its brightest
@@ -461,14 +468,14 @@ TEST (PanelMap, OnIsFullAndNotDimmerThanRest)
 				   std::max ({ panel::base (deckColours[0]).r, panel::base (deckColours[0]).g, panel::base (deckColours[0]).b }));
 }
 
-// A muted stem's pad is half of an open one, channel by channel.
-TEST (PanelMap, MutedIsHalfOfOn)
+// The screen's channel and AUX keys do not dim for a muted stem, so neither
+// do the panel's pads; the mute has its own pad.
+TEST (PanelMap, MutedDoesNotDimTheBusPads)
 {
 	auto state = allOnAux();
 	state.muted[(size_t) buses::stemIndex (1, 0)] = true;
 	const auto leds = panel::compose (state);
-	const auto muted = at (leds, { 2, 6 }), open = panel::vivid (stemColours[0]);
-	EXPECT_EQ (muted, (panel::Rgb { (std::uint8_t) (open.r / 2), (std::uint8_t) (open.g / 2), (std::uint8_t) (open.b / 2) }));
+	EXPECT_EQ (at (leds, { 2, 6 }), panel::vivid (state.auxColour));
 }
 
 // Active CUE and PLAY keep their own colours over the deck's base.

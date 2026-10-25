@@ -999,6 +999,8 @@ void MainComponent::showPanel()
 	state.playColour = toRgb (Theme::play);
 	state.cueColour = toRgb (Theme::cue);
 	state.muteColour = toRgb (Theme::mute);
+	state.auxColour = toRgb (Theme::aux);
+	state.offColour = toRgb (Theme::panelRaised);
 	for (int d = 0; d < numDecks; ++d)
 		state.deckColours[(size_t) d] = toRgb (Theme::deck (d));
 	motionPanel->show (state);

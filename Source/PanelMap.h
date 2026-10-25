@@ -23,11 +23,11 @@
 // no light. A pad switches its stem onto that bus or off it, through the
 // mixer's own switch (MixerPanel::pressBus), toggles its cue, or its mute
 // (what the encoder's push does) -- what a click on the screen key does.
-// Every live key of a half rests lit in its deck's colour, so the halves read
-// as A and B, and lights over that while it is on: a bus pad in its stem's
-// colour (half while muted), a cue pad in the cue colour while the stem is
-// cued, a mute pad in the mute colour while it is muted, CUE and PLAY in
-// theirs. Over each half, four encoders -- two columns of two -- turn the
+// A stem's pads light as the screen keys of its row do: the channel pad in the
+// stem's colour while on, the AUX pad in AUX's, the cue pad in the cue colour
+// while the stem is cued, the mute pad in the mute colour while it is muted,
+// and the screen key's own dim grey when off. Only CUE and PLAY rest in the
+// deck's colour, so the halves still read as A and B, and light in theirs. Over each half, four encoders -- two columns of two -- turn the
 // four stems' gains in reading order; a push mutes the stem. The inner pot of
 // each half is the deck's fader; the outer pots are left free.
 namespace panel
@@ -89,7 +89,8 @@ namespace panel
 		std::array<bool, buses::stemCount> muted {}, cued {};
 		std::array<Rgb, buses::stemsPerDeck> stemColours {};
 		std::array<bool, buses::decks> playing {}, atCue {};
-		Rgb playColour, cueColour, muteColour;
+		Rgb playColour, cueColour, muteColour, auxColour;
+		Rgb offColour;   // a stem pad that is off: the screen key's own, shown as it is
 		std::array<Rgb, buses::decks> deckColours {};   // every key's resting colour, by half
 	};
 

@@ -9,11 +9,10 @@ namespace panel
 	{
 		constexpr int columnsPerDeck = columns / buses::decks;
 		constexpr int cueRow = 0, playRow = 1;
-		// The levels a key can be at: full while on, half for a muted stem, and
-		// at rest the deck colour with its brightest channel at 214 of 255 --
+		// The levels a transport key can be at: full while on, and at rest the
+		// deck colour with its brightest channel at 214 of 255 --
 		// the brightest channel of A3 Motion's idle key (buttonLeds.idle
 		// r31 g214 b205). Rest and on then differ in colour, as on Motion.
-		constexpr int mutedShare = 2;
 		constexpr int restBrightest = 214;
 
 		// A stem row's five slots in the screen row's order, deck B's left to
@@ -258,23 +257,25 @@ namespace panel
 
 		for (int deck = 0; deck < buses::decks; ++deck)
 		{
-			// Every live key of the half rests in the deck's colour; what is on
-			// lights over it in its own. A foreign pad has no cell, so light()
-			// leaves it dark.
+			// A stem's four pads are the screen's keys of its row: off in the
+			// screen key's off colour, on in the key's own -- the stem's colour
+			// on its channel, AUX's on AUX, cue's, mute's. A muted stem dims
+			// nothing, as on the screen. CUE and PLAY rest in the deck's colour.
 			const auto rest = base (state.deckColours[(size_t) deck]);
 			for (int stem = 0; stem < buses::stemsPerDeck; ++stem)
 			{
 				const auto index = (size_t) buses::stemIndex (deck, stem);
-				auto on = vivid (state.stemColours[(size_t) stem]);
-				if (state.muted[index])
-					on = scaled (on, 1, mutedShare);
+				const auto pad = [&] (const Control& control, bool isOn, Rgb colour)
+				{
+					light (leds, control, isOn ? vivid (colour) : state.offColour);
+				};
 				for (int bus = 0; bus < buses::count; ++bus)
 				{
 					const auto isOn = (state.masks[index] & (1u << bus)) != 0;
-					light (leds, { Control::Kind::route, deck, stem, bus }, isOn ? on : rest);
+					pad ({ Control::Kind::route, deck, stem, bus }, isOn, bus == buses::aux ? state.auxColour : state.stemColours[(size_t) stem]);
 				}
-				light (leds, { Control::Kind::stemCue, deck, stem }, state.cued[index] ? vivid (state.cueColour) : rest);
-				light (leds, { Control::Kind::stemMute, deck, stem }, state.muted[index] ? vivid (state.muteColour) : rest);
+				pad ({ Control::Kind::stemCue, deck, stem }, state.cued[index], state.cueColour);
+				pad ({ Control::Kind::stemMute, deck, stem }, state.muted[index], state.muteColour);
 			}
 
 			const auto transport = [&] (Control::Kind kind, bool isOn, Rgb colour)

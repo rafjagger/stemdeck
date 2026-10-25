@@ -115,13 +115,14 @@ TEST (Buses, EightStemsAcrossBothDecks)
 
 TEST (Buses, ASwitchOntoABusPutsTheStemThereAndOffAux)
 {
-	const auto after = buses::applySwitch (allOnAux(), 2, 0, true);
-	EXPECT_EQ (after[2], onBus (0));
+	const auto after = buses::applySwitch (allOnAux(), 2, 2, true);
+	EXPECT_EQ (after[2], onBus (2));
 	expectTheRule (after);
 }
 
 TEST (Buses, TwoStemsOnOneBusIsImpossible)
 {
+	// Only stem 1 of either deck can reach bus 1; the other six are refused.
 	auto masks = allOnAux();
 	for (int stem = 0; stem < buses::stemCount; ++stem)
 	{
@@ -129,39 +130,71 @@ TEST (Buses, TwoStemsOnOneBusIsImpossible)
 		EXPECT_EQ (stemsOn (masks, 0), 1);
 		expectTheRule (masks);
 	}
+	EXPECT_EQ (masks[(size_t) buses::stemIndex (1, 0)], onBus (0));
+	EXPECT_EQ (masks[(size_t) buses::stemIndex (0, 0)], onAux);
 }
 
 TEST (Buses, StemBOntoBusOneMovesStemAToAux)
 {
 	auto masks = buses::applySwitch (allOnAux(), buses::stemIndex (0, 0), 0, true);
-	masks = buses::applySwitch (masks, buses::stemIndex (1, 2), 0, true);
+	masks = buses::applySwitch (masks, buses::stemIndex (1, 0), 0, true);
 
-	EXPECT_EQ (masks[(size_t) buses::stemIndex (1, 2)], onBus (0));
+	EXPECT_EQ (masks[(size_t) buses::stemIndex (1, 0)], onBus (0));
 	EXPECT_EQ (masks[(size_t) buses::stemIndex (0, 0)], onAux) << "the other deck's stem left bus 1 for AUX";
 	expectTheRule (masks);
 }
 
-TEST (Buses, AStemMovesFromOneBusToAnother)
+TEST (Buses, AStemCannotMoveToAnotherChannel)
 {
-	auto masks = buses::applySwitch (allOnAux(), 1, 0, true);
+	auto masks = buses::applySwitch (allOnAux(), 1, 1, true);
+	const auto before = masks;
 	masks = buses::applySwitch (masks, 1, 3, true);
-	EXPECT_EQ (masks[1], onBus (3)) << "bus 1 is free again, not shared";
-	EXPECT_EQ (stemsOn (masks, 0), 0);
+	EXPECT_EQ (masks, before) << "stem 2 reaches channel 2 and AUX only";
 	expectTheRule (masks);
 }
 
+// Stem n of either deck reaches bus n and AUX, and nothing else (decided
+// 2026-10-25).
+TEST (Buses, StemNOnlyReachesChannelNAndAux)
+{
+	for (int stem = 0; stem < buses::stemCount; ++stem)
+		for (int bus = 0; bus < buses::count; ++bus)
+			EXPECT_EQ (buses::mayUse (stem, bus), bus == buses::aux || bus == stem % 4) << stem << "/" << bus;
+	EXPECT_EQ (buses::channelOf (5), 1);
+}
+
+TEST (Buses, ASwitchOntoAnotherChannelIsRefused)
+{
+	EXPECT_EQ (buses::applySwitch (allOnAux(), buses::stemIndex (0, 3), 0, true), allOnAux());
+	EXPECT_EQ (buses::applySwitch (allOnAux(), buses::stemIndex (0, 3), 0, true, buses::Spare::toOff), allOnAux());
+}
+
+// A session from before the rule may have a stem on a channel that is not
+// its own: it loads on AUX, neither silent nor dropped.
+TEST (Buses, AStemOnAnotherChannelLoadsOnAux)
+{
+	auto masks = allOnAux();
+	masks[(size_t) buses::stemIndex (0, 0)] = 1u << 1;
+	masks[(size_t) buses::stemIndex (1, 2)] = (1u << 2) | (1u << 0);
+	const auto after = buses::normalise (masks);
+	EXPECT_EQ (after[(size_t) buses::stemIndex (0, 0)], 1u << buses::aux);
+	EXPECT_EQ (after[(size_t) buses::stemIndex (1, 2)], 1u << 2);
+	expectTheRule (after);
+}
+
+
 TEST (Buses, SwitchingOffSendsTheStemToAux)
 {
-	auto masks = buses::applySwitch (allOnAux(), 5, 2, true);
-	masks = buses::applySwitch (masks, 5, 2, false);
+	auto masks = buses::applySwitch (allOnAux(), 5, 1, true);
+	masks = buses::applySwitch (masks, 5, 1, false);
 	EXPECT_EQ (masks[5], onAux);
 	expectTheRule (masks);
 }
 
 TEST (Buses, SwitchingOffABusTheStemIsNotOnChangesNothing)
 {
-	auto masks = buses::applySwitch (allOnAux(), 5, 2, true);
-	EXPECT_EQ (buses::applySwitch (masks, 5, 1, false), masks);
+	auto masks = buses::applySwitch (allOnAux(), 5, 1, true);
+	EXPECT_EQ (buses::applySwitch (masks, 5, 0, false), masks);
 }
 
 // AUX is the place a stem is when it is on no channel: switching AUX on takes
@@ -169,10 +202,10 @@ TEST (Buses, SwitchingOffABusTheStemIsNotOnChangesNothing)
 // stem stays on AUX.
 TEST (Buses, AuxOnTakesTheStemOffItsChannel)
 {
-	auto masks = buses::applySwitch (allOnAux(), 6, 1, true);
+	auto masks = buses::applySwitch (allOnAux(), 6, 2, true);
 	masks = buses::applySwitch (masks, 6, buses::aux, true);
 	EXPECT_EQ (masks[6], onAux);
-	EXPECT_EQ (stemsOn (masks, 1), 0);
+	EXPECT_EQ (stemsOn (masks, 2), 0);
 	expectTheRule (masks);
 }
 
@@ -180,7 +213,7 @@ TEST (Buses, AuxOffKeepsTheStemOnAux)
 {
 	EXPECT_EQ (buses::applySwitch (allOnAux(), 0, buses::aux, false), allOnAux());
 
-	auto onChannel = buses::applySwitch (allOnAux(), 0, 3, true);
+	auto onChannel = buses::applySwitch (allOnAux(), 0, 0, true);
 	EXPECT_EQ (buses::applySwitch (onChannel, 0, buses::aux, false), onChannel);
 }
 
@@ -195,22 +228,23 @@ TEST (Buses, AnythingOutOfRangeChangesNothing)
 
 // A session saved before 2026-10-07 could have several stems on one bus, one
 // stem on several buses, a stem on a channel and AUX, or a stem on nothing.
-// It loads into the rule: in the order A1-A4, B1-B4, the first stem on a bus
-// keeps it; a stem on several keeps the lowest one still free; a stem on
-// nothing stays on nothing (the Auto-DJ's "off"); everything else goes to AUX.
+// It loads into the rule: a stem keeps its own channel if it is on it and no
+// earlier stem (A1-A4, B1-B4) holds it; a stem on nothing stays on nothing
+// (the Auto-DJ's "off"); everything else, a foreign channel included, goes
+// to AUX.
 TEST (Buses, ALegacySessionLoadsIntoTheRule)
 {
 	const buses::Masks legacy {
-		onBus (0) | onAux,           // A1: bus 1 and AUX -> bus 1
-		onBus (0),                   // A2: bus 1, taken -> AUX
-		onBus (1) | onBus (2),       // A3: buses 2 and 3 -> bus 2
+		onBus (0) | onAux,           // A1: its own bus 1 and AUX -> bus 1
+		onBus (0),                   // A2: bus 1 is not its own -> AUX
+		onBus (1) | onBus (2),       // A3: buses 2 and 3, bus 3 is its own -> bus 3
 		0u,                          // A4: nowhere -> stays nowhere
-		onBus (1) | onBus (2),       // B1: 2 taken, 3 free -> bus 3
-		onBus (3) | (1u << 5),       // B2: bus 4 plus the old CUE bit -> bus 4
+		onBus (0) | onBus (2),       // B1: bus 1 taken by A1, bus 3 foreign -> AUX
+		onBus (1) | (1u << 5),       // B2: its own bus 2 plus the old CUE bit -> bus 2
 		onAux,                       // B3: AUX stays
-		onBus (3),                   // B4: bus 4, taken -> AUX
+		onBus (3),                   // B4: its own bus 4 -> bus 4
 	};
-	const buses::Masks expected { onBus (0), onAux, onBus (1), buses::offMask, onBus (2), onBus (3), onAux, onAux };
+	const buses::Masks expected { onBus (0), onAux, onBus (2), buses::offMask, onAux, onBus (1), onAux, onBus (3) };
 
 	const auto after = buses::normalise (legacy);
 	EXPECT_EQ (after, expected);
@@ -219,8 +253,8 @@ TEST (Buses, ALegacySessionLoadsIntoTheRule)
 
 TEST (Buses, NormalisingAStateInTheRuleChangesNothing)
 {
-	auto masks = buses::applySwitch (allOnAux(), 3, 0, true);
-	masks = buses::applySwitch (masks, 4, 1, true);
+	auto masks = buses::applySwitch (allOnAux(), 3, 3, true);
+	masks = buses::applySwitch (masks, 4, 0, true);
 	EXPECT_EQ (buses::normalise (masks), masks);
 	EXPECT_EQ (buses::normalise (allOnAux()), allOnAux());
 }
@@ -230,33 +264,30 @@ TEST (Buses, NormalisingAStateInTheRuleChangesNothing)
 TEST (Buses, EveryMovedStemIsReported)
 {
 	const auto before = buses::applySwitch (allOnAux(), 0, 0, true);
-	const auto after = buses::applySwitch (before, 6, 0, true);
-	EXPECT_EQ (buses::toReport (before, after, 6), (std::vector<int> { 0, 6 }));
+	const auto after = buses::applySwitch (before, 4, 0, true);
+	EXPECT_EQ (buses::toReport (before, after, 4), (std::vector<int> { 0, 4 }));
 	EXPECT_EQ (buses::toReport (before, before, 2), (std::vector<int> { 2 }));
 }
 
-// Core's own sequence when the desk moves stem S from channel 2 to channel 1,
-// where stem X was: S bus 1 on, S AUX off, X bus 1 off, then S bus 2 off.
-// S moves at the first switch and is never on AUX or on two buses on the way;
-// the late offs change nothing.
-TEST (Buses, CoresMoveFromChannelTwoToOneNeverPassesAux)
+// Core's own sequence when the desk hands channel 2 from stem S (A2) to stem
+// X (B2), the only two that can use it: X bus 2 on, X AUX off, S bus 2 off.
+// X takes the bus at the first switch and S goes to AUX; the late switches
+// change nothing.
+TEST (Buses, CoresHandoverOnChannelTwoNeverPassesAuxTwice)
 {
-	const int s = buses::stemIndex (0, 2), x = buses::stemIndex (1, 1);
+	const int s = buses::stemIndex (0, 1), x = buses::stemIndex (1, 1);
 	auto masks = buses::applySwitch (allOnAux(), s, 1, true);
-	masks = buses::applySwitch (masks, x, 0, true);
 
-	masks = buses::applySwitch (masks, s, 0, true);
-	EXPECT_EQ (masks[(size_t) s], onBus (0));
-	EXPECT_EQ (masks[(size_t) x], onAux);
+	masks = buses::applySwitch (masks, x, 1, true);
+	EXPECT_EQ (masks[(size_t) x], onBus (1));
+	EXPECT_EQ (masks[(size_t) s], onAux);
 	expectTheRule (masks);
 
 	const auto settled = masks;
-	masks = buses::applySwitch (masks, s, buses::aux, false);
+	masks = buses::applySwitch (masks, x, buses::aux, false);
 	EXPECT_EQ (masks, settled);
-	masks = buses::applySwitch (masks, x, 0, false);
-	EXPECT_EQ (masks, settled) << "X already left bus 1";
 	masks = buses::applySwitch (masks, s, 1, false);
-	EXPECT_EQ (masks, settled) << "S is on bus 1, not bus 2: the off does not send it to AUX";
+	EXPECT_EQ (masks, settled) << "S already left bus 2";
 }
 
 // What a stem is multiplied by on its way out of any bus: fader, then trim.
@@ -307,6 +338,12 @@ TEST (Buses, AHandoverTakesTheOldStemOffNotToAux)
 	EXPECT_EQ (otherOrder, masks) << "the order inside one handover does not matter";
 }
 
+TEST (Buses, AutoDjRouteOntoAnotherChannelIsSkipped)
+{
+	const auto m = autoDjDeckAOn14();
+	EXPECT_EQ (buses::route (m, { { buses::stemIndex (1, 2), 0 } }), m);
+}
+
 TEST (Buses, ARouteOutOfRangeChangesNothing)
 {
 	const auto masks = autoDjDeckAOn14();
@@ -324,8 +361,8 @@ TEST (Buses, AnOffStemSurvivesAManualSwitchElsewhere)
 
 TEST (Buses, AManualSwitchNeverPutsAStemOff)
 {
-	auto masks = buses::applySwitch (allOnAux(), 2, 1, true);
-	masks = buses::applySwitch (masks, 2, 1, false);
+	auto masks = buses::applySwitch (allOnAux(), 2, 2, true);
+	masks = buses::applySwitch (masks, 2, 2, false);
 	EXPECT_EQ (masks[2], onAux);
 	EXPECT_EQ (buses::applySwitch (allOnAux(), 2, buses::aux, false), allOnAux()) << "AUX off is still refused";
 	// An off stem switched onto AUX by hand plays there, as before.
@@ -336,8 +373,8 @@ TEST (Buses, AManualSwitchNeverPutsAStemOff)
 TEST (Buses, WhileTheAutoDjPlaysTheSparePlaceIsOff)
 {
 	const auto masks = autoDjDeckAOn14();
-	const auto displaced = buses::applySwitch (masks, 6, 0, true, buses::Spare::toOff);
-	EXPECT_EQ (displaced[6], onBus (0));
+	const auto displaced = buses::applySwitch (masks, 4, 0, true, buses::Spare::toOff);
+	EXPECT_EQ (displaced[4], onBus (0));
 	EXPECT_EQ (displaced[0], buses::offMask) << "A's drums, displaced, go off";
 
 	const auto takenOff = buses::applySwitch (masks, 1, 1, false, buses::Spare::toOff);
@@ -382,7 +419,7 @@ TEST (Buses, NoSwitchOrRouteEverSetsABitBeyondTheBuses)
 	masks.fill (buses::allMask | 0b100000u);
 	for (const auto mask : buses::normalise (masks))
 		EXPECT_EQ (mask & ~buses::allMask, 0u);
-	for (const auto mask : buses::applySwitch (masks, 3, 0, true))
+	for (const auto mask : buses::applySwitch (masks, 3, 3, true))
 		EXPECT_EQ (mask & ~buses::allMask, 0u);
 	for (const auto mask : buses::route (buses::normalise (masks), { { 0, 0 }, { 1, buses::off } }))
 		EXPECT_EQ (mask & ~buses::allMask, 0u);

@@ -300,8 +300,8 @@ namespace surface
 		const auto gap = area.w / 56;
 		area.removeFromTop (gap);
 
-		// n, knob, AUX, CUE, M on deck B, mirrored on deck A: the knob sits
-		// between the stem's channel and its other buses. Four rows tight
+		// n, AUX, CUE, M, knob on deck B, mirrored on deck A: the knob sits
+		// on the deck's outer side. Four rows tight
 		// under each other: a matrix. The knob a seventh of the row, the four
 		// keys share the rest and are as tall as the row, a hairline apart.
 		const auto knobSize = area.w / 7;
@@ -329,10 +329,10 @@ namespace surface
 			// Deck B reads left to right; deck A is the same row from the right.
 			const auto fromLeft = deckIndex != 0;
 			row.channel = key (fromLeft);
-			row.knob = knob (fromLeft);
 			row.aux = key (fromLeft);
 			row.cue = key (fromLeft);
 			row.mute = key (fromLeft);
+			row.knob = knob (fromLeft);
 		}
 		return strip;
 	}

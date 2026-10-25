@@ -462,8 +462,8 @@ TEST (SurfaceLayout, AStemRowIsItsChannelKnobAuxCueAndMute)
 			const auto strip = surface::channelStrip (Rect { 0, 0, strips[(size_t) d].w, strips[(size_t) d].h }, d);
 			for (const auto& row : strip.stems)
 			{
-				const std::array<Rect, 5> leftToRight = d == 0 ? std::array<Rect, 5> { row.mute, row.cue, row.aux, row.knob, row.channel }
-															   : std::array<Rect, 5> { row.channel, row.knob, row.aux, row.cue, row.mute };
+				const std::array<Rect, 5> leftToRight = d == 0 ? std::array<Rect, 5> { row.knob, row.mute, row.cue, row.aux, row.channel }
+															   : std::array<Rect, 5> { row.channel, row.aux, row.cue, row.mute, row.knob };
 				for (size_t k = 0; k + 1 < leftToRight.size(); ++k)
 					EXPECT_LE (leftToRight[k].right(), leftToRight[k + 1].x) << "deck " << d << ": part " << k << " left of part " << k + 1;
 

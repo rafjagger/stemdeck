@@ -114,8 +114,8 @@ namespace surface
 
 	// One stem's row in a channel strip: its own channel and AUX (the only
 	// buses it may use, Buses.h mayUse), the knob, the cue switch and the
-	// mute. Deck B reads n, knob, AUX, CUE, M left to right; deck A is
-	// mirrored: M, CUE, AUX, knob, n. The rows lie tight under each other: a
+	// mute. Deck B reads n, AUX, CUE, M, knob left to right (the knob on the
+	// outer side); deck A is mirrored: knob, M, CUE, AUX, n. The rows lie tight under each other: a
 	// matrix of keys.
 	struct StemRow
 	{

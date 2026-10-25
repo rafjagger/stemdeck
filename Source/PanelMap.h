@@ -18,9 +18,11 @@
 //   row 1     PLAY                                                PLAY
 //   rows 2-5  AUX  1  2  3  4   |   1  2  3  4  AUX     a row per stem, 1-4
 //
+// Only a stem's own channel and AUX act: the other three pads of its row are
+// no control and stay dark (buses::mayUse), though the grid does not move.
 // A pad switches its stem onto that bus or off it, through the mixer's own
 // switch (MixerPanel::pressBus) -- what a click on the screen key does. Every
-// key of a half rests lit in its deck's colour, so the halves read as A
+// live key of a half rests lit in its deck's colour, so the halves read as A
 // and B, and lights over that while it is on: a pad in its stem's colour while
 // the stem is on that bus (half while muted), CUE and PLAY in theirs. Over each half, four encoders -- two columns of two -- turn
 // the four stems' gains in reading order; a push mutes the stem. The inner

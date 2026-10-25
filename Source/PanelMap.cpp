@@ -75,9 +75,11 @@ namespace panel
 			c.kind = cell.row == cueRow ? Control::Kind::cue : Control::Kind::play;
 			return c;
 		}
-		c.kind = Control::Kind::route;
 		c.stem = cell.row - firstPadRow;
 		c.bus = buses::columnOrder (c.deck)[(size_t) (cell.col - c.deck * columnsPerDeck)];
+		if (! buses::mayUse (buses::stemIndex (c.deck, c.stem), c.bus))
+			return {};
+		c.kind = Control::Kind::route;
 		return c;
 	}
 
@@ -95,6 +97,8 @@ namespace panel
 				const auto order = buses::columnOrder (control.deck);
 				const auto it = std::find (order.begin(), order.end(), control.bus);
 				if (it == order.end() || control.stem < 0 || control.stem >= buses::stemsPerDeck)
+					return { -1, -1 };
+				if (! buses::mayUse (buses::stemIndex (control.deck, control.stem), control.bus))
 					return { -1, -1 };
 				return { firstPadRow + control.stem, control.deck * columnsPerDeck + (int) (it - order.begin()) };
 			}
@@ -214,8 +218,9 @@ namespace panel
 
 		for (int deck = 0; deck < buses::decks; ++deck)
 		{
-			// Every key of the half rests in the deck's colour; what is on
-			// lights over it in its own.
+			// Every live key of the half rests in the deck's colour; what is on
+			// lights over it in its own. A foreign pad has no cell, so light()
+			// leaves it dark.
 			const auto rest = base (state.deckColours[(size_t) deck]);
 			for (int stem = 0; stem < buses::stemsPerDeck; ++stem)
 			{

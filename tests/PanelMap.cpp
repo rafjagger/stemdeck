@@ -112,7 +112,7 @@ TEST (PanelMap, PadsAreTheRoutingMatrix)
 	expectRoute ({ 3, 2 }, 0, 1, 1);
 	expectRoute ({ 5, 4 }, 0, 3, 3);
 	expectRoute ({ 2, 5 }, 1, 0, 0);
-	expectRoute ({ 4, 8 }, 1, 2, 3);
+	expectRoute ({ 4, 7 }, 1, 2, 2);
 	expectRoute ({ 5, 9 }, 1, 3, buses::aux);
 
 	// The far left and far right columns: AUX of stems 1-4, top to bottom.
@@ -121,6 +121,33 @@ TEST (PanelMap, PadsAreTheRoutingMatrix)
 		expectRoute ({ panel::firstPadRow + stem, 0 }, 0, stem, buses::aux);
 		expectRoute ({ panel::firstPadRow + stem, 9 }, 1, stem, buses::aux);
 	}
+}
+
+// The grid keeps buses::columnOrder, but only a stem's own channel and AUX
+// act; a pad anywhere else is no control.
+TEST (PanelMap, OnlyAStemsOwnChannelAndAuxAct)
+{
+	for (int deck = 0; deck < buses::decks; ++deck)
+		for (int stem = 0; stem < buses::stemsPerDeck; ++stem)
+		{
+			std::vector<int> buttons;
+			for (int col = 0; col < 5; ++col)
+			{
+				const auto c = panel::controlAt ({ panel::firstPadRow + stem, deck * 5 + col });
+				if (c.kind == Control::Kind::route)
+					buttons.push_back (c.bus);
+				else
+					EXPECT_EQ (c.kind, Control::Kind::none);
+			}
+			std::sort (buttons.begin(), buttons.end());
+			EXPECT_EQ (buttons, (std::vector<int> { stem, buses::aux })) << deck << "," << stem;
+		}
+}
+
+TEST (PanelMap, AForeignPadHasNoCell)
+{
+	EXPECT_EQ (panel::cellOf ({ Control::Kind::route, 0, 0, 2 }), (Cell { -1, -1 }));
+	EXPECT_EQ (panel::cellOf ({ Control::Kind::route, 1, 3, 0 }), (Cell { -1, -1 }));
 }
 
 TEST (PanelMap, EveryRouteHasExactlyOnePad)
@@ -132,9 +159,10 @@ TEST (PanelMap, EveryRouteHasExactlyOnePad)
 		if (c.kind != Control::Kind::route)
 			continue;
 		++routes;
+		EXPECT_TRUE (buses::mayUse (buses::stemIndex (c.deck, c.stem), c.bus));
 		EXPECT_EQ (panel::cellOf (c), panel::buttonCell (i));
 	}
-	EXPECT_EQ (routes, buses::decks * buses::stemsPerDeck * buses::count);
+	EXPECT_EQ (routes, buses::decks * buses::stemsPerDeck * 2);
 }
 
 // The end columns' top two keys: the deck's CUE over its PLAY, as on a CDJ.
@@ -286,18 +314,17 @@ TEST (PanelMap, VividKeepsTheHueAndSaturates)
 TEST (PanelMap, ActivePadsOverTheDecksBase)
 {
 	auto state = allOnAux();
-	state.masks[(size_t) buses::stemIndex (0, 2)] = 1u << 0;
+	state.masks[(size_t) buses::stemIndex (0, 2)] = 1u << 2;
 	const auto leds = panel::compose (state);
 
-	EXPECT_EQ (at (leds, { 4, 1 }), panel::vivid (stemColours[2])) << "deck A stem 3 on bus 1, at full";
+	EXPECT_EQ (at (leds, { 4, 3 }), panel::vivid (stemColours[2])) << "deck A stem 3 on bus 3, at full";
 	EXPECT_EQ (at (leds, { 4, 0 }), panel::base (deckColours[0])) << "and its AUX at deck A's base";
-	EXPECT_EQ (at (leds, { 4, 3 }), panel::base (deckColours[0]));
 	EXPECT_EQ (at (leds, { 2, 9 }), panel::vivid (stemColours[0])) << "deck B stem 1 on AUX";
 	EXPECT_EQ (at (leds, { 2, 5 }), panel::base (deckColours[1]));
 }
 
-// At rest nothing is dark, and every key wears its half's deck colour:
-// the outer columns' CUE and PLAY included.
+// At rest no live key is dark, and every one wears its half's deck colour:
+// the outer columns' CUE and PLAY included. A foreign pad is dark.
 TEST (PanelMap, EveryKeyRestsInItsDecksColour)
 {
 	auto state = allOnAux();
@@ -308,13 +335,23 @@ TEST (PanelMap, EveryKeyRestsInItsDecksColour)
 	{
 		const auto cell = panel::buttonCell (i);
 		const auto colour = at (leds, cell);
-		EXPECT_FALSE (dark (colour)) << cell.row << "," << cell.col;
 		const auto control = panel::controlAt (cell);
+		if (control.kind == Control::Kind::none)
+			continue;
+		EXPECT_FALSE (dark (colour)) << cell.row << "," << cell.col;
 		const auto on = control.kind == Control::Kind::route
 					 && (state.masks[(size_t) buses::stemIndex (control.deck, control.stem)] & (1u << control.bus)) != 0;
 		if (! on)
 			EXPECT_EQ (colour, panel::base (deckColours[(size_t) (cell.col < 5 ? 0 : 1)])) << cell.row << "," << cell.col;
 	}
+}
+
+// A foreign pad does nothing, so it shows nothing -- not even the rest light.
+TEST (PanelMap, ForeignPadsAreDark)
+{
+	const auto leds = panel::compose (allOnAux());
+	EXPECT_TRUE (dark (at (leds, { 2, 3 }))) << "deck A stem 1, bus 3";
+	EXPECT_FALSE (dark (at (leds, { 2, 1 }))) << "deck A stem 1, bus 1 is its own";
 }
 
 // A3 Motion's resting key (buttonLeds.idle, r31 g214 b205) has its brightest

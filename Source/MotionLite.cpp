@@ -20,7 +20,9 @@ namespace motionlite
 			double wrapped = std::fmod (degrees + 180.0, 360.0);
 			if (wrapped < 0.0)
 				wrapped += 360.0;
-			return static_cast<float> (wrapped - 180.0);
+			// A value a hair below +180 rounds to 180.0f as a float: that is -180.
+			const auto azimuth = static_cast<float> (wrapped - 180.0);
+			return azimuth >= 180.0f ? -180.0f : azimuth;
 		}
 
 		// Counter form of splitmix64: the n-th output of the stream from seed.
@@ -72,7 +74,7 @@ namespace motionlite
 			case Shape::scat:
 				if (lastBeat)
 					return home;
-				pose.azimuth = static_cast<float> (-180.0 + 360.0 * unit (seed, 2 * beat));
+				pose.azimuth = wrapDegrees (-180.0 + 360.0 * unit (seed, 2 * beat));
 				pose.elevation = static_cast<float> (scatMaxElevation * unit (seed, 2 * beat + 1));
 				return pose;
 		}
@@ -91,9 +93,11 @@ namespace motionlite
 
 	void StemMotion::press (Shape shape, bool shift, std::uint64_t seed)
 	{
-		if (running && running->shape == shape)
+		// The running pad stops; on its way home only SHIFT starts it afresh.
+		const bool returning = running && running->shape == shape && running->returning;
+		if (running && running->shape == shape && ! (returning && shift))
 		{
-			if (! running->returning)
+			if (! returning)
 				stopRunning();
 			return;
 		}

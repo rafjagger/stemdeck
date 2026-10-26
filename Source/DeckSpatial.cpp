@@ -240,9 +240,11 @@ void DeckSpatial::readControls()
 		const auto pose = poseOf (s);
 		if (! samePose (pose, stem.pose))
 		{
-			// IEM's high-quality mode glides to a new pose over one prepared block.
+			// IEM's StereoEncoder glides to a new pose over the block it was
+			// prepared with: smoothAzimuthL.reset (1, samplesPerBlock) and its
+			// kin in its prepareToPlay (PluginProcessor.cpp:124-127).
 			stem.pose = pose;
-			stem.glideRemaining = blockSize;
+			stem.glideRemaining = stem.encoder->preparedBlockSize();
 		}
 		stem.encoder->setStereoPose (pose);
 	}

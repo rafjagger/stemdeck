@@ -290,3 +290,73 @@ TEST (MotionLite, SetHomeMovesAnIdleStemAtOnceAndARunningShotFollows)
 	motion.setHome ({ 10.0f, 20.0f, 40.0f });
 	EXPECT_FLOAT_EQ (motion.advance (at (1.0), 0.0).pose.elevation, 20.0f);
 }
+
+TEST (MotionLite, AShotStartedByASeekWhilePausedStaysFrozen)
+{
+	auto motion = makeMotion();
+	motion.advance (at (5.0, false), 0.0);
+	motion.press (Shape::orbit, false, 1);
+	motion.advance (at (9.5, false), 0.0);   // a forward seek over the bar line at 8
+	EXPECT_EQ (motion.state (Shape::orbit), PadState::running);
+	motion.advance (at (9.5, false), 10.0);
+	motion.advance (at (9.5, false), 10.0);
+	EXPECT_EQ (motion.progress(), (std::pair<int, int> { 1, 16 }));
+	EXPECT_EQ (motion.state (Shape::orbit), PadState::running);
+}
+
+TEST (MotionLite, ALengthChangeAfterThePressLeavesTheArmedShotAlone)
+{
+	auto motion = makeMotion();
+	motion.advance (at (5.0), 0.0);
+	motion.press (Shape::orbit, false, 1);
+	motion.lengthDown();
+	motion.advance (at (8.0), 0.0);
+	EXPECT_EQ (motion.progress(), (std::pair<int, int> { 1, 16 }));
+	EXPECT_DOUBLE_EQ (motion.lengthBars(), 2.0);
+}
+
+TEST (MotionLite, ARepeatPressOnTheReturningPadIsIgnored)
+{
+	auto motion = started (Shape::orbit);
+	motion.advance (at (8.0), 2.0);
+	motion.press (Shape::orbit, false, 2);   // stop: return
+	motion.advance (at (12.0), 0.25);
+	motion.press (Shape::orbit, false, 3);   // again, no SHIFT
+	EXPECT_EQ (motion.state (Shape::orbit), PadState::running);
+	EXPECT_EQ (motion.progress(), (std::pair<int, int> { 16, 16 }));
+	motion.advance (at (12.5), 0.25);
+	motion.advance (at (13.0), 0.0);
+	EXPECT_EQ (motion.state (Shape::orbit), PadState::idle) << "the return still ends one beat after the stop";
+}
+
+TEST (MotionLite, ShiftOnTheReturningPadStartsAFreshShotNow)
+{
+	auto motion = started (Shape::orbit);
+	motion.advance (at (8.0), 2.0);
+	motion.press (Shape::orbit, false, 2);   // stop: return
+	motion.advance (at (12.0), 0.25);
+	motion.press (Shape::orbit, true, 3);
+	EXPECT_EQ (motion.state (Shape::orbit), PadState::running);
+	EXPECT_EQ (motion.progress(), (std::pair<int, int> { 1, 16 }));
+	motion.advance (at (12.5), 1.0);   // two beats: a return would have ended
+	motion.advance (at (14.5), 0.0);
+	EXPECT_EQ (motion.state (Shape::orbit), PadState::running);
+	EXPECT_EQ (motion.progress(), (std::pair<int, int> { 3, 16 }));
+}
+
+// Float rounding next to the seam must land on -180, never on 180.
+TEST (MotionLite, AnAzimuthIsNeverPlus180)
+{
+	const double L = 16.0;
+	const spatial::Pose edge { std::nextafter (180.0f, 0.0f), 0.0f, 60.0f };
+	const auto pose = shapePose (Shape::orbit, edge, 1.0e-5 * L / 360.0, L, 0);
+	EXPECT_LT (pose.azimuth, 180.0f);
+	EXPECT_GE (pose.azimuth, -180.0f);
+
+	for (std::uint64_t seed = 0; seed < 20000; ++seed)
+	{
+		const auto scat = shapePose (Shape::scat, home, 0.5, L, seed).azimuth;
+		ASSERT_LT (scat, 180.0f) << seed;
+		ASSERT_GE (scat, -180.0f) << seed;
+	}
+}

@@ -11,4 +11,6 @@ namespace appsettings
 {
 	juce::PropertiesFile::Options options();
 	juce::File analysisCacheFile();
+	// Which StemDeck instance holds the A3 Motion panel: the deck letter (PanelOwnership).
+	juce::File panelLockFile();
 }

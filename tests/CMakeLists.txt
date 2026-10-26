@@ -77,6 +77,10 @@ add_executable(stemdeck-tests
     ${CMAKE_SOURCE_DIR}/Source/PanelMap.cpp
     PanelLink.cpp
     ${CMAKE_SOURCE_DIR}/Source/PanelLink.cpp
+    PanelMapOneDeck.cpp
+    ${CMAKE_SOURCE_DIR}/Source/PanelMapOneDeck.cpp
+    PanelOwnership.cpp
+    ${CMAKE_SOURCE_DIR}/Source/PanelOwnership.cpp
     ${CMAKE_SOURCE_DIR}/Source/Tips.cpp
     ${CMAKE_SOURCE_DIR}/Source/LibraryFolders.cpp
     KeyLock.cpp

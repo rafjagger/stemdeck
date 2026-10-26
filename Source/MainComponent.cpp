@@ -625,11 +625,6 @@ void MainComponent::showControllers()
 	}
 }
 
-namespace
-{
-	panel::Rgb toRgb (juce::Colour c) { return { c.getRed(), c.getGreen(), c.getBlue() }; }
-}
-
 void MainComponent::handlePanel (const panel::Event& e)
 {
 	if (e.deck < 0 || e.deck >= numDecks)
@@ -672,14 +667,14 @@ void MainComponent::showPanel()
 								  && std::abs (player.getPosition() - player.getCuePoint()) < 0.01;
 	}
 	for (int s = 0; s < StemSet::numStems; ++s)
-		state.stemColours[(size_t) s] = toRgb (Theme::stem (s));
-	state.playColour = toRgb (Theme::play);
-	state.cueColour = toRgb (Theme::cue);
-	state.muteColour = toRgb (Theme::mute);
-	state.auxColour = toRgb (Theme::aux);
-	state.offColour = toRgb (Theme::panelRaised);
+		state.stemColours[(size_t) s] = panel::rgbOf (Theme::stem (s));
+	state.playColour = panel::rgbOf (Theme::play);
+	state.cueColour = panel::rgbOf (Theme::cue);
+	state.muteColour = panel::rgbOf (Theme::mute);
+	state.auxColour = panel::rgbOf (Theme::aux);
+	state.offColour = panel::rgbOf (Theme::panelRaised);
 	for (int d = 0; d < numDecks; ++d)
-		state.deckColours[(size_t) d] = toRgb (Theme::deck (d));
+		state.deckColours[(size_t) d] = panel::rgbOf (Theme::deck (d));
 	motionPanel->show (state);
 }
 

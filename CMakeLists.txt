@@ -159,6 +159,8 @@ target_sources(StemDeck PRIVATE
     Source/Tips.cpp
     Source/PanelProtocol.cpp
     Source/PanelMap.cpp
+    Source/PanelMapOneDeck.cpp
+    Source/PanelOwnership.cpp
     Source/PanelLink.cpp
     Source/PanelDevice.cpp
     Source/SpatialLaw.cpp

@@ -22,4 +22,9 @@ namespace appsettings
 	{
 		return options().getDefaultFile().getSiblingFile ("analysis.xml");
 	}
+
+	juce::File panelLockFile()
+	{
+		return options().getDefaultFile().getSiblingFile ("panel.lock");
+	}
 }

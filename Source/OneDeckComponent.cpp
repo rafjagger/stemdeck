@@ -3,6 +3,7 @@
 #include "OneDeckComponent.h"
 
 #include "AppSettings.h"
+#include "KnobSetup.h"
 #include "OscTruthFile.h"
 #include "SettingsPanel.h"
 #include "SurfaceLayout.h"
@@ -14,6 +15,7 @@ namespace
 {
 double nowSeconds() { return juce::Time::getMillisecondCounterHiRes() / 1000.0; }
 constexpr const char* phonesModeKey = "phonesMode";
+constexpr const char* panelHereKey = "panelHere";   // "1" take it at start if free, "0" never, unset: deck A by default
 constexpr const char* phonesLevelKey = "phonesLevel";
 constexpr const char* phonesMixKey = "phonesMix";
 constexpr int refreshHz = 60;   // the rolling waveform's
@@ -22,7 +24,8 @@ constexpr float topBarShare = 0.035f, libraryShare = 0.24f;
 }
 
 OneDeckComponent::OneDeckComponent (DeckInstance deck)
-	: instance (deck), truth (coretruth::choose())
+	: instance (deck), truth (coretruth::choose()),
+	  panelOwnership (appsettings::panelLockFile().getFullPathName().toStdString(), deck.letter)
 {
 	setLookAndFeel (&lookAndFeel);
 	appProperties.setStorageParameters (appsettings::options());
@@ -99,6 +102,7 @@ OneDeckComponent::OneDeckComponent (DeckInstance deck)
 
 	setSize (768, 1024);
 	restoreSession();
+	startPanel();
 	updatePhonesDecoder();
 	updateDeviceStatus();
 	startTimerHz (refreshHz);
@@ -107,6 +111,8 @@ OneDeckComponent::OneDeckComponent (DeckInstance deck)
 OneDeckComponent::~OneDeckComponent()
 {
 	stopTimer();
+	panelDevice.reset();   // dark, and no more presses
+	panelOwnership.release();
 	saveSession();
 	audio->closeJack();   // no more input blocks ...
 	recorder.stop();      // ... then the file is closed complete
@@ -228,6 +234,100 @@ void OneDeckComponent::updateDeviceStatus()
 	deviceStatus.setColour (juce::Label::textColourId, AudioOutput::colourOf (status.health));
 }
 
+//==============================================================================
+void OneDeckComponent::startPanel()
+{
+	const auto wanted = settings().getValue (panelHereKey);
+	if (wanted == "1")
+		panelOwnership.claimIfFree();
+	else if (wanted != "0")
+		panelOwnership.claimByDefault();
+	updatePanelOwner();
+}
+
+// The lock names the instance with the panel; another instance taking it
+// (its toggle) takes it from here: this one lets the port go.
+void OneDeckComponent::updatePanelOwner()
+{
+	const auto holds = panelOwnership.holds();
+	if (! holds)
+	{
+		panelDevice.reset();
+		return;
+	}
+	if (panelDevice != nullptr)
+		return;
+
+	auto decoder = std::make_unique<PanelDevice::MappedDecoder<panel1::InputDecoder, panel1::Event>>();
+	decoder->onEvent = [this] (const panel1::Event& e) { handlePanel (e); };
+	panelDevice = std::make_unique<PanelDevice> (std::move (decoder));
+}
+
+// Every press goes through the screen's own control: the panel does what a
+// touch on the key does, and nothing here writes the played pose.
+void OneDeckComponent::handlePanel (const panel1::Event& e)
+{
+	using Type = panel1::Event::Type;
+	auto& deck = view.deckPanel();
+
+	switch (e.type)
+	{
+		case Type::cueDown:   deck.cuePressed(); return;
+		case Type::cueUp:     deck.cueReleased(); return;
+		case Type::play:      deck.togglePlay(); return;
+		case Type::shiftDown: view.shift().setToggleState (true, juce::dontSendNotification); return;
+		case Type::shiftUp:   view.shift().setToggleState (false, juce::dontSendNotification); return;
+		default: break;
+	}
+
+	if (e.stem < 0 || e.stem >= StemDeckPlayer::numStems)
+		return;
+	auto& column = view.column (e.stem);
+	switch (e.type)
+	{
+		case Type::shot:       column.oneShots().pad (e.shape).triggerClick(); break;
+		case Type::stemCue:    column.cue().triggerClick(); break;
+		case Type::stemMute:   column.mute().triggerClick(); break;
+		case Type::lengthDown: column.oneShots().lengthDown().triggerClick(); break;
+		case Type::lengthUp:   column.oneShots().lengthUp().triggerClick(); break;
+		case Type::gain:       knobsetup::nudge (column.gain(), e.value); break;
+		case Type::threeD:     knobsetup::nudge (column.threeD(), e.value); break;
+		default: break;
+	}
+}
+
+void OneDeckComponent::showPanel()
+{
+	if (panelDevice == nullptr)
+		return;
+
+	const auto& host = deckAudio.host();
+	const auto& player = host.player();
+	const auto& motion = host.spatialPorts().motion();
+
+	panel1::LedState state;
+	for (int s = 0; s < StemDeckPlayer::numStems; ++s)
+	{
+		auto& stem = state.stems[(size_t) s];
+		for (int shape = 0; shape < (int) stem.pads.size(); ++shape)
+			stem.pads[(size_t) shape] = motion.padState (s, (motionlite::Shape) shape);
+		stem.cued = player.isStemCued (s);
+		stem.muted = player.isStemMuted (s);
+		const auto bars = motion.lengthBars (s);
+		stem.shortest = motionlite::shorterLength (bars) == bars;
+		stem.longest = motionlite::longerLength (bars) == bars;
+		state.stemColours[(size_t) s] = panel::rgbOf (Theme::stem (s));
+	}
+	state.deckColour = panel::rgbOf (Theme::deck (instance.letter - 'A'));
+	state.cueColour = panel::rgbOf (Theme::cue);
+	state.playColour = panel::rgbOf (Theme::play);
+	state.muteColour = panel::rgbOf (Theme::mute);
+	state.playing = player.isPlaying();
+	state.atCue = player.isLoaded() && ! player.isPlaying() && std::abs (player.getPosition() - player.getCuePoint()) < 0.01;
+	state.shift = view.shift().getToggleState();
+	panelDevice->show (panel1::leds (state, nowSeconds()));
+}
+
 void OneDeckComponent::showSettings()
 {
 	SettingsPanel::Values values;
@@ -236,6 +336,7 @@ void OneDeckComponent::showSettings()
 	values.audioDeviceNote = audio->usingJack() ? "Under JACK: route with qjackctl or a patchbay" : juce::String();
 	values.tipsShown = tips::shown (settings().getValue (tips::settingKey).toStdString());
 	values.phonesMode = phonesMode;
+	values.panelHere = panelOwnership.holds();
 
 	SettingsPanel::Actions actions;
 	actions.onLibraryFolder = [this] (const juce::File& folder) { library.setFolder (folder); };
@@ -246,6 +347,16 @@ void OneDeckComponent::showSettings()
 		phonesMode = mode;
 		settings().setValue (phonesModeKey, juce::String (spatial::phonesModeName (mode)));
 		updatePhonesDecoder();
+	};
+
+	actions.onPanelHere = [this] (bool here)
+	{
+		settings().setValue (panelHereKey, here ? "1" : "0");
+		if (here)
+			panelOwnership.take();
+		else
+			panelOwnership.release();
+		updatePanelOwner();
 	};
 
 	juce::DialogWindow::LaunchOptions dialog;
@@ -261,6 +372,12 @@ void OneDeckComponent::timerCallback()
 {
 	view.refresh();
 	updatePhonesDecoder();
+	if (--panelCountdown <= 0)
+	{
+		panelCountdown = refreshHz / 2;
+		updatePanelOwner();
+	}
+	showPanel();
 	creatorLink->showStatus();
 	rec.update (audio->usingJack() ? audio->jackClient().getClientName() : juce::String());
 

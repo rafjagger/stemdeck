@@ -24,6 +24,19 @@ namespace
 
 PanelDevice::PanelDevice() : juce::Thread ("A3 Motion panel")
 {
+	auto twoDeck = std::make_unique<MappedDecoder<panel::InputDecoder, panel::Event>>();
+	twoDeck->onEvent = [this] (const panel::Event& e) { if (onEvent) onEvent (e); };
+	begin (std::move (twoDeck));
+}
+
+PanelDevice::PanelDevice (std::unique_ptr<Decoder> mapDecoder) : juce::Thread ("A3 Motion panel")
+{
+	begin (std::move (mapDecoder));
+}
+
+void PanelDevice::begin (std::unique_ptr<Decoder> mapDecoder)
+{
+	decoder = std::move (mapDecoder);
 	startThread();
 }
 
@@ -35,7 +48,11 @@ PanelDevice::~PanelDevice()
 
 void PanelDevice::show (const panel::LedState& state)
 {
-	const auto leds = panel::compose (state);
+	show (panel::compose (state));
+}
+
+void PanelDevice::show (const panel::Leds& leds)
+{
 	const std::lock_guard<std::mutex> lock (ledLock);
 	wanted = leds;
 }
@@ -115,7 +132,7 @@ bool PanelDevice::open (const std::string& path)
 	}
 
 	openPath = path;
-	decoder.reset();
+	decoder->reset();
 	reconnect.noteFrame();
 	shownKnown = false;   // whatever it shows, it was not this program's doing
 	cycle = 0;
@@ -177,8 +194,8 @@ bool PanelDevice::poll()
 	}
 
 	reconnect.noteFrame();
-	if (auto events = decoder.feed (*frame); ! events.empty())
-		post (std::move (events));
+	if (auto work = decoder->feed (*frame))
+		post (std::move (work));
 	return true;
 }
 
@@ -276,13 +293,11 @@ void PanelDevice::note (const juce::String& line)
 	juce::Logger::writeToLog (line);
 }
 
-void PanelDevice::post (std::vector<panel::Event> events)
+void PanelDevice::post (std::function<void()> work)
 {
-	juce::MessageManager::callAsync ([this, events = std::move (events), alive = alive]
+	juce::MessageManager::callAsync ([work = std::move (work), alive = alive]
 	{
-		if (! *alive || ! onEvent)
-			return;
-		for (const auto& e : events)
-			onEvent (e);
+		if (*alive)
+			work();
 	});
 }

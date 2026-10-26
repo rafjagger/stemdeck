@@ -81,6 +81,15 @@ SettingsPanel::SettingsPanel (const Values& values, Actions a)
 		addAndMakeVisible (phonesMode);
 	}
 
+	panelShown = values.panelHere;
+	if (panelShown)
+	{
+		panelButton.setToggleState (*panelShown, juce::dontSendNotification);
+		panelButton.setTooltip ("This deck's StemDeck holds the A3 Motion panel. Only one instance does: switching it on here "
+								"takes it from the other.");
+		addAndMakeVisible (panelButton);
+	}
+
 	tipsWereShown = values.tipsShown;
 	tipsButton.setToggleState (values.tipsShown, juce::dontSendNotification);
 	addAndMakeVisible (tipsButton);
@@ -96,7 +105,7 @@ SettingsPanel::SettingsPanel (const Values& values, Actions a)
 	addAndMakeVisible (cancelButton);
 
 	showFolder();
-	setSize (520, 276);
+	setSize (520, panelShown ? 306 : 276);
 }
 
 void SettingsPanel::resized()
@@ -120,6 +129,8 @@ void SettingsPanel::resized()
 	fadeSeconds.setBounds (fade.removeFromLeft (80));
 	fadeSecondsUnit.setBounds (fade);
 	area.removeFromTop (8);
+	if (panelShown)
+		panelButton.setBounds (area.removeFromTop (30));
 	tipsButton.setBounds (area.removeFromTop (30));
 
 	auto buttons = area.removeFromBottom (34);
@@ -160,6 +171,8 @@ void SettingsPanel::ok()
 	if (phonesModeShown && phonesMode.getSelectedId() > 0 && actions.onPhonesMode)
 		if (const auto chosen = (spatial::PhonesMode) (phonesMode.getSelectedId() - 1); chosen != *phonesModeShown)
 			actions.onPhonesMode (chosen);
+	if (panelShown && panelButton.getToggleState() != *panelShown && actions.onPanelHere)
+		actions.onPanelHere (panelButton.getToggleState());
 	if (tipsButton.getToggleState() != tipsWereShown && actions.onTips)
 		actions.onTips (tipsButton.getToggleState());
 	close();

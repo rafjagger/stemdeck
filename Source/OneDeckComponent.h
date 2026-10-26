@@ -9,6 +9,9 @@
 #include "DeckInstance.h"
 #include "OneDeckAudio.h"
 #include "OneDeckView.h"
+#include "PanelDevice.h"
+#include "PanelMapOneDeck.h"
+#include "PanelOwnership.h"
 #include "RecorderControls.h"
 #include "Session.h"
 #include "StemCreatorLink.h"
@@ -19,7 +22,9 @@
 // StemDeck-<X> with the 22 one-deck ports and rec_L/R, its own session
 // (~/.config/StemDeck/<X>/session.xml, imported once from the two-deck one),
 // the library, the stem creator and the recorder as the two-deck screen has
-// them. No buses, no Auto DJ (B15), no panel, no remote link yet.
+// them. No buses, no Auto DJ (B15), no remote link yet. The A³ Motion panel
+// (PanelMapOneDeck, B16) belongs to one instance: the one named in
+// ~/.config/StemDeck/panel.lock, deck A when there is none (PanelOwnership).
 //
 // The screen is v4 (spec section 9): the top bar (deck letter, REC, AUTO DJ
 // shown off, SYNC's source, the device, Settings), the deck (OneDeckView:
@@ -47,6 +52,11 @@ private:
 	void saveSession();
 	OneDeckSession gatherSession() const;
 	void updateDeviceStatus();
+	// The A³ Motion panel: held by one instance (panel.lock). Looked at every half second.
+	void startPanel();
+	void updatePanelOwner();
+	void handlePanel (const panel1::Event&);
+	void showPanel();
 	void showSettings();
 	void timerCallback() override;
 
@@ -75,6 +85,10 @@ private:
 	OneDeckSession restored;
 	juce::String lastSessionText;
 	int sessionCountdown = 0, statusCountdown = 0;
+
+	panel::Ownership panelOwnership;
+	std::unique_ptr<PanelDevice> panelDevice;
+	int panelCountdown = 0;
 
 	OneDeckView view { deckAudio, formatManager, instance.letter - 'A' };
 	juce::Label deckLabel, deviceStatus;

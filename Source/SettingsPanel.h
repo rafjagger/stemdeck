@@ -26,6 +26,8 @@ public:
 		bool tipsShown = true;
 		// A -bformat instance: its phones decoder (R12) in place of Auto DJ, which it has not.
 		std::optional<spatial::PhonesMode> phonesMode;
+		// A -bformat instance: whether this deck holds the A³ Motion panel (one instance does).
+		std::optional<bool> panelHere;
 	};
 
 	struct Actions
@@ -35,6 +37,7 @@ public:
 		std::function<void()> onAudioDevice;
 		std::function<void (bool shown)> onTips;
 		std::function<void (spatial::PhonesMode)> onPhonesMode;
+		std::function<void (bool here)> onPanelHere;
 	};
 
 	SettingsPanel (const Values& values, Actions actions);
@@ -60,6 +63,9 @@ private:
 	juce::Label phonesLabel { {}, "Phones decoder" };
 	juce::ComboBox phonesMode;
 	std::optional<spatial::PhonesMode> phonesModeShown;
+
+	juce::ToggleButton panelButton { "Panel: this deck" };
+	std::optional<bool> panelShown;
 
 	juce::ToggleButton tipsButton { "Show tips (help text on the keys)" };
 	bool tipsWereShown = true;

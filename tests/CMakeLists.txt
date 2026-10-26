@@ -165,9 +165,17 @@ add_executable(stemdeck-spatial-tests
     spatial/DeckSpatialTiming.cpp
     spatial/DeckSpatialPorts.cpp
     spatial/DeckSpatialMotion.cpp
+    spatial/DeckHost.cpp
     ${CMAKE_SOURCE_DIR}/Source/SteadyBed.cpp
     ${CMAKE_SOURCE_DIR}/Source/DeckSpatial.cpp
     ${CMAKE_SOURCE_DIR}/Source/DeckSpatialPorts.cpp
+    ${CMAKE_SOURCE_DIR}/Source/DeckHost.cpp
+    ${CMAKE_SOURCE_DIR}/Source/TempoAnalysis.cpp
+    ${CMAKE_SOURCE_DIR}/Source/SectionAnalysis.cpp
+    ${CMAKE_SOURCE_DIR}/Source/Sections.cpp
+    ${CMAKE_SOURCE_DIR}/Source/BarPhase.cpp
+    ${CMAKE_SOURCE_DIR}/Source/CachedGrid.cpp
+    ${CMAKE_SOURCE_DIR}/Source/FollowLeader.cpp
     ${CMAKE_SOURCE_DIR}/Source/DeckMotion.cpp
     ${CMAKE_SOURCE_DIR}/Source/MotionLite.cpp
     ${CMAKE_SOURCE_DIR}/Source/StemDeckPlayer.cpp

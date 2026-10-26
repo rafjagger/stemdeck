@@ -163,6 +163,7 @@ target_sources(StemDeck PRIVATE
     Source/SteadyBed.cpp
     Source/DeckSpatial.cpp
     Source/DeckSpatialPorts.cpp
+    Source/DeckHost.cpp
     Source/StemSpatialPopup.cpp
     Source/DeckMotion.cpp
     Source/StemViewer.cpp

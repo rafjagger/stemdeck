@@ -22,7 +22,7 @@
 #include "PanelDevice.h"
 #include "Waveforms.h"
 #include "JackOutput.h"
-#include "DeckSpatialPorts.h"
+#include "DeckHost.h"
 #include "Theme.h"
 #include "TempoAnalysis.h"
 #include "Preview.h"
@@ -77,8 +77,6 @@ private:
 	static constexpr int numOutputChannels = OutputMeters::numChannels;
 
 	void loadSet (const StemSet& set, int deckIndex);
-	void startAnalysis (const StemSet& set, int deckIndex);
-	void startDownbeatAnalysis (const StemSet& set, int deckIndex);
 	void setSync (int deckIndex, bool enabled);
 	void updateSync();
 	double applyFollow (int deckIndex, FollowInput in, double followerPosition);
@@ -103,11 +101,6 @@ private:
 	Session gatherSession() const;
 	void saveSession();
 	void restoreSession();
-	void gatherSpatial (int deckIndex, DeckSession&) const;
-	void restoreSpatial (int deckIndex, const DeckSession&);
-	// What the session held for each stem's spatial values, kept for a deck
-	// without a spatial engine, which would otherwise save the defaults.
-	std::array<decltype (DeckSession::stems), numDecks> restoredSpatial {};
 	juce::String lastSessionText;
 	int sessionCountdown = 0;
 	void updateDeviceStatus();
@@ -129,9 +122,18 @@ private:
 	juce::AudioFormatManager formatManager;
 	juce::AudioThumbnailCache thumbCache { 16 };
 
-	StemDeckPlayer playerA { formatManager }, playerB { formatManager };
+	// Tempo analysis runs in the background when a set is loaded, for both
+	// decks; results are cached (analysisCache).
+	juce::ThreadPool analysisPool { juce::ThreadPoolOptions{}.withThreadName ("Tempo analysis").withNumberOfThreads (2) };
+	std::unique_ptr<AnalysisCache> analysisCache;
+
+	// Each deck (DeckHost.h): its player, its spatial ports (built at start;
+	// if IEM refuses, the decks play on without them and the device status
+	// says so), its set, grid, sections and its part of the session.
+	std::array<DeckHost, numDecks> hosts { { { formatManager, analysisPool }, { formatManager, analysisPool } } };
+	StemDeckPlayer& playerA = hosts[0].player();
+	StemDeckPlayer& playerB = hosts[1].player();
 	std::array<StemDeckPlayer*, numDecks> players { &playerA, &playerB };
-	std::array<juce::AudioBuffer<float>, numDecks> deckBuffers; // 8 channels each (stem pairs)
 	juce::AudioBuffer<float> busBuffer;                            // every output channel (Outputs.h)
 
 	// Read on the audio thread; only changed while the output is closed
@@ -142,9 +144,6 @@ private:
 	std::array<std::array<std::array<juce::SmoothedValue<float>, buses::count>, StemSet::numStems>, numDecks> routeGains;
 	std::array<std::atomic<float>, numOutputChannels> outputPeaks {};
 
-	// Each deck's spatial ports (DeckSpatialPorts.h), built at start; if IEM
-	// refuses, the decks play on without them and the device status says so.
-	std::array<DeckSpatialPorts, numDecks> spatialPorts;
 	juce::String spatialError;
 	void createSpatialPorts();
 	juce::String withSpatialError (const juce::String& status) const;
@@ -188,23 +187,10 @@ private:
 	struct KeyBinding { int key; std::function<void (bool down)> action; bool wasDown = false; };
 	std::vector<KeyBinding> keyBindings;
 
-	// Tempo analysis runs in the background when a set is loaded; results are cached.
-	std::unique_ptr<AnalysisCache> analysisCache;
-	juce::ThreadPool analysisPool { juce::ThreadPoolOptions{}.withThreadName ("Tempo analysis").withNumberOfThreads (2) };
-	std::array<int, numDecks> loadGeneration {}; // drops results for a set no longer loaded
-	std::array<juce::String, numDecks> loadedSetIds; // StemLibrary's id: the first stem's path
-	std::array<std::optional<StemSet>, numDecks> loadedSets;
-
-	// The sets' sections (Sections.h): measured once per set in the analysis
-	// pool and cached beside the beat grid; grouped into bars of the deck's
-	// grid whenever it moves. The preview of the audible deck goes to Motion
-	// through Core on every downbeat and on any change (Preview.h decides;
-	// sendPreview only gathers).
-	std::array<std::optional<sections::Features>, numDecks> sectionFeatures;
-	std::array<std::vector<sections::Bar>, numDecks> sectionBars;
+	// The preview of the audible deck, from each deck's sections (DeckHost),
+	// goes to Motion through Core on every downbeat and on any change
+	// (Preview.h decides; sendPreview only gathers).
 	preview::Gate previewGate;
-	void startSectionAnalysis (const StemSet& set, int deckIndex, const BeatGrid& grid);
-	void rebuildSections (int deckIndex);
 	void sendPreview();
 
 	// As on a CDJ-3000: bending a synced deck with the jog ring stops it
@@ -214,8 +200,8 @@ private:
 	std::array<bool, numDecks> syncBent {};
 	void setSyncBent (int deckIndex, bool bent);
 
-	// Grid Adjust on a deck (DeckPanel::GridAction): edits its grid, keeps the
-	// correction in the analysis cache (written with the session).
+	// Grid Adjust on a deck (DeckPanel::GridAction): DeckHost edits its grid;
+	// SHIFT GRID's leader, and the bend it ends, are here.
 	void editGrid (int deckIndex, DeckPanel::GridAction action, double seconds);
 
 	// Auto-DJ (AutoDj.h): run every tick while on; picks at random from what

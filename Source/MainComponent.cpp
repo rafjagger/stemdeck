@@ -55,6 +55,13 @@ MainComponent::MainComponent()
 	analysisCache = std::make_unique<AnalysisCache> (appProperties.getUserSettings()->getFile().getSiblingFile ("analysis.xml"));
 
 	formatManager.registerBasicFormats();
+	for (int d = 0; d < numDecks; ++d)
+	{
+		auto& host = hosts[(size_t) d];
+		host.useAnalysisCache (*analysisCache);
+		host.onAnalysing = [this, d] (bool analysing) { decks[(size_t) d]->setAnalysing (analysing); };
+		host.onAnalysisStored = [this] { library.analysisChanged(); };
+	}
 	showTips (tips::shown (settings().getValue (tips::settingKey).toStdString()));
 
 	for (int d = 0; d < numDecks; ++d)
@@ -196,7 +203,7 @@ MainComponent::MainComponent()
 	createSpatialPorts();
 	for (int d = 0; d < numDecks; ++d)
 	{
-		auto& ports = spatialPorts[(size_t) d];
+		auto& ports = hosts[(size_t) d].spatialPorts();
 		mixer.setSpatial (d, ports.deckSpatial() != nullptr ? &ports : nullptr);
 	}
 	initialiseAudio();
@@ -293,159 +300,16 @@ void MainComponent::loadSet (const StemSet& set, int deckIndex)
 	}
 
 	const auto d = (size_t) deckIndex;
-	const auto error = players[d]->load (set);
-
-	if (error.isNotEmpty())
+	if (const auto error = hosts[d].load (set); error.isNotEmpty())
 	{
 		juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Cannot load the set", error);
 		return;
 	}
 
-	loadedSetIds[d] = set.files[0].getFullPathName();
-	loadedSets[d] = set;
 	thumbs[d]->setSet (set);
 	decks[d]->setSet (set);
 	waves[d]->setTitle (set.name);
 	findSteps();
-
-	++loadGeneration[d];
-	sectionFeatures[d].reset();
-	sectionBars[d].clear();
-
-	if (const auto cached = analysisCache->find (set))
-	{
-		players[d]->setBeatGrid (*cached);
-		decks[d]->setAnalysing (false);
-
-		// A set analysed before the sections existed gets them now.
-		sectionFeatures[d] = analysisCache->findFeatures (set);
-		if (sectionFeatures[d])
-			rebuildSections (deckIndex);
-		else
-			startSectionAnalysis (set, deckIndex, *cached);
-		if (analysisCache->needsNewDownbeat (set))
-			startDownbeatAnalysis (set, deckIndex);
-	}
-	else
-	{
-		startAnalysis (set, deckIndex);
-	}
-}
-
-void MainComponent::startAnalysis (const StemSet& set, int deckIndex)
-{
-	decks[(size_t) deckIndex]->setAnalysing (true);
-	const auto generation = loadGeneration[(size_t) deckIndex];
-	juce::Component::SafePointer<MainComponent> safeThis (this);
-
-	analysisPool.addJob ([this, safeThis, set, deckIndex, generation]
-	{
-		auto* job = juce::ThreadPoolJob::getCurrentThreadPoolJob();
-		const auto grid = TempoAnalysis::analyse (set, formatManager, [job] { return job != nullptr && job->shouldExit(); });
-
-		juce::MessageManager::callAsync ([safeThis, set, deckIndex, generation, grid]
-		{
-			if (safeThis == nullptr)
-				return;
-
-			if (grid.isValid())
-			{
-				safeThis->analysisCache->store (set, grid);
-				safeThis->library.analysisChanged();
-			}
-
-			// Only apply it if the deck still has that set.
-			if (safeThis->loadGeneration[(size_t) deckIndex] == generation)
-			{
-				safeThis->players[(size_t) deckIndex]->setBeatGrid (grid);
-				safeThis->decks[(size_t) deckIndex]->setAnalysing (false);
-
-				if (grid.isValid())
-					safeThis->startSectionAnalysis (set, deckIndex, grid);
-			}
-		});
-	});
-}
-
-void MainComponent::startSectionAnalysis (const StemSet& set, int deckIndex, const BeatGrid& grid)
-{
-	const auto generation = loadGeneration[(size_t) deckIndex];
-	juce::Component::SafePointer<MainComponent> safeThis (this);
-
-	analysisPool.addJob ([this, safeThis, set, deckIndex, generation, grid]
-	{
-		auto* job = juce::ThreadPoolJob::getCurrentThreadPoolJob();
-		const auto features = SectionAnalysis::analyse (set, formatManager, grid,
-														[job] { return job != nullptr && job->shouldExit(); });
-
-		juce::MessageManager::callAsync ([safeThis, set, deckIndex, generation, features]
-		{
-			if (safeThis == nullptr || ! features)
-				return;
-
-			safeThis->analysisCache->storeFeatures (set, *features);
-
-			// Only apply them if the deck still has that set.
-			if (safeThis->loadGeneration[(size_t) deckIndex] != generation)
-				return;
-
-			safeThis->sectionFeatures[(size_t) deckIndex] = features;
-			safeThis->rebuildSections (deckIndex);
-		});
-	});
-}
-
-// A grid from before the one was found from the stems is played with at
-// once; its first beat, onto the kick and the one, follows a few seconds later.
-void MainComponent::startDownbeatAnalysis (const StemSet& set, int deckIndex)
-{
-	const auto analysed = analysisCache->findAnalysed (set);
-	if (! analysed)
-		return;
-
-	const auto generation = loadGeneration[(size_t) deckIndex];
-	juce::Component::SafePointer<MainComponent> safeThis (this);
-
-	analysisPool.addJob ([this, safeThis, set, deckIndex, generation, grid = *analysed]
-	{
-		auto* job = juce::ThreadPoolJob::getCurrentThreadPoolJob();
-		const auto found = TempoAnalysis::redetectDownbeat (set, formatManager, grid, [job] { return job != nullptr && job->shouldExit(); });
-
-		juce::MessageManager::callAsync ([safeThis, set, deckIndex, generation, found]
-		{
-			if (safeThis == nullptr || ! found.isValid())
-				return;
-
-			safeThis->analysisCache->storeNewDownbeat (set, found.firstBeat);
-			safeThis->library.analysisChanged();
-
-			// A correction made meanwhile is what find() returns, and stays.
-			if (safeThis->loadGeneration[(size_t) deckIndex] == generation)
-				if (const auto current = safeThis->analysisCache->find (set))
-				{
-					safeThis->players[(size_t) deckIndex]->setBeatGrid (*current);
-					// The sections are counted in bars from the one.
-					safeThis->rebuildSections (deckIndex);
-				}
-		});
-	});
-}
-
-void MainComponent::rebuildSections (int deckIndex)
-{
-	const auto d = (size_t) deckIndex;
-	const auto grid = players[d]->getBeatGrid();
-
-	if (! sectionFeatures[d] || ! loadedSets[d] || ! grid.isValid())
-	{
-		sectionBars[d].clear();
-		return;
-	}
-
-	const auto& names = loadedSets[d]->stemNames;
-	const auto roles = sections::rolesFor ({ names[0].toStdString(), names[1].toStdString(),
-											 names[2].toStdString(), names[3].toStdString() });
-	sectionBars[d] = sections::classify (sections::barLevels (*sectionFeatures[d], grid.bpm, grid.firstBeat, roles));
 }
 
 void MainComponent::sendPreview()
@@ -458,14 +322,14 @@ void MainComponent::sendPreview()
 		const auto grid = player.getBeatGrid();
 		auto& state = states[(size_t) d];
 		state.view = { player.isPlaying(), player.getDeckGain() };
-		state.generation = loadGeneration[(size_t) d];
+		state.generation = hosts[(size_t) d].loadGeneration();
 		state.speed = player.getSpeed();
 		state.bpm = grid.bpm;
 		state.firstBeat = grid.firstBeat;
 		state.position = player.getPosition();
 		if (player.hasLoop())
 			state.loopSeconds = std::make_pair (player.getLoop().getStart(), player.getLoop().getEnd());
-		state.bars = sectionBars[(size_t) d];
+		state.bars = hosts[(size_t) d].sectionBars();
 	}
 
 	const auto moment = preview::momentOf (states, masterDeck);
@@ -723,15 +587,11 @@ Session MainComponent::gatherSession() const
 	for (int d = 0; d < numDecks; ++d)
 	{
 		auto& deck = session.decks[(size_t) d];
-		const auto& player = *players[(size_t) d];
-		deck.setId = library.storedId (loadedSetIds[(size_t) d]);
-		deck.position = player.getPosition();
-		deck.playing = player.isPlaying();
-		deck.cuePoint = player.getCuePoint();
-		deck.loop = player.hasLoop() ? player.getLoop() : juce::Range<double>();
+		const auto& host = hosts[(size_t) d];
+		deck.setId = library.storedId (host.loadedSetId());
+		host.gather (deck);
 		decks[(size_t) d]->saveState (deck);
 		mixer.strip (d).saveState (deck);
-		gatherSpatial (d, deck);
 	}
 	session.masterDeck = masterDeck;
 	session.masterTurnedOff = masterTurnedOff;
@@ -742,130 +602,34 @@ Session MainComponent::gatherSession() const
 	return session;
 }
 
-// The spatial state is the deck's DeckSpatial::Controls. With no spatial engine
-// (IEM refused) nothing changes it, so the values read at restore are written
-// back as they were: a session saved meanwhile must not reset them.
-void MainComponent::gatherSpatial (int deckIndex, DeckSession& deck) const
-{
-	auto* spatial = spatialPorts[(size_t) deckIndex].deckSpatial();
-	const auto& carried = restoredSpatial[(size_t) deckIndex];
-	for (size_t s = 0; s < deck.stems.size(); ++s)
-	{
-		// The motion object exists with or without an engine and remembers the
-		// length it was given, so this needs no carried copy.
-		deck.stems[s].lengthBars = spatialPorts[(size_t) deckIndex].motion().lengthBars ((int) s);
-		if (spatial == nullptr)
-		{
-			deck.stems[s].threeD = carried[s].threeD;
-			deck.stems[s].azimuth = carried[s].azimuth;
-			deck.stems[s].elevation = carried[s].elevation;
-			deck.stems[s].width = carried[s].width;
-			continue;
-		}
-		const auto& controls = spatialPorts[(size_t) deckIndex].settings();
-		deck.stems[s].threeD = controls.threeD[s].load();
-		deck.stems[s].azimuth = controls.azimuth[s].load();
-		deck.stems[s].elevation = controls.elevation[s].load();
-		deck.stems[s].width = controls.width[s].load();
-	}
-}
-
-void MainComponent::restoreSpatial (int deckIndex, const DeckSession& deck)
-{
-	restoredSpatial[(size_t) deckIndex] = deck.stems;
-	for (size_t s = 0; s < deck.stems.size(); ++s)
-		spatialPorts[(size_t) deckIndex].motion().setLength ((int) s, deck.stems[s].lengthBars);
-
-	auto* spatial = spatialPorts[(size_t) deckIndex].deckSpatial();
-	if (spatial == nullptr)
-		return;
-
-	auto& controls = spatialPorts[(size_t) deckIndex].settings();
-	for (size_t s = 0; s < deck.stems.size(); ++s)
-	{
-		controls.threeD[s].store ((float) deck.stems[s].threeD);
-		controls.azimuth[s].store ((float) deck.stems[s].azimuth);
-		controls.elevation[s].store ((float) deck.stems[s].elevation);
-		controls.width[s].store ((float) deck.stems[s].width);
-	}
-}
-
 void MainComponent::editGrid (int deckIndex, DeckPanel::GridAction action, double seconds)
 {
-	auto& player = *players[(size_t) deckIndex];
-	const auto& set = loadedSets[(size_t) deckIndex];
-	const auto current = player.getBeatGrid();
-	if (! set || ! current.isValid())
-		return;
-
-	using Action = DeckPanel::GridAction;
-	if (action == Action::reset)
+	std::optional<double> leaderBeatPhase;
+	if (action == DeckPanel::GridAction::shiftToLeader)
 	{
-		analysisCache->clearCorrected (*set);
-		if (const auto analysed = analysisCache->findAnalysed (*set))
+		// The leader: the Pioneer master under SYNC: PIO, else the other deck.
+		const auto now = juce::Time::getMillisecondCounterHiRes() / 1000.0;
+		if (pioSource)
 		{
-			player.setBeatGrid (*analysed);
-			rebuildSections (deckIndex);
+			if (pioClock.bpm() > 0.0)
+				leaderBeatPhase = pioClock.beatPhaseAt (now);
 		}
-		return;
-	}
-
-	GridEdit::Grid grid { current.bpm, current.firstBeat };
-	switch (action)
-	{
-		case Action::shift:       grid = GridEdit::shift (grid, seconds); break;
-		case Action::halfBack:    grid = GridEdit::shiftHalfBeat (grid, false); break;
-		case Action::halfForward: grid = GridEdit::shiftHalfBeat (grid, true); break;
-		case Action::oneBack:     grid = GridEdit::moveOne (grid, false); break;
-		case Action::oneForward:  grid = GridEdit::moveOne (grid, true); break;
-		case Action::doubleTempo: grid = GridEdit::doubleTempo (grid); break;
-		case Action::halveTempo:  grid = GridEdit::halveTempo (grid); break;
-		case Action::snapToCue:   grid = GridEdit::snapToCue (grid, player.getCuePoint()); break;
-		case Action::downbeatAtPlayhead:
+		else
 		{
-			// Where the playhead is now, carried from the last audio block.
-			const auto now = juce::Time::getMillisecondCounterHiRes() / 1000.0;
-			grid = GridEdit::snapToCue (grid, positionAt (player.getPosition(), player.getPositionStamp(), now,
-														  player.getEffectiveRate(), player.isPlaying() && ! player.isScratching()));
-			break;
-		}
-		case Action::shiftToLeader:
-		{
-			// The leader: the Pioneer master under SYNC: PIO, else the other deck.
-			const auto now = juce::Time::getMillisecondCounterHiRes() / 1000.0;
-			const auto position = positionAt (player.getPosition(), player.getPositionStamp(), now,
-											  player.getEffectiveRate(), player.isPlaying() && ! player.isScratching());
-			if (pioSource)
+			const auto& leader = *players[(size_t) (1 - deckIndex)];
+			const auto leaderGrid = leader.getBeatGrid();
+			if (leaderGrid.isValid() && leader.isPlaying())
 			{
-				if (pioClock.bpm() <= 0.0)
-					return;
-				grid = GridEdit::shiftToPhase (grid, position, pioClock.beatPhaseAt (now));
-			}
-			else
-			{
-				const auto& leader = *players[(size_t) (1 - deckIndex)];
-				const auto leaderGrid = leader.getBeatGrid();
-				if (! leaderGrid.isValid() || ! leader.isPlaying())
-					return;
 				const auto leaderPosition = positionAt (leader.getPosition(), leader.getPositionStamp(), now,
 														leader.getEffectiveRate(), ! leader.isScratching());
 				const auto multiple = syncMultiple > 0.0 ? syncMultiple : 1.0;
-				grid = GridEdit::shiftToPhase (grid, position, leaderGrid.beatsAt (leaderPosition) * multiple);
+				leaderBeatPhase = leaderGrid.beatsAt (leaderPosition) * multiple;
 			}
-			break;
 		}
-		case Action::reset: break;
 	}
 
-	const BeatGrid edited { grid.bpm, grid.firstBeat };
-	player.setBeatGrid (edited);
-	analysisCache->storeCorrected (*set, edited);
-
-	// The bars follow the downbeat at once: the next preview says so (Preview.h).
-	rebuildSections (deckIndex);
-
 	// SHIFT GRID ends a bend: the grid now says what the ear did, the beat follows again.
-	if (action == Action::shiftToLeader)
+	if (hosts[(size_t) deckIndex].editGrid (action, seconds, leaderBeatPhase) && action == DeckPanel::GridAction::shiftToLeader)
 		setSyncBent (deckIndex, false);
 }
 
@@ -1117,7 +881,7 @@ void MainComponent::setAutoDj (bool on)
 const StemSet* MainComponent::autoDjPick (AutoDj::Pick pick, int loadDeck)
 {
 	if (pick != AutoDj::Pick::random)
-		if (const auto* set = library.neighbourInFolder (loadedSetIds[(size_t) (1 - loadDeck)], pick == AutoDj::Pick::next ? 1 : -1))
+		if (const auto* set = library.neighbourInFolder (hosts[(size_t) (1 - loadDeck)].loadedSetId(), pick == AutoDj::Pick::next ? 1 : -1))
 			return set;
 	return library.randomVisibleSet (autoDjPlayed);
 }
@@ -1141,22 +905,22 @@ void MainComponent::setAutoDjFade (AutoDj::MixLength length)
 void MainComponent::readLevels (int deckIndex)
 {
 	const auto d = (size_t) deckIndex;
-	const auto generation = loadGeneration[d];
-	if (levelsGeneration[d] == generation || ! loadedSets[d])
+	const auto generation = hosts[d].loadGeneration();
+	if (levelsGeneration[d] == generation || ! hosts[d].loadedSet())
 		return;
 	levelsGeneration[d] = generation;
 	deckLevels[d].reset();
 	deckSpans[d].reset();
 
 	juce::Component::SafePointer<MainComponent> safeThis (this);
-	analysisPool.addJob ([this, safeThis, set = *loadedSets[d], deckIndex, generation]
+	analysisPool.addJob ([this, safeThis, set = *hosts[d].loadedSet(), deckIndex, generation]
 	{
 		auto* job = juce::ThreadPoolJob::getCurrentThreadPoolJob();
 		auto levels = StemLevels::read (set, formatManager, [job] { return job != nullptr && job->shouldExit(); });
 		const auto span = levels != nullptr ? StemHandover::audibleSpan (*levels) : std::nullopt;
 		juce::MessageManager::callAsync ([safeThis, deckIndex, generation, levels, span]
 		{
-			if (safeThis == nullptr || safeThis->loadGeneration[(size_t) deckIndex] != generation)
+			if (safeThis == nullptr || safeThis->hosts[(size_t) deckIndex].loadGeneration() != generation)
 				return;
 			safeThis->deckLevels[(size_t) deckIndex] = levels;
 			safeThis->deckSpans[(size_t) deckIndex] = span;
@@ -1175,7 +939,7 @@ void MainComponent::stepDeck (int deckIndex, int direction)
 		return;
 	}
 
-	if (const auto* set = library.neighbourInFolder (loadedSetIds[(size_t) deckIndex], direction))
+	if (const auto* set = library.neighbourInFolder (hosts[(size_t) deckIndex].loadedSetId(), direction))
 		loadSet (*set, deckIndex);
 }
 
@@ -1183,7 +947,7 @@ void MainComponent::findSteps()
 {
 	for (int d = 0; d < numDecks; ++d)
 	{
-		const auto& id = loadedSetIds[(size_t) d];
+		const auto& id = hosts[(size_t) d].loadedSetId();
 		steps[(size_t) d] = { library.neighbourInFolder (id, -1) != nullptr, library.neighbourInFolder (id, 1) != nullptr };
 	}
 	showSteps();
@@ -1242,8 +1006,8 @@ void MainComponent::runAutoDj()
 								 : (mask & (1u << buses::aux)) != 0 ? AutoDj::auxBus
 								 : (int) juce::findHighestSetBit (mask);
 		}
-		view.levelsPending = levelsGeneration[(size_t) d] == loadGeneration[(size_t) d]
-						  && levelsRead[(size_t) d] != loadGeneration[(size_t) d];
+		view.levelsPending = levelsGeneration[(size_t) d] == hosts[(size_t) d].loadGeneration()
+						  && levelsRead[(size_t) d] != hosts[(size_t) d].loadGeneration();
 	}
 
 	const auto c = autoDj.update (views);
@@ -1329,7 +1093,7 @@ void MainComponent::restoreSession()
 		auto& player = *players[(size_t) d];
 
 		mixer.strip (d).restoreState (deck);
-		restoreSpatial (d, deck);
+		hosts[(size_t) d].restoreSpatial (deck);
 
 		if (deck.setId.isEmpty())
 			continue;
@@ -1339,10 +1103,7 @@ void MainComponent::restoreSession()
 			continue;
 
 		decks[(size_t) d]->restoreState (deck);
-		player.setCuePoint (deck.cuePoint);
-		if (! deck.loop.isEmpty())
-			player.setLoop (deck.loop.getStart(), deck.loop.getEnd());
-		player.setPosition (deck.position);
+		hosts[(size_t) d].restoreTransport (deck);
 	}
 	// Both decks' switches at once: an older session may break the
 	// one-stem-per-bus rule, which spans the two decks.
@@ -1468,8 +1229,8 @@ void MainComponent::loadDroppedSet (const juce::String& setId, int deckIndex)
 //==============================================================================
 void MainComponent::createSpatialPorts()
 {
-	for (size_t d = 0; d < spatialPorts.size(); ++d)
-		if (const auto error = spatialPorts[d].create(); error.isNotEmpty() && spatialError.isEmpty())
+	for (auto& host : hosts)
+		if (const auto error = host.createSpatial(); error.isNotEmpty() && spatialError.isEmpty())
 			spatialError = error;
 }
 
@@ -1708,9 +1469,7 @@ void MainComponent::prepareToPlay (int samplesPerBlockExpected, double sampleRat
 
 	for (int d = 0; d < numDecks; ++d)
 	{
-		deckBuffers[(size_t) d].setSize (StemDeckPlayer::numOutputChannels, maxBlock);
-		players[(size_t) d]->prepareToPlay (samplesPerBlockExpected, sampleRate);
-		spatialPorts[(size_t) d].prepare (sampleRate, samplesPerBlockExpected);
+		hosts[(size_t) d].prepare (sampleRate, samplesPerBlockExpected);
 
 		const auto& player = *players[(size_t) d];
 		for (int s = 0; s < StemSet::numStems; ++s)
@@ -1749,14 +1508,8 @@ void MainComponent::getNextAudioBlock (const juce::AudioSourceChannelInfo& buffe
 
 	for (int d = 0; d < numDecks; ++d)
 	{
-		auto& deckBuffer = deckBuffers[(size_t) d];
 		auto& player = *players[(size_t) d];
-
-		if (numSamples > deckBuffer.getNumSamples())
-			deckBuffer.setSize (StemDeckPlayer::numOutputChannels, numSamples, false, false, true);
-
-		player.getNextAudioBlock (juce::AudioSourceChannelInfo (&deckBuffer, 0, numSamples));
-		spatialPorts[(size_t) d].render (player, busBuffer, outputs::spatialFirstChannel (d), numSamples);
+		const auto& deckBuffer = hosts[(size_t) d].render (busBuffer, outputs::spatialFirstChannel (d), numSamples);
 
 		// Each stem onto every bus it is switched to, post fader; ramped over
 		// 10 ms on any change.
@@ -1816,8 +1569,8 @@ void MainComponent::getNextAudioBlock (const juce::AudioSourceChannelInfo& buffe
 
 void MainComponent::releaseResources()
 {
-	for (auto* player : players)
-		player->releaseResources();
+	for (auto& host : hosts)
+		host.releaseResources();
 }
 
 //==============================================================================

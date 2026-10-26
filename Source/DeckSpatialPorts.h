@@ -25,7 +25,7 @@ public:
 	void prepare (double sampleRate, int blockSize);   // allocates
 	// Audio thread: writes channels [firstChannel, firstChannel + 20) of `outputs`.
 	void render (const StemDeckPlayer&, juce::AudioBuffer<float>& outputs, int firstChannel, int numSamples);
-	DeckSpatial* deckSpatial() { return spatial.get(); }
+	DeckSpatial* deckSpatial() const { return spatial.get(); }
 
 private:
 	void followPlayer (const StemDeckPlayer&);

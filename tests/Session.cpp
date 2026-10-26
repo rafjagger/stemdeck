@@ -100,3 +100,62 @@ TEST (Session, AnOldCueBusBitDoesNotTurnCueOn)
 			EXPECT_FALSE (stem.cue);
 		}
 }
+
+TEST (Session, SpatialStateRoundTrips)
+{
+	Session session;
+	auto& stem = session.decks[1].stems[2];
+	stem.threeD = 0.75;
+	stem.azimuth = -120.5;
+	stem.elevation = 33.0;
+	stem.width = 200.0;
+
+	const auto back = throughXml (session).decks[1].stems[2];
+	EXPECT_DOUBLE_EQ (back.threeD, 0.75);
+	EXPECT_DOUBLE_EQ (back.azimuth, -120.5);
+	EXPECT_DOUBLE_EQ (back.elevation, 33.0);
+	EXPECT_DOUBLE_EQ (back.width, 200.0);
+}
+
+TEST (Session, AnOlderSessionHasDefaultSpatialState)
+{
+	auto xml = Session().toXml();
+	for (auto* deck : xml->getChildWithTagNameIterator ("Deck"))
+		for (auto* stem : deck->getChildWithTagNameIterator ("Stem"))
+			for (const auto* name : { "threeD", "azimuth", "elevation", "width" })
+				stem->removeAttribute (name);
+
+	const auto back = Session::fromXml (*xml);
+	for (const auto& deck : back.decks)
+		for (const auto& stem : deck.stems)
+		{
+			EXPECT_DOUBLE_EQ (stem.threeD, 0.0);
+			EXPECT_DOUBLE_EQ (stem.azimuth, 0.0);
+			EXPECT_DOUBLE_EQ (stem.elevation, 0.0);
+			EXPECT_DOUBLE_EQ (stem.width, 60.0);
+		}
+}
+
+TEST (Session, GarbageSpatialValuesAreClamped)
+{
+	auto xml = Session().toXml();
+	auto* deck = xml->getChildByName ("Deck");
+	auto* first = deck->getChildByName ("Stem");
+	first->setAttribute ("threeD", 7.0);
+	first->setAttribute ("azimuth", 400.0);
+	first->setAttribute ("elevation", 120.0);
+	first->setAttribute ("width", -5.0);
+	auto* second = first->getNextElementWithTagName ("Stem");
+	second->setAttribute ("threeD", -2.0);
+	second->setAttribute ("elevation", -120.0);
+	second->setAttribute ("width", 400.0);
+
+	const auto back = Session::fromXml (*xml).decks[0];
+	EXPECT_DOUBLE_EQ (back.stems[0].threeD, 1.0);
+	EXPECT_DOUBLE_EQ (back.stems[0].azimuth, 40.0);
+	EXPECT_DOUBLE_EQ (back.stems[0].elevation, 90.0);
+	EXPECT_DOUBLE_EQ (back.stems[0].width, 0.0);
+	EXPECT_DOUBLE_EQ (back.stems[1].threeD, 0.0);
+	EXPECT_DOUBLE_EQ (back.stems[1].elevation, -90.0);
+	EXPECT_DOUBLE_EQ (back.stems[1].width, 360.0);
+}

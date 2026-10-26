@@ -1,6 +1,19 @@
 #include "Session.h"
 #include "Buses.h"
 
+#include <cmath>
+
+namespace
+{
+	double wrapDegrees (double degrees)
+	{
+		if (! std::isfinite (degrees))
+			return 0.0;
+		const auto wrapped = std::fmod (degrees + 180.0, 360.0);
+		return (wrapped < 0.0 ? wrapped + 360.0 : wrapped) - 180.0;
+	}
+}
+
 std::unique_ptr<juce::XmlElement> Session::toXml() const
 {
 	auto xml = std::make_unique<juce::XmlElement> ("StemDeckSession");
@@ -34,6 +47,10 @@ std::unique_ptr<juce::XmlElement> Session::toXml() const
 			stem->setAttribute ("muted", deck.stems[s].muted);
 			stem->setAttribute ("buses", (int) deck.stems[s].buses);
 			stem->setAttribute ("cue", deck.stems[s].cue);
+			stem->setAttribute ("threeD", deck.stems[s].threeD);
+			stem->setAttribute ("azimuth", deck.stems[s].azimuth);
+			stem->setAttribute ("elevation", deck.stems[s].elevation);
+			stem->setAttribute ("width", deck.stems[s].width);
 		}
 	}
 
@@ -94,6 +111,13 @@ Session Session::fromXml (const juce::XmlElement& xml)
 			// An older session's "phones" and CUE bus bit are not read back: the
 			// cue send is its own attribute, absent (off) in a file without it.
 			deck.stems[s].cue = stem->getBoolAttribute ("cue");
+			// Absent in an older file: the defaults of StemMixState. Stored garbage is
+			// pulled into IEM's ranges here, so the engine never sees it.
+			const StemMixState defaults;
+			deck.stems[s].threeD = juce::jlimit (0.0, 1.0, stem->getDoubleAttribute ("threeD", defaults.threeD));
+			deck.stems[s].azimuth = wrapDegrees (stem->getDoubleAttribute ("azimuth", defaults.azimuth));
+			deck.stems[s].elevation = juce::jlimit (-90.0, 90.0, stem->getDoubleAttribute ("elevation", defaults.elevation));
+			deck.stems[s].width = juce::jlimit (0.0, 360.0, stem->getDoubleAttribute ("width", defaults.width));
 			deck.stems[s].buses = buses::fromStored ((unsigned) stem->getIntAttribute ("buses", (int) buses::defaultMask ((int) s)));
 			++s;
 		}

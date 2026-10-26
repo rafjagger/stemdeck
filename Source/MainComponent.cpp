@@ -726,6 +726,7 @@ Session MainComponent::gatherSession() const
 		deck.loop = player.hasLoop() ? player.getLoop() : juce::Range<double>();
 		decks[(size_t) d]->saveState (deck);
 		mixer.strip (d).saveState (deck);
+		gatherSpatial (d, deck);
 	}
 	session.masterDeck = masterDeck;
 	session.masterTurnedOff = masterTurnedOff;
@@ -734,6 +735,40 @@ Session MainComponent::gatherSession() const
 	for (const auto& job : stemCreator.pendingJobs())
 		session.stemJobs.push_back ({ juce::String (job.input), juce::String (job.folder), juce::String (job.track) });
 	return session;
+}
+
+// The spatial state is the deck's DeckSpatial::Controls; with no spatial engine
+// (IEM refused) the defaults stay in the file as they were read.
+void MainComponent::gatherSpatial (int deckIndex, DeckSession& deck) const
+{
+	auto* spatial = spatialPorts[(size_t) deckIndex].deckSpatial();
+	if (spatial == nullptr)
+		return;
+
+	const auto& controls = spatial->controls();
+	for (size_t s = 0; s < deck.stems.size(); ++s)
+	{
+		deck.stems[s].threeD = controls.threeD[s].load();
+		deck.stems[s].azimuth = controls.azimuth[s].load();
+		deck.stems[s].elevation = controls.elevation[s].load();
+		deck.stems[s].width = controls.width[s].load();
+	}
+}
+
+void MainComponent::restoreSpatial (int deckIndex, const DeckSession& deck)
+{
+	auto* spatial = spatialPorts[(size_t) deckIndex].deckSpatial();
+	if (spatial == nullptr)
+		return;
+
+	auto& controls = spatial->controls();
+	for (size_t s = 0; s < deck.stems.size(); ++s)
+	{
+		controls.threeD[s].store ((float) deck.stems[s].threeD);
+		controls.azimuth[s].store ((float) deck.stems[s].azimuth);
+		controls.elevation[s].store ((float) deck.stems[s].elevation);
+		controls.width[s].store ((float) deck.stems[s].width);
+	}
 }
 
 void MainComponent::editGrid (int deckIndex, DeckPanel::GridAction action, double seconds)
@@ -1275,6 +1310,7 @@ void MainComponent::restoreSession()
 		auto& player = *players[(size_t) d];
 
 		mixer.strip (d).restoreState (deck);
+		restoreSpatial (d, deck);
 
 		if (deck.setId.isEmpty())
 			continue;

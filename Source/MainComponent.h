@@ -103,6 +103,8 @@ private:
 	Session gatherSession() const;
 	void saveSession();
 	void restoreSession();
+	void gatherSpatial (int deckIndex, DeckSession&) const;
+	void restoreSpatial (int deckIndex, const DeckSession&);
 	juce::String lastSessionText;
 	int sessionCountdown = 0;
 	void updateDeviceStatus();

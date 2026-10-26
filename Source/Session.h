@@ -18,6 +18,11 @@ struct StemMixState
 	bool muted = false;
 	unsigned buses = 0;     // bit per bus (Buses.h)
 	bool cue = false;       // the stem's cue send, apart from the buses
+
+	// The stem's place in the deck's spatial engine (DeckSpatial::Controls).
+	double threeD = 0.0;                          // 0..1
+	double azimuth = 0.0, elevation = 0.0;        // home direction, degrees; azimuth -180..180, elevation -90..90
+	double width = 60.0;                          // degrees, 0..360 (IEM StereoEncoder)
 };
 
 struct DeckSession

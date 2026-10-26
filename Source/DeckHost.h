@@ -3,7 +3,7 @@
 #pragma once
 
 #include <JuceHeader.h>
-#include "DeckPanel.h"
+#include "GridAction.h"
 #include "DeckSpatialPorts.h"
 #include "Session.h"
 #include "StemDeckPlayer.h"
@@ -25,12 +25,11 @@
 class DeckHost
 {
 public:
-	DeckHost (juce::AudioFormatManager&, juce::ThreadPool& analysisPool);
+	// The cache lives beside the app's settings and outlives the deck. The
+	// layout: where the deck's spatial ports lie in what render() writes.
+	DeckHost (juce::AudioFormatManager&, juce::ThreadPool& analysisPool, AnalysisCache&,
+	          outputs::SpatialLayout = outputs::twoDeckSpatialLayout());
 	~DeckHost();
-
-	// Before the first load: the cache lives beside the app's settings, made
-	// once those are known.
-	void useAnalysisCache (AnalysisCache& cache) { analysisCache = &cache; }
 
 	// The deck panel's "analysing" light; and a grid stored in the cache,
 	// which the library shows.
@@ -47,7 +46,7 @@ public:
 
 	//==============================================================================
 	// Audio: allocates the deck's stem pairs, then fills them each block and
-	// writes channels [firstChannel, firstChannel + 20) of `spatialOutputs`.
+	// writes the layout's channels from `firstChannel` on in `spatialOutputs`.
 	void prepare (double sampleRate, int samplesPerBlockExpected);
 	const juce::AudioBuffer<float>& render (juce::AudioBuffer<float>& spatialOutputs, int firstChannel, int numSamples);
 	void releaseResources() { deckPlayer.releaseResources(); }
@@ -61,11 +60,11 @@ public:
 	int loadGeneration() const { return generation; }            // counts loads: results for an older one are dropped
 	const std::vector<sections::Bar>& sectionBars() const { return bars; }
 
-	// Grid Adjust (DeckPanel::GridAction): the edit kept in the cache as a
+	// Grid Adjust (GridAction): the edit kept in the cache as a
 	// correction, RESET back to the analysed grid. SHIFT GRID needs the
 	// leader's beat phase now (the other deck, or the Pioneer master);
 	// without it nothing happens. True if the grid was changed.
-	bool editGrid (DeckPanel::GridAction action, double seconds, std::optional<double> leaderBeatPhase);
+	bool editGrid (GridAction action, double seconds, std::optional<double> leaderBeatPhase);
 
 	//==============================================================================
 	// The deck's part of the session: where it was, its loop and cue, each
@@ -85,7 +84,7 @@ private:
 
 	juce::AudioFormatManager& formats;
 	juce::ThreadPool& pool;
-	AnalysisCache* analysisCache = nullptr;
+	AnalysisCache& analysisCache;
 
 	StemDeckPlayer deckPlayer { formats };
 	DeckSpatialPorts ports;

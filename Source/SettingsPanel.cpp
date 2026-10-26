@@ -61,6 +61,26 @@ SettingsPanel::SettingsPanel (const Values& values, Actions a)
 		addAndMakeVisible (unit);
 	}
 
+	// One deck: no Auto DJ; the phones decoder's mode where its row was.
+	phonesModeShown = values.phonesMode;
+	if (phonesModeShown)
+	{
+		for (auto* c : std::initializer_list<juce::Component*> { &fadeLabel, &fadeBars, &fadeSeconds, &fadeBarsUnit, &fadeSecondsUnit })
+			c->setVisible (false);
+		phonesLabel.setFont (juce::FontOptions (14.0f, juce::Font::bold));
+		addAndMakeVisible (phonesLabel);
+		using spatial::PhonesMode;
+		for (const auto mode : { PhonesMode::automatic, PhonesMode::on, PhonesMode::off })
+			phonesMode.addItem (mode == PhonesMode::automatic ? "Automatic: off while Core is heard"
+							   : mode == PhonesMode::on       ? "On while the phones ports are connected"
+																: "Off",
+								(int) mode + 1);
+		phonesMode.setSelectedId ((int) *phonesModeShown + 1, juce::dontSendNotification);
+		phonesMode.setTooltip ("StemDeck's own phones (phones_L/R) are for a laptop without the desk: on the rig the phones "
+							   "come from Core. Automatic runs them only while Core is not heard.");
+		addAndMakeVisible (phonesMode);
+	}
+
 	tipsWereShown = values.tipsShown;
 	tipsButton.setToggleState (values.tipsShown, juce::dontSendNotification);
 	addAndMakeVisible (tipsButton);
@@ -91,7 +111,9 @@ void SettingsPanel::resized()
 	area.removeFromTop (8);
 
 	fadeLabel.setBounds (area.removeFromTop (22));
+	phonesLabel.setBounds (fadeLabel.getBounds());
 	auto fade = area.removeFromTop (34);
+	phonesMode.setBounds (fade.withWidth (juce::jmin (fade.getWidth(), 320)));
 	fadeBars.setBounds (fade.removeFromLeft (80));
 	fadeBarsUnit.setBounds (fade.removeFromLeft (60));
 	fade.removeFromLeft (12);
@@ -135,6 +157,9 @@ void SettingsPanel::ok()
 	const auto changed = fade.bars != fadeShown.bars || ! juce::approximatelyEqual (fade.noGridSeconds, fadeShown.noGridSeconds);
 	if (changed && actions.onAutoDjFade)
 		actions.onAutoDjFade (fade);
+	if (phonesModeShown && phonesMode.getSelectedId() > 0 && actions.onPhonesMode)
+		if (const auto chosen = (spatial::PhonesMode) (phonesMode.getSelectedId() - 1); chosen != *phonesModeShown)
+			actions.onPhonesMode (chosen);
 	if (tipsButton.getToggleState() != tipsWereShown && actions.onTips)
 		actions.onTips (tipsButton.getToggleState());
 	close();

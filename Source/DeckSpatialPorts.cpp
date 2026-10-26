@@ -10,7 +10,7 @@ namespace
 constexpr int maxSilenceBlock = 4096;   // as the player's cue room
 }
 
-DeckSpatialPorts::DeckSpatialPorts() = default;
+DeckSpatialPorts::DeckSpatialPorts (outputs::SpatialLayout spatialLayout) : layout (spatialLayout) {}
 DeckSpatialPorts::~DeckSpatialPorts() = default;
 
 juce::String DeckSpatialPorts::create()
@@ -20,11 +20,7 @@ juce::String DeckSpatialPorts::create()
 	if (spatial == nullptr)
 		return error.isNotEmpty() ? error : juce::String ("the spatial engine could not be built");
 
-	auto& controls = spatial->controls();
-	controls.deckThreeD = 1.0f;
-	controls.phonesLevel = 1.0f;
-	controls.phonesMix = 0.0f;
-	controls.phonesDecoderOn = false;
+	copySettings (true);
 	return {};
 }
 
@@ -48,6 +44,10 @@ void DeckSpatialPorts::copySettings (bool withPose)
 	{
 		to.store (from.load (std::memory_order_relaxed), std::memory_order_relaxed);
 	};
+	copy (userSettings.deckThreeD, controls.deckThreeD);
+	copy (userSettings.phonesLevel, controls.phonesLevel);
+	copy (userSettings.phonesMix, controls.phonesMix);
+	controls.phonesDecoderOn.store (userSettings.phonesDecoderOn.load (std::memory_order_relaxed), std::memory_order_relaxed);
 	for (size_t s = 0; s < (size_t) DeckSpatial::stems; ++s)
 	{
 		copy (userSettings.threeD[s], controls.threeD[s]);
@@ -79,10 +79,10 @@ void DeckSpatialPorts::followPlayer (const StemDeckPlayer& player, int numSample
 
 void DeckSpatialPorts::render (const StemDeckPlayer& player, juce::AudioBuffer<float>& outputs, int firstChannel, int numSamples)
 {
-	jassert (firstChannel + outputs::spatialChannelsPerDeck() <= outputs.getNumChannels());
+	jassert (firstChannel + layout.channels <= outputs.getNumChannels());
 	if (spatial == nullptr)
 	{
-		for (int c = 0; c < outputs::spatialChannelsPerDeck(); ++c)
+		for (int c = 0; c < layout.channels; ++c)
 			outputs.clear (firstChannel + c, 0, numSamples);
 		return;
 	}
@@ -103,11 +103,13 @@ void DeckSpatialPorts::process (const float* const* stems, juce::AudioBuffer<flo
 	const auto at = [&] (int within) { return outputs.getWritePointer (firstChannel + within) + offset; };
 	DeckSpatial::Outputs ports;
 	for (int c = 0; c < outputs::bformatChannels; ++c)
-		ports.bformat[(size_t) c] = at (outputs::bformatOffset + c);
+		ports.bformat[(size_t) c] = at (layout.bformat + c);
 	for (int side = 0; side < 2; ++side)
 	{
-		ports.cue[(size_t) side] = at (outputs::binauralCueOffset + side);
-		ports.phones[(size_t) side] = at (outputs::phonesOffset + side);
+		ports.cue[(size_t) side] = at (layout.cue + side);
+		ports.phones[(size_t) side] = at (layout.phones + side);
+		if (layout.aux >= 0)
+			ports.aux[(size_t) side] = at (layout.aux + side);
 	}
 	spatial->process (stems, ports, count);
 }

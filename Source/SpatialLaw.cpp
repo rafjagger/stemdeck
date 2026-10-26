@@ -49,4 +49,24 @@ namespace spatial
 		const double angle = halfPi * clamp01 (mix);
 		return { snapToSilence (levelGain * std::cos (angle)), snapToSilence (levelGain * std::sin (angle)) };
 	}
+
+	std::string phonesModeName (PhonesMode mode)
+	{
+		switch (mode)
+		{
+			case PhonesMode::on:  return "on";
+			case PhonesMode::off: return "off";
+			case PhonesMode::automatic: break;
+		}
+		return "automatic";
+	}
+
+	PhonesMode phonesModeFrom (const std::string& name)
+	{
+		if (name == "on")
+			return PhonesMode::on;
+		if (name == "off")
+			return PhonesMode::off;
+		return PhonesMode::automatic;
+	}
 }

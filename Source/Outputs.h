@@ -40,6 +40,43 @@ namespace outputs
 		return prefix + (within < phonesOffset ? "bcue" : "phones") + side;
 	}
 
+	// Where a deck's spatial ports lie among its own channels; aux -1: not rendered.
+	struct SpatialLayout { int channels, bformat, cue, aux, phones; };
+	inline SpatialLayout twoDeckSpatialLayout()
+	{
+		return { spatialChannelsPerDeck(), bformatOffset, binauralCueOffset, -1, phonesOffset };
+	}
+
+	// A -bformat instance (spec section 8): one deck, its own JACK client
+	// StemDeck-<X>, and only these 22 -- no bus ports.
+	namespace oneDeck
+	{
+		inline SpatialLayout layout() { return { bformatChannels + 6, 0, bformatChannels, bformatChannels + 2, bformatChannels + 4 }; }
+		inline int channelCount() { return layout().channels; }
+
+		inline std::string portName (int channel)
+		{
+			const auto l = layout();
+			if (channel < l.cue)
+				return "bformat_" + std::to_string (channel + 1);
+			const auto side = (channel - l.cue) % 2 == 0 ? "_L" : "_R";
+			return std::string (channel < l.aux ? "cue" : channel < l.phones ? "aux" : "phones") + side;
+		}
+
+		// Without JACK: every channel to its own output when the device has
+		// them all; on a smaller device (a laptop's stereo) only the phones,
+		// onto its first pair -- B-format summed to stereo is nothing to hear.
+		inline int foldsInto (int channel, int numDeviceOutputs)
+		{
+			if (numDeviceOutputs >= channelCount())
+				return channel;
+			const auto phones = layout().phones;
+			if (numDeviceOutputs >= 2 && (channel == phones || channel == phones + 1))
+				return channel - phones;
+			return -1;
+		}
+	}
+
 	inline std::string portName (int channel)
 	{
 		if (channel >= stereo::channelCount())

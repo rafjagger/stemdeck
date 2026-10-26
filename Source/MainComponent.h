@@ -21,10 +21,13 @@
 #include "Scs3dDevice.h"
 #include "PanelDevice.h"
 #include "Waveforms.h"
-#include "JackOutput.h"
+#include "AudioOutput.h"
+#include "RecorderControls.h"
+#include "StemCreatorLink.h"
 #include "DeckHost.h"
 #include "Theme.h"
 #include "TempoAnalysis.h"
+#include "AppSettings.h"
 #include "Preview.h"
 #include "SectionAnalysis.h"
 #include "FollowLeader.h"
@@ -50,7 +53,6 @@
 class MainComponent  : public juce::Component,
 					   public juce::AudioSource,
 					   public juce::DragAndDropContainer,
-					   private juce::ChangeListener,
 					   private juce::Timer
 {
 public:
@@ -88,12 +90,7 @@ private:
 	void updatePioneerStatus();
 	void loadDroppedSet (const juce::String& setId, int deckIndex);
 	void initialiseAudio();
-	void initialiseDeviceManager();
-	void changeListenerCallback (juce::ChangeBroadcaster*) override;
 	void timerCallback() override;
-	void createStems (const juce::Array<juce::File>& files);
-	void askTargetFolder (const juce::Array<juce::File>& files, const juce::String& preset);
-	void updateCreatorStatus();
 
 	// The session (Session.h): gathered from the decks, the mixer, the library
 	// and the stem creator; written when it changed, every two seconds and on
@@ -104,7 +101,6 @@ private:
 	juce::String lastSessionText;
 	int sessionCountdown = 0;
 	void updateDeviceStatus();
-	void showAudioSettings();
 	void showSettings();
 
 	// Over to A3 Motion in one tap, or to any of the rig's i3 workspaces from
@@ -125,12 +121,13 @@ private:
 	// Tempo analysis runs in the background when a set is loaded, for both
 	// decks; results are cached (analysisCache).
 	juce::ThreadPool analysisPool { juce::ThreadPoolOptions{}.withThreadName ("Tempo analysis").withNumberOfThreads (2) };
-	std::unique_ptr<AnalysisCache> analysisCache;
+	// Beside the settings (AppSettings.h); declared before the decks that use it.
+	AnalysisCache analysisCache { appsettings::analysisCacheFile() };
 
 	// Each deck (DeckHost.h): its player, its spatial ports (built at start;
 	// if IEM refuses, the decks play on without them and the device status
 	// says so), its set, grid, sections and its part of the session.
-	std::array<DeckHost, numDecks> hosts { { { formatManager, analysisPool }, { formatManager, analysisPool } } };
+	std::array<DeckHost, numDecks> hosts { { { formatManager, analysisPool, analysisCache }, { formatManager, analysisPool, analysisCache } } };
 	StemDeckPlayer& playerA = hosts[0].player();
 	StemDeckPlayer& playerB = hosts[1].player();
 	std::array<StemDeckPlayer*, numDecks> players { &playerA, &playerB };
@@ -163,8 +160,7 @@ private:
 	juce::String truthHash;
 	StemLibrary library { formatManager };
 	StemCreator stemCreator;
-	std::unique_ptr<juce::AlertWindow> stemDialog;
-	std::unique_ptr<juce::FileChooser> folderChooser;
+	std::unique_ptr<StemCreatorLink> creatorLink;   // made once the settings are known
 
 	std::array<StemThumbnails*, numDecks> thumbs { &thumbsA, &thumbsB };
 	std::array<ScrollingWaveform*, numDecks> waves { &waveA, &waveB };
@@ -279,18 +275,10 @@ private:
 	void showPanel();
 
 	Recorder recorder;
-	juce::TextButton recButton { "REC" };
+	RecorderControls rec { recorder };
 
-	LevelMeter recMeterL, recMeterR;
-	void toggleRecording();
-	void updateRecorder();
-
-	JackOutput jack;
-	bool usingJack = false;
-
-	// Fallback when no JACK server is running.
-	juce::AudioDeviceManager deviceManager;
-	juce::AudioSourcePlayer audioSourcePlayer;
+	// JACK, or the device when no JACK server runs; made once the settings are known.
+	std::unique_ptr<AudioOutput> audio;
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
 };

@@ -8,6 +8,7 @@
 
 #include <JuceHeader.h>
 #include "MainComponent.h"
+#include "OneDeckComponent.h"
 #include "DeckInstance.h"
 #include "LaunchOptions.h"
 
@@ -38,17 +39,23 @@ public:
         }
 
         const auto& options = std::get<LaunchOptions> (parsed);
-        auto title = getApplicationName();
 
-        // The one-deck screen lands in S4.4; until then -bformat only names the
-        // window and the two-deck UI runs as it always did.
+        // -bformat: one deck per instance (R10); without it the two-deck app
+        // as it always was. Each keeps its window's place under its own key.
         if (options.oneDeck)
         {
-            title = DeckInstance { options.deck }.title();
-            juce::Logger::writeToLog ("one-deck mode lands in S4.4");
+            const DeckInstance instance { options.deck };
+            auto content = std::make_unique<OneDeckComponent> (instance);
+            auto& settings = content->settings();
+            mainWindow.reset (new MainWindow (juce::String (instance.title()), std::move (content), settings,
+                                              "windowState." + juce::String::charToString (instance.letter)));
         }
-
-        mainWindow.reset (new MainWindow (title));
+        else
+        {
+            auto content = std::make_unique<MainComponent>();
+            auto& settings = content->settings();
+            mainWindow.reset (new MainWindow (getApplicationName(), std::move (content), settings, "windowState"));
+        }
 
         // The rig's service starts it with --fullscreen: the i3 rule alone
         // missed it, catching one of the windows JUCE builds and drops again
@@ -87,15 +94,16 @@ public:
     class MainWindow    : public juce::DocumentWindow
     {
     public:
-        MainWindow (juce::String name)
+        MainWindow (juce::String name, std::unique_ptr<juce::Component> content, juce::PropertiesFile& contentSettings,
+                    juce::String windowStateKey)
             : DocumentWindow (name,
                               juce::Desktop::getInstance().getDefaultLookAndFeel()
                                                           .findColour (juce::ResizableWindow::backgroundColourId),
-                              DocumentWindow::allButtons)
+                              DocumentWindow::allButtons),
+              settings (contentSettings), stateKey (windowStateKey)
         {
             setUsingNativeTitleBar (true);
-            auto* content = new MainComponent();
-            setContentOwned (content, true);
+            setContentOwned (content.release(), true);
 
            #if JUCE_IOS || JUCE_ANDROID
             setFullScreen (true);
@@ -103,7 +111,7 @@ public:
             setResizable (true, true);
             centreWithSize (getWidth(), getHeight());
             // Where it was last time (StemDeck.settings).
-            if (const auto state = content->settings().getValue ("windowState"); state.isNotEmpty())
+            if (const auto state = settings.getValue (stateKey); state.isNotEmpty())
                 restoreWindowStateFromString (state);
            #endif
 
@@ -112,8 +120,8 @@ public:
 
         ~MainWindow() override
         {
-            if (auto* content = dynamic_cast<MainComponent*> (getContentComponent()))
-                content->settings().setValue ("windowState", getWindowStateAsString());
+            // The settings belong to the content, deleted after this body.
+            settings.setValue (stateKey, getWindowStateAsString());
         }
 
         void closeButtonPressed() override
@@ -132,6 +140,9 @@ public:
         */
 
     private:
+        juce::PropertiesFile& settings;
+        const juce::String stateKey;
+
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainWindow)
     };
 

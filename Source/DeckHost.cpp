@@ -17,8 +17,9 @@ std::function<bool()> abortWithJob()
 }
 }
 
-DeckHost::DeckHost (juce::AudioFormatManager& formatManager, juce::ThreadPool& analysisPool)
-	: formats (formatManager), pool (analysisPool)
+DeckHost::DeckHost (juce::AudioFormatManager& formatManager, juce::ThreadPool& analysisPool, AnalysisCache& cache,
+                    outputs::SpatialLayout layout)
+	: formats (formatManager), pool (analysisPool), analysisCache (cache), ports (layout)
 {
 }
 
@@ -45,7 +46,6 @@ const juce::AudioBuffer<float>& DeckHost::render (juce::AudioBuffer<float>& spat
 //==============================================================================
 juce::String DeckHost::load (const StemSet& newSet)
 {
-	jassert (analysisCache != nullptr);
 	if (const auto error = deckPlayer.load (newSet); error.isNotEmpty())
 		return error;
 
@@ -55,18 +55,18 @@ juce::String DeckHost::load (const StemSet& newSet)
 	features.reset();
 	bars.clear();
 
-	if (const auto cached = analysisCache->find (newSet))
+	if (const auto cached = analysisCache.find (newSet))
 	{
 		deckPlayer.setBeatGrid (*cached);
 		setAnalysing (false);
 
 		// A set analysed before the sections existed gets them now.
-		features = analysisCache->findFeatures (newSet);
+		features = analysisCache.findFeatures (newSet);
 		if (features)
 			rebuildSections();
 		else
 			startSectionAnalysis (*cached);
-		if (analysisCache->needsNewDownbeat (newSet))
+		if (analysisCache.needsNewDownbeat (newSet))
 			startDownbeatAnalysis();
 	}
 	else
@@ -92,7 +92,7 @@ void DeckHost::startAnalysis()
 
 			if (grid.isValid())
 			{
-				safeThis->analysisCache->store (analysed, grid);
+				safeThis->analysisCache.store (analysed, grid);
 				safeThis->analysisStored();
 			}
 
@@ -121,7 +121,7 @@ void DeckHost::startSectionAnalysis (const BeatGrid& grid)
 			if (safeThis == nullptr || ! found)
 				return;
 
-			safeThis->analysisCache->storeFeatures (analysed, *found);
+			safeThis->analysisCache.storeFeatures (analysed, *found);
 
 			// Only apply them if the deck still has that set.
 			if (safeThis->generation != loaded)
@@ -137,7 +137,7 @@ void DeckHost::startSectionAnalysis (const BeatGrid& grid)
 // once; its first beat, onto the kick and the one, follows a few seconds later.
 void DeckHost::startDownbeatAnalysis()
 {
-	const auto analysedGrid = analysisCache->findAnalysed (*set);
+	const auto analysedGrid = analysisCache.findAnalysed (*set);
 	if (! analysedGrid)
 		return;
 
@@ -152,12 +152,12 @@ void DeckHost::startDownbeatAnalysis()
 			if (safeThis == nullptr || ! found.isValid())
 				return;
 
-			safeThis->analysisCache->storeNewDownbeat (analysed, found.firstBeat);
+			safeThis->analysisCache.storeNewDownbeat (analysed, found.firstBeat);
 			safeThis->analysisStored();
 
 			// A correction made meanwhile is what find() returns, and stays.
 			if (safeThis->generation == loaded)
-				if (const auto current = safeThis->analysisCache->find (analysed))
+				if (const auto current = safeThis->analysisCache.find (analysed))
 				{
 					safeThis->deckPlayer.setBeatGrid (*current);
 					// The sections are counted in bars from the one.
@@ -196,17 +196,17 @@ void DeckHost::analysisStored()
 }
 
 //==============================================================================
-bool DeckHost::editGrid (DeckPanel::GridAction action, double seconds, std::optional<double> leaderBeatPhase)
+bool DeckHost::editGrid (GridAction action, double seconds, std::optional<double> leaderBeatPhase)
 {
 	const auto current = deckPlayer.getBeatGrid();
 	if (! set || ! current.isValid())
 		return false;
 
-	using Action = DeckPanel::GridAction;
+	using Action = GridAction;
 	if (action == Action::reset)
 	{
-		analysisCache->clearCorrected (*set);
-		const auto analysed = analysisCache->findAnalysed (*set);
+		analysisCache.clearCorrected (*set);
+		const auto analysed = analysisCache.findAnalysed (*set);
 		if (analysed)
 		{
 			deckPlayer.setBeatGrid (*analysed);
@@ -244,7 +244,7 @@ bool DeckHost::editGrid (DeckPanel::GridAction action, double seconds, std::opti
 
 	const BeatGrid edited { grid.bpm, grid.firstBeat };
 	deckPlayer.setBeatGrid (edited);
-	analysisCache->storeCorrected (*set, edited);
+	analysisCache.storeCorrected (*set, edited);
 
 	// The bars follow the downbeat at once: the next preview says so (Preview.h).
 	rebuildSections();

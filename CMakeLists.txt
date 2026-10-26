@@ -140,6 +140,7 @@ target_sources(StemDeck PRIVATE
     Source/StemNames.cpp
     Source/StemJob.cpp
     Source/StemCreator.cpp
+    Source/StemCreatorLock.cpp
     Source/ProcessGroup.cpp
     Source/MeterBallistics.cpp
     Source/Session.cpp
@@ -164,6 +165,13 @@ target_sources(StemDeck PRIVATE
     Source/DeckSpatial.cpp
     Source/DeckSpatialPorts.cpp
     Source/DeckHost.cpp
+    Source/OneDeckAudio.cpp
+    Source/AppSettings.cpp
+    Source/AudioOutput.cpp
+    Source/RecorderControls.cpp
+    Source/StemCreatorLink.cpp
+    Source/CoreTruth.cpp
+    Source/OneDeckComponent.cpp
     Source/StemSpatialPopup.cpp
     Source/DeckMotion.cpp
     Source/StemViewer.cpp

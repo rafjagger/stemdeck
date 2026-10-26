@@ -70,8 +70,7 @@ TEST (DeckHost, LoadsASyntheticSetAndPlays)
 	AnalysisCache cache (folder.getChildFile ("analysis.xml"));
 	juce::ThreadPool pool;
 	{
-		DeckHost host (formats, pool);
-		host.useAnalysisCache (cache);
+		DeckHost host (formats, pool, cache);
 		std::vector<bool> analysing;
 		host.onAnalysing = [&] (bool now) { analysing.push_back (now); };
 

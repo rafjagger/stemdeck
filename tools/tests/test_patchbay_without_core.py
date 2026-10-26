@@ -128,7 +128,8 @@ class TheNamesAreTheProgramsOwn(unittest.TestCase):
                       ' : buses::portName (channel / 2) + side', outputs)
         self.assertIn("cueChannel() { return busChannelCount(); }", outputs)
         self.assertIn("channelCount() { return cueChannel() + 2; }", outputs)
-        self.assertIn('jack.open ("StemDeck"', main)
+        # The client is opened through AudioOutput (shared with -bformat).
+        self.assertIn('audio->open ("StemDeck"', main)
 
     def test_every_stemdeck_port_in_the_patchbay_exists(self):
         """Five stereo buses and the cue pair are what StemDeck puts out; no

@@ -5,6 +5,7 @@
 #include "TruthKeeper.h"
 
 #include <functional>
+#include <optional>
 #include <string>
 
 // The JUCE side of the truth keeper (TruthKeeper.h has the decisions): hears
@@ -29,6 +30,10 @@ public:
 	// Asks `url` for Core's truth now and every pollSeconds.
 	void startPolling (juce::String url);
 
+	// When Core's last announcement came, in seconds on the hi-res millisecond
+	// counter; none yet: nothing. Message thread. (R12: Core is heard.)
+	std::optional<double> lastAnnouncementSeconds() const { return lastAnnouncement; }
+
 private:
 	void oscMessageReceived (const juce::OSCMessage& message) override;
 	void timerCallback() override;
@@ -44,6 +49,7 @@ private:
 	juce::String pollUrl;
 	std::atomic<bool> busy { false };
 	truthkeeper::Refusals refusals;
+	std::optional<double> lastAnnouncement;
 	// Last: destroyed first, so a job it still waits for finds the rest alive.
 	juce::ThreadPool fetcher { juce::ThreadPoolOptions{}.withNumberOfThreads (1) };
 

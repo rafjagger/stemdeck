@@ -34,6 +34,8 @@ public:
 	int getBufferSize() const { return (int) bufferSize.load(); }
 	int getNumPorts() const { return (int) ports.size(); }
 	int getNumConnectedPorts() const;
+	// Output port `index` (in open()'s order) has a connection. Not on the audio thread.
+	bool isPortConnected (int index) const;
 	int getXrunCount() const { return xruns.load(); }
 
 private:

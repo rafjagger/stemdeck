@@ -1,6 +1,7 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include "GridAction.h"
 #include "StemDeckPlayer.h"
 #include "StemThumbnails.h"
 #include "Waveforms.h"
@@ -58,10 +59,7 @@ public:
 
 	// The deck's own controls for the session (tempo, range, key lock, vinyl,
 	// repeat, SYNC); restoring SYNC is the caller's, through onSyncToggled.
-	// Grid Adjust, as on a CDJ-3000: GRID turns it on; the jog wheel then moves
-	// the grid, and <1/2 1/2> <1 1> (the one a beat) SNAP (the downbeat onto the cue) SHIFT (take the
-	// phase aligned by ear against the sync leader) RESET (as analysed) edit it.
-	enum class GridAction { shift, halfBack, halfForward, oneBack, oneForward, doubleTempo, halveTempo, snapToCue, downbeatAtPlayhead, shiftToLeader, reset };
+	using GridAction = ::GridAction;   // GridAction.h
 
 	// The parts in the band: made children of `parent`, placed by it.
 	void addBandPartsTo (juce::Component& parent);

@@ -5,6 +5,8 @@
 #include "Buses.h"
 
 #include <array>
+#include <optional>
+#include <string>
 
 // The laws of the deck's spatial engine, free of JUCE: Core's 3D law for
 // stems, the deck-3D multiply, the steady bed and the phones weights.
@@ -42,4 +44,17 @@ namespace spatial
 			return false;
 		return mode == PhonesMode::on || ! coreHeard;
 	}
+
+	// Core is heard while its last /core/here (sent every 2 s) is at most
+	// this old. Seconds on one monotonic clock.
+	constexpr double coreHeardSeconds = 5.0;
+	constexpr bool coreHeard (std::optional<double> lastHeardSeconds, double nowSeconds)
+	{
+		return lastHeardSeconds.has_value() && nowSeconds - *lastHeardSeconds <= coreHeardSeconds;
+	}
+
+	// The mode as the app settings store it ("automatic", "on", "off");
+	// anything else is the default, automatic.
+	std::string phonesModeName (PhonesMode mode);
+	PhonesMode phonesModeFrom (const std::string& name);
 }

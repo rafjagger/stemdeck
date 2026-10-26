@@ -92,6 +92,11 @@ void JackOutput::close()
 	source = nullptr;
 }
 
+bool JackOutput::isPortConnected (int index) const
+{
+	return isRunning() && juce::isPositiveAndBelow (index, (int) ports.size()) && jack_port_connected (ports[(size_t) index]) > 0;
+}
+
 int JackOutput::getNumConnectedPorts() const
 {
 	if (! isRunning())

@@ -83,3 +83,15 @@ TEST (SpatialLaw, PhonesDecoderRunsOnlyWhereR12Says)
             EXPECT_EQ (spatial::phonesDecoderRuns (PhonesMode::automatic, connected, core), connected && ! core);
         }
 }
+
+// The PhonesMode setting as stored with the app settings; a value nobody
+// knows (a hand edit, an older file) is the default.
+TEST (SpatialLaw, PhonesModeIsStoredByName)
+{
+    using spatial::PhonesMode;
+    for (auto mode : { PhonesMode::automatic, PhonesMode::on, PhonesMode::off })
+        EXPECT_EQ (spatial::phonesModeFrom (spatial::phonesModeName (mode)), mode);
+    EXPECT_EQ (spatial::phonesModeName (PhonesMode::automatic), "automatic");
+    EXPECT_EQ (spatial::phonesModeFrom (""), PhonesMode::automatic);
+    EXPECT_EQ (spatial::phonesModeFrom ("ON"), PhonesMode::automatic);
+}

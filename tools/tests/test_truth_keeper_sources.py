@@ -53,9 +53,13 @@ class TheTruthIsResolvedOnce(unittest.TestCase):
         self.assertEqual(calls, 1)
 
     def test_the_keeper_is_given_the_hash_of_that_truth(self):
+        # Chosen and hashed in CoreTruth.cpp (shared with -bformat), handed on whole.
         main = (SOURCE / "MainComponent.cpp").read_text()
+        chosen = (SOURCE / "CoreTruth.cpp").read_text()
         self.assertIn("remote.start (truthPath, truthHash)", main)
-        self.assertIn("SHA256 (juce::File (truthPath))", main)
+        self.assertIn("coretruth::follow ({ truthPath, truthHash })", main)
+        self.assertIn("SHA256 (juce::File (truth.path))", chosen)
+        self.assertIn("truth.hash.toStdString()", chosen)
 
 
 
@@ -63,7 +67,7 @@ class RadlaPolls(unittest.TestCase):
     """Step 4: where ~/.config/a3/core names Core, the keeper polls it."""
 
     def test_a_named_core_is_polled_else_heard(self):
-        text = (SOURCE / "MainComponent.cpp").read_text()
+        text = (SOURCE / "CoreTruth.cpp").read_text()   # both screens follow it there
         self.assertIn("truthkeeper::corePath (", text)
         self.assertIn("startPolling (", text)
         self.assertIn("->start()", text)

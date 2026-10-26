@@ -1,4 +1,5 @@
 #include "JackOutput.h"
+#include "JackFormat.h"
 
 JackOutput::~JackOutput()
 {
@@ -144,7 +145,9 @@ int JackOutput::bufferSizeCallback (jack_nframes_t numFrames, void* arg)
 	{
 		self.bufferSize = numFrames;
 		self.renderBuffer.setSize ((int) self.ports.size(), (int) numFrames);
-		self.source->prepareToPlay ((int) numFrames, self.sampleRate.load());
+
+		if (jackformat::complete (numFrames, self.sampleRate.load()))
+			self.source->prepareToPlay ((int) numFrames, self.sampleRate.load());
 	}
 
 	return 0;
@@ -157,7 +160,9 @@ int JackOutput::sampleRateCallback (jack_nframes_t rate, void* arg)
 	if (! juce::approximatelyEqual ((double) rate, self.sampleRate.load()))
 	{
 		self.sampleRate = (double) rate;
-		self.source->prepareToPlay ((int) self.bufferSize.load(), (double) rate);
+
+		if (jackformat::complete (self.bufferSize.load(), (double) rate))
+			self.source->prepareToPlay ((int) self.bufferSize.load(), (double) rate);
 	}
 
 	return 0;

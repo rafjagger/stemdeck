@@ -50,6 +50,7 @@ add_executable(stemdeck-tests
     ${CMAKE_SOURCE_DIR}/Source/StemJob.cpp
     ProcessGroup.cpp
     ${CMAKE_SOURCE_DIR}/Source/ProcessGroup.cpp
+    JackFormat.cpp
     MeterBallistics.cpp
     ${CMAKE_SOURCE_DIR}/Source/MeterBallistics.cpp
     Workspaces.cpp

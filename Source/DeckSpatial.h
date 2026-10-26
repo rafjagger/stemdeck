@@ -45,7 +45,9 @@ public:
 	};
 
 	// Mean µs per process() call (S1.4 calls with 128-sample blocks) since resetTiming();
-	// 0 for a node never called. Audio thread only.
+	// 0 for a node never called. Audio thread only. The phones decoder's figure and
+	// sample count include its priming blocks after a reconnect (one per chunk, for
+	// 2048 samples): real work on the audio thread, so it counts.
 	struct Timing { double encoders, bed, cueBed, cueDecoder, phonesDecoder; };
 	// Samples each decoder ran since resetTiming(). Audio thread only.
 	struct DecoderRuns { std::int64_t cue, phones; };
@@ -76,7 +78,7 @@ private:
 	void renderMain (const Outputs&, int offset, int count);
 	void renderCue (const Outputs&, int offset, int count, bool wanted);
 	void renderPhones (const Outputs&, int offset, int count);
-	void primePhonesDecoder();
+	void primePhonesDecoderOneBlock();
 	bool cueWanted() const;
 
 	Controls state;
@@ -86,6 +88,7 @@ private:
 	DecoderGate cueGate, phonesGate;
 	bool phonesDecoding = false;       // the phones decoder ran in the last chunk
 	bool phonesDecoderStale = false;   // it may hold a tail: stopped hard, before its hold-over ran out
+	int phonesPrimeRemaining = 0;      // silence still to run through it before it decodes the deck again
 	Ramp phonesCueWeight, phonesMixWeight;
 
 	// Prepared at blockSize: 16-ch sums and decoder io, stereo bed inputs, per-sample gains.

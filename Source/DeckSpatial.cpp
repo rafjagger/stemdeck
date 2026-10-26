@@ -209,6 +209,7 @@ void DeckSpatial::prepare (double sampleRate, int newBlockSize)
 	phonesGate.reset();
 	phonesDecoderStale = false;
 	phonesDecoding = false;
+	phonesPrimeRemaining = 0;
 	resetTiming();
 }
 
@@ -351,7 +352,8 @@ void DeckSpatial::renderCue (const Outputs& out, int offset, int count, bool wan
 // Standalone phones: the cue's share plus the deck's B-format, binaural. The
 // decoder runs only while both phones outputs are rendered and the mix share
 // is above 0; turned off or mixed out it gets the cue's hold-over, unplugged it
-// stops at once (R12), and its next start primes it with silence first.
+// stops at once (R12). Its next start after such a hard stop first primes it
+// with silence, a block per chunk, before it decodes the deck again.
 void DeckSpatial::renderPhones (const Outputs& out, int offset, int count)
 {
 	float* cueWeight = scratch.getWritePointer (movingRow);
@@ -377,10 +379,20 @@ void DeckSpatial::renderPhones (const Outputs& out, int offset, int count)
 	if (phonesDecoding && ! decoding)
 		phonesDecoderStale = false;   // a hold-over that ran out leaves it empty
 	phonesDecoding = decoding;
-	if (decoding)
+	if (starting && phonesDecoderStale)
 	{
-		if (starting && phonesDecoderStale)
-			primePhonesDecoder();
+		phonesPrimeRemaining = DecoderGate::holdOverSamples;
+		phonesDecoderStale = false;
+	}
+
+	bool decodedTheDeck = false;
+	if (decoding && phonesPrimeRemaining > 0)
+	{
+		// Costs one extra decoder block per chunk, for 2048 samples after a reconnect.
+		primePhonesDecoderOneBlock();
+	}
+	else if (decoding)
+	{
 		if (wanted)
 			for (int c = 0; c < busChannels; ++c)
 				FVO::copy (phonesDecoderIo.getWritePointer (c), mainSum.getReadPointer (c), count);
@@ -389,29 +401,28 @@ void DeckSpatial::renderPhones (const Outputs& out, int offset, int count)
 		timed (phonesDecoderClock.ticks, [&] { runNode (*phonesDecoder, phonesDecoderIo, count); });
 		phonesDecoderSamples += count;
 		phonesDecoderStale = true;   // until a hold-over runs out
+		decodedTheDeck = wanted;
 	}
 	for (int side = 0; side < 2; ++side)
 	{
 		float* phones = out.phones[(size_t) side] + offset;
 		FVO::clear (phones, count);
 		addScaled (phones, cueOut.getReadPointer (side), cueWeight, cueSpan, count);
-		if (decoding && wanted)
+		if (decodedTheDeck)
 			addScaled (phones, phonesDecoderIo.getReadPointer (side), mixWeight, mixSpan, count);
 	}
 }
 
-// After a hard stop the decoder still holds the tail of what it last heard:
-// a hold-over's worth of silence, output discarded, empties it.
-void DeckSpatial::primePhonesDecoder()
+// After a hard stop the decoder still holds the tail of what it last heard: a
+// hold-over's worth of silence, output discarded, empties it. One block per
+// chunk, so a reconnect never runs more than two decoder blocks in one chunk.
+void DeckSpatial::primePhonesDecoderOneBlock()
 {
-	for (int primed = 0; primed < DecoderGate::holdOverSamples; primed += blockSize)
-	{
-		const int count = juce::jmin (blockSize, DecoderGate::holdOverSamples - primed);
-		phonesDecoderIo.clear (0, count);
-		timed (phonesDecoderClock.ticks, [&] { runNode (*phonesDecoder, phonesDecoderIo, count); });
-		phonesDecoderSamples += count;
-	}
-	phonesDecoderStale = false;
+	const int primeCount = juce::jmin (blockSize, phonesPrimeRemaining);
+	phonesDecoderIo.clear (0, primeCount);
+	timed (phonesDecoderClock.ticks, [&] { runNode (*phonesDecoder, phonesDecoderIo, primeCount); });
+	phonesDecoderSamples += primeCount;
+	phonesPrimeRemaining -= primeCount;
 }
 
 DeckSpatial::Timing DeckSpatial::timing() const

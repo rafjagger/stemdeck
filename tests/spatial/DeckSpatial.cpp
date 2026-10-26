@@ -380,17 +380,46 @@ TEST (DeckSpatial, PhonesDecoderReconnectsClean)
 	render (*deck, in);                          // decoding the mix
 	render (*deck, in, { block, false, {} });    // unplugged mid-signal: a hard stop
 
-	StemInputs oneBlock (block);
-	for (size_t c = 0; c < oneBlock.channels.size(); ++c)
-		std::copy (in.channels[c].begin(), in.channels[c].begin() + block, oneBlock.channels[c].begin());
-	const auto reconnected = render (*deck, oneBlock);
+	// Reconnected: while the decoder primes, the phones carry only the cue's share (0 at mix 1).
+	const int priming = DecoderGate::holdOverSamples;
+	StemInputs primingPart (priming), firstDecoded (block);
+	for (size_t c = 0; c < in.channels.size(); ++c)
+	{
+		std::copy (in.channels[c].begin(), in.channels[c].begin() + priming, primingPart.channels[c].begin());
+		std::copy (in.channels[c].begin() + priming, in.channels[c].begin() + priming + block, firstDecoded.channels[c].begin());
+	}
+	const auto whilePriming = render (*deck, primingPart);
+	EXPECT_TRUE (exactlySilent (whilePriming.phones[0]));
+	EXPECT_TRUE (exactlySilent (whilePriming.phones[1]));
+
+	const auto reconnected = render (*deck, firstDecoded);
 	auto fresh = preparedDeck (block, setUp);
-	const auto first = render (*fresh, oneBlock);
+	const auto first = render (*fresh, firstDecoded);
 	for (int side = 0; side < 2; ++side)
 	{
 		EXPECT_FALSE (exactlySilent (first.phones[(size_t) side]));
 		EXPECT_LE (maxDifference (reconnected.phones[(size_t) side], first.phones[(size_t) side]), 1e-5f) << "phones " << side;
 	}
+}
+
+TEST (DeckSpatial, PhonesPrimingNeverRunsMoreThanOneExtraBlockPerCall)
+{
+	juce::ScopedJuceInitialiser_GUI juceInitialiser;
+	const auto in = noiseOnAllStems();
+	auto deck = preparedDeck (block, [] (DeckSpatial::Controls& c) { busyDeck (c); c.phonesMix = 1.0f; });
+	render (*deck, in);
+	render (*deck, in, { block, false, {} });
+
+	deck->resetTiming();
+	std::int64_t previous = 0, mostInOneCall = 0;
+	render (*deck, in, { block, true, [&] (int)
+	{
+		const auto now = deck->decoderRuns().phones;
+		mostInOneCall = std::max (mostInOneCall, now - previous);
+		previous = now;
+	} });
+	EXPECT_GT (deck->decoderRuns().phones, (std::int64_t) DecoderGate::holdOverSamples) << "it primed and then decoded";
+	EXPECT_LE (mostInOneCall, (std::int64_t) (2 * block));
 }
 
 TEST (DeckSpatial, OnePhonesOutputAloneIsClearedNotDecoded)

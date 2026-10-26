@@ -107,10 +107,17 @@ class TheTemplateUnit(unittest.TestCase):
             with self.subTest(line=line):
                 self.assertIn(line, self.lines(self.TEMPLATE))
 
+    def test_a_refused_letter_does_not_restart_forever(self):
+        """Exit 2 is a usage error (refused flags), not a transient failure."""
+        self.assertIn("RestartPreventExitStatus=2", self.lines(self.TEMPLATE))
+
     def test_two_deck_unit_unchanged(self):
-        committed = subprocess.run(
+        done = subprocess.run(
             ["git", "show", "main:.config/systemd/user/stemdeck.service"],
-            cwd=REPO, capture_output=True, check=True).stdout
+            cwd=REPO, capture_output=True)
+        if done.returncode != 0:
+            self.skipTest("no local main ref to compare with (tarball or detached checkout)")
+        committed = done.stdout
         self.assertEqual(committed, self.TWO_DECK.read_bytes())
 
 

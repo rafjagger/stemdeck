@@ -32,4 +32,7 @@ ExecStartPre=/usr/lib/stemdeck/rig-keep-the-screen.sh remember
 ExecStart=/usr/bin/stemdeck -bformat --deck %i --fullscreen
 ExecStartPost=/usr/lib/stemdeck/rig-keep-the-screen.sh restore
 Restart=on-failure
+# Exit 2 is a usage error (a refused flag or deck letter), not a transient
+# failure: restarting would loop every 5 s and rerun the screen steps.
+RestartPreventExitStatus=2
 RestartSec=5

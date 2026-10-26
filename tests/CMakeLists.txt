@@ -172,6 +172,7 @@ add_executable(stemdeck-spatial-tests
     spatial/DeckSpatialMotion.cpp
     spatial/DeckHost.cpp
     spatial/OneDeck.cpp
+    spatial/OneDeckSync.cpp
     spatial/StemCreatorLock.cpp
     spatial/AnalysisCache.cpp
     ${CMAKE_SOURCE_DIR}/Source/SteadyBed.cpp
@@ -191,6 +192,15 @@ add_executable(stemdeck-spatial-tests
     ${CMAKE_SOURCE_DIR}/Source/BarPhase.cpp
     ${CMAKE_SOURCE_DIR}/Source/CachedGrid.cpp
     ${CMAKE_SOURCE_DIR}/Source/FollowLeader.cpp
+    ${CMAKE_SOURCE_DIR}/Source/DeckFollow.cpp
+    ${CMAKE_SOURCE_DIR}/Source/OneDeckSync.cpp
+    ${CMAKE_SOURCE_DIR}/Source/MasterDeck.cpp
+    ${CMAKE_SOURCE_DIR}/Source/PioneerClock.cpp
+    ${CMAKE_SOURCE_DIR}/Source/ProLinkPackets.cpp
+    ${CMAKE_SOURCE_DIR}/Source/ProLinkReceiver.cpp
+    ${CMAKE_SOURCE_DIR}/Source/ProLinkSender.cpp
+    ${CMAKE_SOURCE_DIR}/Source/BeatScheduler.cpp
+    ${CMAKE_SOURCE_DIR}/Source/DeckInstance.cpp
     ${CMAKE_SOURCE_DIR}/Source/DeckMotion.cpp
     ${CMAKE_SOURCE_DIR}/Source/MotionLite.cpp
     ${CMAKE_SOURCE_DIR}/Source/StemDeckPlayer.cpp

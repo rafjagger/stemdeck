@@ -14,4 +14,8 @@ struct DeckInstance
 	std::string sessionDir() const;     // "A", under ~/.config/StemDeck/
 	int oscDeck() const;                // A -> 1, B -> 2 (the truth's {deck} range)
 	std::string title() const;          // "StemDeck A"
+	// Its player number on the link: two instances on one host share the
+	// settings file, and a receiver drops its own number's beats. A is 6 (the
+	// two-deck app's), B is 8 (7 is beat-analyzer's default).
+	int proLinkDevice() const;
 };

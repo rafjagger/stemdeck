@@ -10,11 +10,12 @@
 #include <variant>
 #include <vector>
 
-// StemDeck on the Pioneer network: a virtual CDJ that listens for beat and
-// status packets and announces itself every 1.5 s. Ported from beat-analyzer's
+// StemDeck on the Pro DJ Link network: a player on the link that listens for
+// beat and status packets and announces itself every 1.5 s. Ported from beat-analyzer's
 // PioneerReceiver (src/osc/pioneer_receiver.cpp there): one thread, poll()
 // over three UDP sockets. SO_REUSEADDR, as beat-analyzer does, so both can
-// run on one machine and both get the broadcast beats.
+// run on one machine and both get the broadcast beats -- as do two one-deck
+// instances (S4.7; a unicast would reach only the socket bound last).
 //
 // The thread only parses and queues; the message thread drains the queue.
 // Each event carries the time it arrived, so a busy UI does not shift beats.
@@ -35,10 +36,13 @@ public:
 	bool start (int deviceNumber, const osctruth::ProLinkPorts& ports,
 				const std::string& name = "StemDeck");
 	void stop();
+	// Use this interface instead of finding one at start(): the tests' loopback
+	// (127.0.0.1, broadcast 127.255.255.255). Network byte order.
+	void useInterface (uint32_t localIpNetworkOrder, uint32_t broadcastIpNetworkOrder);
 	bool isRunning() const { return running.load(); }
 	std::string error() const;
 
-	// The subnet's broadcast address the virtual CDJ announces to, in network
+	// The subnet's broadcast address the player announces to, in network
 	// byte order; 0 until start() has found an interface.
 	uint32_t broadcastAddress() const { return broadcastIp; }
 
@@ -59,6 +63,7 @@ private:
 	std::string name;
 	std::array<uint8_t, 6> mac {};
 	uint32_t localIp = 0, broadcastIp = 0;
+	uint32_t forcedLocalIp = 0, forcedBroadcastIp = 0;   // useInterface(); 0: find one
 
 	mutable std::mutex lock;
 	std::vector<Event> events;

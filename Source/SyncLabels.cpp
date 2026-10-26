@@ -37,5 +37,9 @@ namespace syncLabels
 
 	std::string masterTooltip() { return "This deck gives the beat to the DJ network (its tempo master)"; }
 
+	std::string linkSyncTooltip() { return "Lock tempo and beats to the master on the DJ network: another StemDeck deck, or a player"; }
+
+	std::string linkUnavailable() { return "SYNC and MASTER need the DJ network's ports in a3-osc.json"; }
+
 	std::string gridTooltip() { return "Grid Adjust: the controller's jog wheel moves the beat grid"; }
 }

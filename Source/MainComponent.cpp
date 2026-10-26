@@ -267,10 +267,7 @@ void MainComponent::sendPreview()
 //==============================================================================
 void MainComponent::setSyncBent (int deckIndex, bool bent)
 {
-	syncBent[(size_t) deckIndex] = bent;
-	decks[(size_t) deckIndex]->setSyncBpmOnly (bent);
-	if (bent)
-		players[(size_t) deckIndex]->setSyncNudge (1.0);
+	deckfollow::setBent (*decks[(size_t) deckIndex], *players[(size_t) deckIndex], syncBent[(size_t) deckIndex], bent);
 }
 
 void MainComponent::setSync (int deckIndex, bool enabled)
@@ -376,10 +373,7 @@ void MainComponent::followPioneer()
 		if (! pioSynced[(size_t) d] || ! players[(size_t) d]->getBeatGrid().isValid())
 			continue;
 
-		FollowInput in;
-		in.leaderBpm = pioClock.bpm();
-		in.leaderBeatPhase = pioClock.beatPhaseAt (now);
-		in.leaderPlaying = pioClock.isLive (now); // silent master: tempo held, phase left alone
+		auto in = leaderInputAt (pioClock, now); // silent master: tempo held, phase left alone
 		in.anyScratching = players[(size_t) d]->isScratching();
 		in.multiple = pioMultiple[(size_t) d];
 
@@ -962,7 +956,7 @@ void MainComponent::setMasterDeck (int deckIndex)
 }
 
 // On the Pioneer network while following (PIO) or sending (a master deck):
-// the receiver announces the virtual CDJ and listens, the sender sends the
+// the receiver announces our player on the link and listens, the sender sends the
 // master deck's beat. Off the network when neither.
 void MainComponent::updateNetwork()
 {
@@ -988,30 +982,7 @@ void MainComponent::updateNetwork()
 // result put on the deck.
 double MainComponent::applyFollow (int deckIndex, FollowInput in, double followerPosition)
 {
-	auto& follower = *players[(size_t) deckIndex];
-	const auto grid = follower.getBeatGrid();
-
-	if (std::abs (follower.getPitchBend() - 1.0) > 1e-4 && ! syncBent[(size_t) deckIndex])
-		setSyncBent (deckIndex, true);
-	if (syncBent[(size_t) deckIndex])
-		in.leaderPlaying = false;   // the tempo only: the beat is the hand's
-
-	in.followerGridBpm = grid.bpm;
-	in.followerBeatPhase = grid.beatsAt (followerPosition);
-	in.followerSpeed = follower.getSpeed();
-	in.followerEffectiveRate = follower.getEffectiveRate();
-	in.followerPlaying = follower.isPlaying();
-
-	const auto out = followLeader (in);
-
-	if (out.tempo)
-		decks[(size_t) deckIndex]->setTempoFromSync (*out.tempo);
-
-	if (out.jumpBeats)
-		follower.setPosition (follower.getPosition() + *out.jumpBeats * grid.beatLength());
-
-	follower.setSyncNudge (out.nudge);
-	return out.multiple;
+	return deckfollow::apply (*decks[(size_t) deckIndex], *players[(size_t) deckIndex], syncBent[(size_t) deckIndex], in, followerPosition);
 }
 
 void MainComponent::loadDroppedSet (const juce::String& setId, int deckIndex)

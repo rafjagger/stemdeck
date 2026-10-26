@@ -48,3 +48,14 @@ TEST (SyncLabels, NoLabelNamesABrand)
 		for (const auto* brand : { "PIO", "Pioneer", "CDJ", "XDJ", "rekordbox" })
 			EXPECT_EQ (label.find (brand), std::string::npos) << label;
 }
+
+// S4.7: the one-deck screen's link texts, under the same rule (and no "virtual" player).
+TEST (SyncLabels, TheOneDeckLinkLabelsNameNoBrand)
+{
+	for (const auto& label : { syncLabels::linkSyncTooltip(), syncLabels::linkUnavailable() })
+	{
+		EXPECT_FALSE (label.empty());
+		for (const auto* brand : { "PIO", "Pioneer", "CDJ", "XDJ", "rekordbox", "virtual" })
+			EXPECT_EQ (label.find (brand), std::string::npos) << label;
+	}
+}

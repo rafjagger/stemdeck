@@ -30,6 +30,7 @@
 #include "AppSettings.h"
 #include "Preview.h"
 #include "SectionAnalysis.h"
+#include "DeckFollow.h"
 #include "FollowLeader.h"
 #include "PioneerClock.h"
 #include "OscTruth.h"

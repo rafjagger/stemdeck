@@ -8,7 +8,7 @@
 #include <vector>
 
 // Pioneer Pro DJ Link, the parts StemDeck needs to follow the tempo master:
-// beat packets, CDJ status packets and the keep-alive a virtual CDJ sends.
+// beat packets, CDJ status packets and the keep-alive a player on the link sends.
 // Layout as beat-analyzer reads it (include/osc/pioneer_receiver.h there),
 // after the dysentery protocol analysis. Pure: no sockets, no JUCE.
 namespace prolink
@@ -47,7 +47,7 @@ namespace prolink
 	std::vector<uint8_t> statusPacket (int device, const std::string& name, double bpm, double pitch,
 									   bool master, bool playing, uint32_t beatNumber, int beatInBar);
 
-	// The keep-alive a virtual CDJ announces itself with, every 1.5 s on port 50000.
+	// The keep-alive a player announces itself with, every 1.5 s on port 50000.
 	std::vector<uint8_t> keepAlive (int deviceNumber, const std::string& name,
 									const std::array<uint8_t, 6>& mac, uint32_t ipNetworkOrder);
 }

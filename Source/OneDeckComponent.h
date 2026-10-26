@@ -9,10 +9,13 @@
 #include "DeckInstance.h"
 #include "DeckLink.h"
 #include "OneDeckAudio.h"
+#include "OneDeckSync.h"
 #include "OneDeckView.h"
 #include "PanelDevice.h"
 #include "PanelMapOneDeck.h"
 #include "PanelOwnership.h"
+#include "ProLinkReceiver.h"
+#include "ProLinkSender.h"
 #include "RecorderControls.h"
 #include "Session.h"
 #include "StemCreatorLink.h"
@@ -23,7 +26,9 @@
 // StemDeck-<X> with the 22 one-deck ports and rec_L/R, its own session
 // (~/.config/StemDeck/<X>/session.xml, imported once from the two-deck one),
 // the library, the stem creator and the recorder as the two-deck screen has
-// them. No buses, no Auto DJ (B15), no remote link yet. The A³ Motion panel
+// them. No buses, no Auto DJ (B15). SYNC and MASTER meet the other
+// instances' decks on the link (OneDeckSync, B17), as player
+// DeckInstance::proLinkDevice(). The A³ Motion panel
 // (PanelMapOneDeck, B16) belongs to one instance: the one named in
 // ~/.config/StemDeck/panel.lock, deck A when there is none (PanelOwnership).
 //
@@ -60,6 +65,11 @@ private:
 	void handlePanel (const panel1::Event&);
 	void showPanel();
 	void showSettings();
+	// The link (S4.7): joined while SYNC or MASTER is on; the MASTER deck publishes.
+	void startSync();
+	void masterChanged();
+	void updateLink();
+	void showSyncStatus();
 	void timerCallback() override;
 
 	const DeckInstance instance;
@@ -96,6 +106,12 @@ private:
 	OneDeckView view { deckAudio, formatManager, instance.letter - 'A' };
 	juce::Label deckLabel, deviceStatus;
 	juce::TextButton autoDjButton { "AUTO DJ" }, syncSourceButton { "SYNC: DECK" }, settingsButton { "Settings" };
+
+	osctruth::ProLinkPorts linkPorts;   // from the truth; incomplete: SYNC and MASTER greyed
+	OneDeckSync sync { deckAudio.host().player(), view.deckPanel() };
+	ProLinkReceiver link;
+	ProLinkSender linkSender;   // reads the player: stopped before it goes
+	int linkRetryCountdown = 0;
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (OneDeckComponent)
 };

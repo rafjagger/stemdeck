@@ -213,7 +213,8 @@ OneDeckView::OneDeckView (OneDeckAudio& a, juce::AudioFormatManager& formats, in
 	addAndMakeVisible (wave);
 	addAndMakeVisible (panel);
 	panel.addBandPartsTo (*this);
-	// Across instances (S4.7): nothing in this process to sync to or to lead.
+	// Across instances on the link (S4.7): the owner makes the keys pressable
+	// once it knows the truth has the link's ports.
 	panel.setSyncAvailable (false);
 	panel.onGridEdit = [this] (DeckPanel::GridAction action, double seconds)
 	{

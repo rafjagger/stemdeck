@@ -7,6 +7,7 @@
 #include "OscTruthFile.h"
 #include "SettingsPanel.h"
 #include "SurfaceLayout.h"
+#include "SyncLabels.h"
 #include "Tips.h"
 
 #include <iostream>
@@ -58,11 +59,11 @@ OneDeckComponent::OneDeckComponent (DeckInstance deck)
 		addAndMakeVisible (label);
 
 	// Shown as the two-deck bar has them, not pressable: Auto DJ needs two
-	// decks (B15); SYNC's source and the master are across instances (S4.7).
+	// decks (B15); SYNC's source is always the link here (S4.7), and the
+	// button shows what the link is doing.
 	autoDjButton.setEnabled (false);
 	autoDjButton.setTooltip ("Auto DJ needs two decks: the two-deck StemDeck");
 	syncSourceButton.setEnabled (false);
-	syncSourceButton.setTooltip ("SYNC across StemDeck instances: not yet");
 	settingsButton.onClick = [this] { showSettings(); };
 	for (auto* button : { &autoDjButton, &syncSourceButton, &settingsButton })
 	{
@@ -103,6 +104,7 @@ OneDeckComponent::OneDeckComponent (DeckInstance deck)
 	deckLink = std::make_unique<DeckLink> (instance.oscDeck(), host.spatialPorts().settings().deckThreeD);
 	deckLink->start (truth.path, truth.hash);
 
+	startSync();
 	setSize (768, 1024);
 	restoreSession();
 	startPanel();
@@ -114,6 +116,8 @@ OneDeckComponent::OneDeckComponent (DeckInstance deck)
 OneDeckComponent::~OneDeckComponent()
 {
 	stopTimer();
+	linkSender.stop();   // before the player it reads
+	link.stop();
 	deckLink.reset();   // before the deck whose 3D it writes
 	panelDevice.reset();   // dark, and no more presses
 	panelOwnership.release();
@@ -187,8 +191,10 @@ void OneDeckComponent::restoreSession()
 	if (deck.setId.isNotEmpty())
 		if (const auto* set = library.findSet (library.idFromStored (deck.setId)))
 			loadSet (*set);
-	// Tempo, range, key lock and each stem's GAIN, MUTE and CUE.
+	// Tempo, range, key lock, SYNC (lit only with the link) and each stem's GAIN, MUTE and CUE.
 	view.restoreState (deck);
+	sync.setSynced (view.deckPanel().isSyncEnabled());
+	updateLink();
 	if (player.isLoaded())
 	{
 		host.restoreTransport (deck);
@@ -227,6 +233,74 @@ void OneDeckComponent::saveSession()
 	file.getParentDirectory().createDirectory();
 	if (file.replaceWithText (text))
 		lastSessionText = text;
+}
+
+//==============================================================================
+void OneDeckComponent::startSync()
+{
+	std::string truthError;
+	linkPorts = osctruth::proLinkPortsFrom (osctruth::readListeners (truth.path, truthError));
+
+	auto& panel = view.deckPanel();
+	panel.setSyncTooltip (syncLabels::linkSyncTooltip());
+	panel.setSyncAvailable (linkPorts.complete());
+	panel.onSyncToggled = [this] (bool on)
+	{
+		sync.setSynced (on);
+		updateLink();
+	};
+	panel.onMasterPressed = [this]
+	{
+		sync.pressMaster (nowSeconds());
+		masterChanged();
+	};
+	showSyncStatus();
+}
+
+void OneDeckComponent::masterChanged()
+{
+	linkSender.setMaster (sync.isMaster() ? &deckAudio.host().player() : nullptr);
+	updateLink();
+}
+
+// On the link while SYNC or MASTER is on, as the two-deck app; off it otherwise.
+void OneDeckComponent::updateLink()
+{
+	if (! sync.wantsLink())
+	{
+		linkSender.stop();
+		link.stop();
+		return;
+	}
+
+	const auto device = instance.proLinkDevice();
+	if (! link.isRunning() && link.start (device, linkPorts, instance.title()))
+		sync.joined (nowSeconds());
+
+	if (sync.isMaster() && link.isRunning() && ! linkSender.isRunning())
+		linkSender.start (device, link.broadcastAddress(), linkPorts, instance.title());
+	else if (! sync.isMaster())
+		linkSender.stop();
+}
+
+void OneDeckComponent::showSyncStatus()
+{
+	if (! linkPorts.complete())
+	{
+		syncSourceButton.setButtonText (syncLabels::sourceButton (true));
+		syncSourceButton.setTooltip (syncLabels::linkUnavailable());
+		return;
+	}
+	syncSourceButton.setTooltip (syncLabels::linkSyncTooltip());
+
+	const auto now = nowSeconds();
+	const auto& clock = sync.clock();
+	const auto text = ! sync.wantsLink()   ? syncLabels::sourceButton (true)
+					: ! link.isRunning() ? syncLabels::error (link.error())
+					: sync.isMaster()    ? syncLabels::sendingMaster (instance.letter - 'A')
+					: clock.bpm() <= 0.0 ? syncLabels::nothingHeard()
+										 : syncLabels::following (clock.bpm(), clock.isLive (now) ? clock.leader (now) : 0);
+	syncSourceButton.setButtonText (juce::String::fromUTF8 (text.c_str()));
 }
 
 //==============================================================================
@@ -380,6 +454,16 @@ void OneDeckComponent::showSettings()
 void OneDeckComponent::timerCallback()
 {
 	view.refresh();
+	sync.hear (link.drain());
+	if (sync.update (nowSeconds()))
+		masterChanged();   // another deck took MASTER
+	// SYNC or MASTER on but not on the link (no network yet, ports busy): again every two seconds.
+	if (sync.wantsLink() && ! link.isRunning() && --linkRetryCountdown <= 0)
+	{
+		linkRetryCountdown = 2 * refreshHz;
+		updateLink();
+	}
+	showSyncStatus();
 	updatePhonesDecoder();
 	if (--panelCountdown <= 0)
 	{

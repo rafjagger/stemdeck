@@ -21,5 +21,8 @@ namespace syncLabels
 	std::string sendingMaster (int deck);
 
 	std::string masterTooltip();
+	// One deck per instance (S4.7): SYNC follows the link's master.
+	std::string linkSyncTooltip();
+	std::string linkUnavailable();
 	std::string gridTooltip();
 }

@@ -18,3 +18,12 @@ TEST (DeckInstance, NamesFollowTheLetter)
 	EXPECT_EQ (b.oscDeck(), 2);
 	EXPECT_EQ (b.title(), "StemDeck B");
 }
+
+// Two instances on one host share the settings file, so the player number on
+// the link comes from the letter: the receiver drops its own number's beats.
+// A is player 6 (the two-deck app's), B 8 (7 is beat-analyzer's default).
+TEST (DeckInstance, ProLinkPlayerFollowsTheLetter)
+{
+	EXPECT_EQ ((DeckInstance { 'A' }).proLinkDevice(), 6);
+	EXPECT_EQ ((DeckInstance { 'B' }).proLinkDevice(), 8);
+}

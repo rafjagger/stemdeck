@@ -33,6 +33,9 @@ public:
 	enum class Health { fine, warning, failed };
 	struct Status { juce::String text; Health health = Health::fine; };
 	Status status (int wantedDeviceOutputs) const;
+	// The line's colour, and the line with why there are no spatial outputs (empty: none missing).
+	static juce::Colour colourOf (Health);
+	static juce::String withSpatialError (const juce::String& text, const juce::String& spatialError);
 
 	void showDeviceSettings();
 	std::function<void()> onDeviceChanged;

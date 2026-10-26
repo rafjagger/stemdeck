@@ -143,7 +143,6 @@ private:
 
 	juce::String spatialError;
 	void createSpatialPorts();
-	juce::String withSpatialError (const juce::String& status) const;
 
 	StemThumbnails thumbsA { formatManager, thumbCache }, thumbsB { formatManager, thumbCache };
 	ScrollingWaveform waveA { playerA, thumbsA, 0 }, waveB { playerB, thumbsB, 1 };

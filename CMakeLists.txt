@@ -141,6 +141,7 @@ target_sources(StemDeck PRIVATE
     Source/StemJob.cpp
     Source/StemCreator.cpp
     Source/StemCreatorLock.cpp
+    Source/FileLock.cpp
     Source/ProcessGroup.cpp
     Source/MeterBallistics.cpp
     Source/Session.cpp

@@ -3,6 +3,7 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include "FileLock.h"
 
 // Two StemDeck instances (-bformat --deck A and B) share the library folder
 // and may hold the same queued job: each imported the two-deck session's
@@ -17,9 +18,9 @@ public:
 	~StemCreatorLock();
 
 	// unavailable: the lock file cannot be made (no folder) -- run without it.
-	enum class Result { acquired, heldElsewhere, unavailable };
+	using Result = FileLock::Result;
 	Result tryAcquire();
-	void release();
+	void release() { lock.release(); }
 
 	// Held: the job's set went into the library just now.
 	void recordDone (const juce::File& input, const juce::String& folder, const juce::String& track);
@@ -28,7 +29,7 @@ public:
 
 private:
 	juce::File libraryFolder;
-	int descriptor = -1;
+	FileLock lock;
 
 	JUCE_DECLARE_NON_COPYABLE (StemCreatorLock)
 };

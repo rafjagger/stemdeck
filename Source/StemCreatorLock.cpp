@@ -2,10 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "StemCreatorLock.h"
 
-#include <fcntl.h>
-#include <sys/file.h>
-#include <unistd.h>
-
 namespace
 {
 constexpr int journalLines = 200;   // what is kept; a waiting job is minutes old, not hundreds of jobs
@@ -16,40 +12,16 @@ juce::String journalKey (const juce::File& input, const juce::String& folder, co
 }
 }
 
-StemCreatorLock::StemCreatorLock (const juce::File& folder) : libraryFolder (folder) {}
-
-StemCreatorLock::~StemCreatorLock()
+StemCreatorLock::StemCreatorLock (const juce::File& folder)
+	: libraryFolder (folder), lock (folder.getChildFile ("stemcreator.lock"))
 {
-	release();
 }
+
+StemCreatorLock::~StemCreatorLock() = default;
 
 StemCreatorLock::Result StemCreatorLock::tryAcquire()
 {
-	if (descriptor >= 0)
-		return Result::acquired;
-	if (! libraryFolder.isDirectory())
-		return Result::unavailable;
-
-	const auto path = libraryFolder.getChildFile ("stemcreator.lock").getFullPathName();
-	const auto fd = ::open (path.toRawUTF8(), O_RDWR | O_CREAT | O_CLOEXEC, 0644);
-	if (fd < 0)
-		return Result::unavailable;
-	if (::flock (fd, LOCK_EX | LOCK_NB) != 0)
-	{
-		::close (fd);
-		return Result::heldElsewhere;
-	}
-	descriptor = fd;
-	return Result::acquired;
-}
-
-void StemCreatorLock::release()
-{
-	if (descriptor < 0)
-		return;
-	::flock (descriptor, LOCK_UN);
-	::close (descriptor);
-	descriptor = -1;
+	return libraryFolder.isDirectory() ? lock.tryAcquire() : Result::unavailable;
 }
 
 // "<ms>\t<input>\t<folder>\t<track>" a line, the newest last.

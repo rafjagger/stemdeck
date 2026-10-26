@@ -194,13 +194,8 @@ void OneDeckComponent::updateDeviceStatus()
 {
 	// Without JACK only the phones play on a device short of all 22 outputs.
 	const auto status = audio->status (outputs::oneDeck::channelCount());
-	auto text = status.text;
-	if (spatialError.isNotEmpty())
-		text << "  |  No spatial outputs: " << spatialError;
-	deviceStatus.setText (text, juce::dontSendNotification);
-	deviceStatus.setColour (juce::Label::textColourId, status.health == AudioOutput::Health::failed  ? Theme::mute
-													 : status.health == AudioOutput::Health::warning ? Theme::cue
-																									 : Theme::textDim);
+	deviceStatus.setText (AudioOutput::withSpatialError (status.text, spatialError), juce::dontSendNotification);
+	deviceStatus.setColour (juce::Label::textColourId, AudioOutput::colourOf (status.health));
 }
 
 void OneDeckComponent::showSettings()

@@ -50,7 +50,6 @@ add_executable(stemdeck-tests
     ${CMAKE_SOURCE_DIR}/Source/StemJob.cpp
     ProcessGroup.cpp
     ${CMAKE_SOURCE_DIR}/Source/ProcessGroup.cpp
-    ${CMAKE_SOURCE_DIR}/Source/StemNames.cpp
     MeterBallistics.cpp
     ${CMAKE_SOURCE_DIR}/Source/MeterBallistics.cpp
     Workspaces.cpp
@@ -169,6 +168,7 @@ add_executable(stemdeck-spatial-tests
     spatial/DeckHost.cpp
     spatial/OneDeck.cpp
     spatial/StemCreatorLock.cpp
+    spatial/AnalysisCache.cpp
     ${CMAKE_SOURCE_DIR}/Source/SteadyBed.cpp
     ${CMAKE_SOURCE_DIR}/Source/DeckSpatial.cpp
     ${CMAKE_SOURCE_DIR}/Source/DeckSpatialPorts.cpp
@@ -176,6 +176,7 @@ add_executable(stemdeck-spatial-tests
     ${CMAKE_SOURCE_DIR}/Source/OneDeckAudio.cpp
     ${CMAKE_SOURCE_DIR}/Source/StemCreator.cpp
     ${CMAKE_SOURCE_DIR}/Source/StemCreatorLock.cpp
+    ${CMAKE_SOURCE_DIR}/Source/FileLock.cpp
     ${CMAKE_SOURCE_DIR}/Source/StemJob.cpp
     ${CMAKE_SOURCE_DIR}/Source/ProcessGroup.cpp
     ${CMAKE_SOURCE_DIR}/Source/StemNames.cpp

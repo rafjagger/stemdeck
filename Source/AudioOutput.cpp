@@ -105,6 +105,16 @@ AudioOutput::Status AudioOutput::status (int wantedDeviceOutputs) const
 	return { text, activeOutputs < wantedDeviceOutputs ? Health::warning : Health::fine };
 }
 
+juce::Colour AudioOutput::colourOf (Health health)
+{
+	return health == Health::failed ? Theme::mute : health == Health::warning ? Theme::cue : Theme::textDim;
+}
+
+juce::String AudioOutput::withSpatialError (const juce::String& text, const juce::String& spatialError)
+{
+	return spatialError.isEmpty() ? text : text + "  |  No spatial outputs: " + spatialError;
+}
+
 void AudioOutput::showDeviceSettings()
 {
 	juce::DialogWindow::LaunchOptions dialog;

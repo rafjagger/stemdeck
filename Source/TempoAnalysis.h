@@ -6,6 +6,7 @@
 #include "BarPhase.h"
 #include "CachedGrid.h"
 #include <optional>
+#include <set>
 
 // Constant-tempo beat grid: beats at firstBeat + n * 60 / bpm (seconds).
 struct BeatGrid
@@ -90,9 +91,14 @@ private:
 	static juce::String keyFor (const StemSet& set);
 	juce::File featuresFileFor (const StemSet& set) const;
 	static CachedGrid::Entry entryOf (const juce::XmlElement& element);
+	void touch (const juce::String& key);
 	void write();
+	void mergeFromDisk();
 
 	juce::File file;
 	std::unique_ptr<juce::XmlElement> xml;
 	bool unwritten = false;
+	// The sets this process changed since its last write: only these go
+	// into the file, the rest is taken from it (two -bformat instances).
+	std::set<juce::String> touched;
 };

@@ -1033,11 +1033,6 @@ void MainComponent::createSpatialPorts()
 			spatialError = error;
 }
 
-juce::String MainComponent::withSpatialError (const juce::String& status) const
-{
-	return spatialError.isEmpty() ? status : status + "  |  No spatial outputs: " + spatialError;
-}
-
 void MainComponent::initialiseAudio()
 {
 	juce::StringArray portNames;
@@ -1057,10 +1052,8 @@ void MainComponent::updateDeviceStatus()
 {
 	// Summed down means the buses; the cue and spatial ports are only ever left out.
 	const auto status = audio->status (outputs::stereo::channelCount());
-	deviceStatus.setText (withSpatialError (status.text), juce::dontSendNotification);
-	deviceStatus.setColour (juce::Label::textColourId, status.health == AudioOutput::Health::failed  ? Theme::mute
-													 : status.health == AudioOutput::Health::warning ? Theme::cue
-																									 : Theme::textDim);
+	deviceStatus.setText (AudioOutput::withSpatialError (status.text, spatialError), juce::dontSendNotification);
+	deviceStatus.setColour (juce::Label::textColourId, AudioOutput::colourOf (status.health));
 }
 
 void MainComponent::goToWorkspace (int number)

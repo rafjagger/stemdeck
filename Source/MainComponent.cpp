@@ -193,6 +193,7 @@ MainComponent::MainComponent()
 		bind ("7890"[s], [this, s] (bool down) { if (down) mixer.strip (1).toggleMute (s); });
 	}
 
+	createSpatialPorts();
 	initialiseAudio();
 
 	if (appProperties.getUserSettings()->getValue ("syncSource") == "pio")
@@ -1410,6 +1411,18 @@ void MainComponent::loadDroppedSet (const juce::String& setId, int deckIndex)
 }
 
 //==============================================================================
+void MainComponent::createSpatialPorts()
+{
+	for (size_t d = 0; d < spatialPorts.size(); ++d)
+		if (const auto error = spatialPorts[d].create(); error.isNotEmpty() && spatialError.isEmpty())
+			spatialError = error;
+}
+
+juce::String MainComponent::withSpatialError (const juce::String& status) const
+{
+	return spatialError.isEmpty() ? status : status + "  |  No spatial outputs: " + spatialError;
+}
+
 void MainComponent::initialiseAudio()
 {
 	juce::StringArray portNames;
@@ -1475,7 +1488,7 @@ void MainComponent::updateDeviceStatus()
 		else
 			text = "The JACK server has stopped - please restart StemDeck";
 
-		deviceStatus.setText (text, juce::dontSendNotification);
+		deviceStatus.setText (withSpatialError (text), juce::dontSendNotification);
 		deviceStatus.setColour (juce::Label::textColourId, running ? Theme::textDim : Theme::mute);
 		return;
 	}
@@ -1484,13 +1497,14 @@ void MainComponent::updateDeviceStatus()
 
 	if (device == nullptr)
 	{
-		deviceStatus.setText (juce::String ("No audio device open"), juce::dontSendNotification);
+		deviceStatus.setText (withSpatialError ("No audio device open"), juce::dontSendNotification);
 		deviceStatus.setColour (juce::Label::textColourId, Theme::mute);
 		return;
 	}
 
 	const auto activeOutputs = device->getActiveOutputChannels().countNumberOfSetBits();
-	const auto wanted = outputs::channelCount();
+	// Summed down means the buses; the cue and spatial ports are only ever left out.
+	const auto wanted = outputs::stereo::channelCount();
 	auto text = deviceManager.getCurrentAudioDeviceType() + ": " + device->getName()
 			  + "  |  " + juce::String (device->getCurrentSampleRate(), 0) + " Hz, "
 			  + juce::String (device->getCurrentBufferSizeSamples()) + " Samples  |  "
@@ -1499,7 +1513,7 @@ void MainComponent::updateDeviceStatus()
 	if (activeOutputs < wanted)
 		text << "  (summed down)";
 
-	deviceStatus.setText (text, juce::dontSendNotification);
+	deviceStatus.setText (withSpatialError (text), juce::dontSendNotification);
 	deviceStatus.setColour (juce::Label::textColourId, activeOutputs < wanted ? Theme::cue : Theme::textDim);
 }
 
@@ -1641,6 +1655,7 @@ void MainComponent::prepareToPlay (int samplesPerBlockExpected, double sampleRat
 	{
 		deckBuffers[(size_t) d].setSize (StemDeckPlayer::numOutputChannels, maxBlock);
 		players[(size_t) d]->prepareToPlay (samplesPerBlockExpected, sampleRate);
+		spatialPorts[(size_t) d].prepare (sampleRate, samplesPerBlockExpected);
 
 		const auto& player = *players[(size_t) d];
 		for (int s = 0; s < StemSet::numStems; ++s)
@@ -1686,6 +1701,7 @@ void MainComponent::getNextAudioBlock (const juce::AudioSourceChannelInfo& buffe
 			deckBuffer.setSize (StemDeckPlayer::numOutputChannels, numSamples, false, false, true);
 
 		player.getNextAudioBlock (juce::AudioSourceChannelInfo (&deckBuffer, 0, numSamples));
+		spatialPorts[(size_t) d].render (player, busBuffer, outputs::spatialFirstChannel (d), numSamples);
 
 		// Each stem onto every bus it is switched to, post fader; ramped over
 		// 10 ms on any change.
@@ -1714,8 +1730,9 @@ void MainComponent::getNextAudioBlock (const juce::AudioSourceChannelInfo& buffe
 	}
 
 	// The fixed 6 dB trim on every bus and on the cue pair, before the
-	// meters, so they show what leaves StemDeck.
-	for (int ch = 0; ch < numBusChannels; ++ch)
+	// meters, so they show what leaves StemDeck. The spatial ports carry it
+	// already (DeckSpatial).
+	for (int ch = 0; ch < outputs::stereo::channelCount(); ++ch)
 		busBuffer.applyGain (ch, 0, numSamples, buses::trim);
 
 	// The desk's SA meter: the AUX bus as it goes to the return, side by side.
@@ -1732,14 +1749,14 @@ void MainComponent::getNextAudioBlock (const juce::AudioSourceChannelInfo& buffe
 	}
 
 	// One output per bus channel; with fewer outputs (e.g. plain stereo for
-	// monitoring) the buses are summed down. The cue pair only goes to
-	// outputs of its own: summed down it would land on bus 1.
+	// monitoring) the buses are summed down. The cue pair and the spatial
+	// ports only go to outputs of their own: summed down they would land on
+	// a bus (outputs::foldsInto).
 	bufferToFill.clearActiveBufferRegion();
 
-	if (numOut > 0)
-		for (int ch = 0; ch < numBusChannels; ++ch)
-			if (ch < outputs::cueChannel() || ch < numOut)
-				out.addFrom (ch % numOut, bufferToFill.startSample, busBuffer, ch, 0, numSamples);
+	for (int ch = 0; ch < numBusChannels; ++ch)
+		if (const auto target = outputs::foldsInto (ch, numOut); target >= 0)
+			out.addFrom (target, bufferToFill.startSample, busBuffer, ch, 0, numSamples);
 }
 
 void MainComponent::releaseResources()

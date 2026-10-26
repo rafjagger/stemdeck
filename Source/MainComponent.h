@@ -22,6 +22,7 @@
 #include "PanelDevice.h"
 #include "Waveforms.h"
 #include "JackOutput.h"
+#include "DeckSpatialPorts.h"
 #include "Theme.h"
 #include "TempoAnalysis.h"
 #include "Preview.h"
@@ -44,7 +45,8 @@
 // fader. Each stem of each deck is on any of them by its bus switches. With a
 // JACK server running these are 10 ports (deck1_L ... deck4_R, aux_L/R),
 // otherwise a regular audio device is used. No cue or phones of its own: the
-// cue is the desk channel, in REAPER (2026-10-07).
+// cue is the desk channel, in REAPER (2026-10-07). After these, each deck's
+// spatial ports (stage S2, Outputs.h): B-format, a binaural cue and phones.
 class MainComponent  : public juce::Component,
 					   public juce::AudioSource,
 					   public juce::DragAndDropContainer,
@@ -125,7 +127,7 @@ private:
 	StemDeckPlayer playerA { formatManager }, playerB { formatManager };
 	std::array<StemDeckPlayer*, numDecks> players { &playerA, &playerB };
 	std::array<juce::AudioBuffer<float>, numDecks> deckBuffers; // 8 channels each (stem pairs)
-	juce::AudioBuffer<float> busBuffer;                            // 12 channels (6 stereo buses) or 16 (stems)
+	juce::AudioBuffer<float> busBuffer;                            // every output channel (Outputs.h)
 
 	// Read on the audio thread; only changed while the output is closed
 	// (setOutputMode), so a block never sees a mode its buffers aren't sized for.
@@ -134,6 +136,13 @@ private:
 	// fader moves don't click.
 	std::array<std::array<std::array<juce::SmoothedValue<float>, buses::count>, StemSet::numStems>, numDecks> routeGains;
 	std::array<std::atomic<float>, numOutputChannels> outputPeaks {};
+
+	// Each deck's spatial ports (DeckSpatialPorts.h), built at start; if IEM
+	// refuses, the decks play on without them and the device status says so.
+	std::array<DeckSpatialPorts, numDecks> spatialPorts;
+	juce::String spatialError;
+	void createSpatialPorts();
+	juce::String withSpatialError (const juce::String& status) const;
 
 	StemThumbnails thumbsA { formatManager, thumbCache }, thumbsB { formatManager, thumbCache };
 	ScrollingWaveform waveA { playerA, thumbsA, 0 }, waveB { playerB, thumbsB, 1 };

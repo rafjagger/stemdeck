@@ -60,6 +60,7 @@ juce::String JackOutput::open (const juce::String& name, const juce::StringArray
 
 	sampleRate = (double) jack_get_sample_rate (client);
 	bufferSize = jack_get_buffer_size (client);
+	renderBuffer.setSize ((int) ports.size(), (int) bufferSize.load());
 	source->prepareToPlay ((int) bufferSize.load(), sampleRate.load());
 
 	if (jack_activate (client) != 0)
@@ -113,9 +114,13 @@ int JackOutput::processCallback (jack_nframes_t numFrames, void* arg)
 	for (size_t i = 0; i < self.ports.size(); ++i)
 		self.channelPointers[i] = static_cast<float*> (jack_port_get_buffer (self.ports[i], numFrames));
 
-	// Wraps the port buffers directly; no allocation for up to 32 channels.
-	juce::AudioBuffer<float> buffer (self.channelPointers.data(), (int) self.channelPointers.size(), (int) numFrames);
+	// Sized on every buffer size change; growing here is a fallback that allocates.
+	auto& buffer = self.renderBuffer;
+	if ((int) numFrames > buffer.getNumSamples())
+		buffer.setSize ((int) self.ports.size(), (int) numFrames, false, false, true);
 	self.source->getNextAudioBlock (juce::AudioSourceChannelInfo (&buffer, 0, (int) numFrames));
+	for (size_t i = 0; i < self.ports.size(); ++i)
+		juce::FloatVectorOperations::copy (self.channelPointers[i], buffer.getReadPointer ((int) i), (int) numFrames);
 
 	if (self.sink != nullptr && ! self.inputs.empty())
 	{
@@ -133,6 +138,7 @@ int JackOutput::bufferSizeCallback (jack_nframes_t numFrames, void* arg)
 	if (numFrames != self.bufferSize.load())
 	{
 		self.bufferSize = numFrames;
+		self.renderBuffer.setSize ((int) self.ports.size(), (int) numFrames);
 		self.source->prepareToPlay ((int) numFrames, self.sampleRate.load());
 	}
 

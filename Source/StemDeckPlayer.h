@@ -101,6 +101,14 @@ public:
 	const juce::AudioBuffer<float>& getCueBlock() const { return cueBuffer; }
 	int getCueBlockSamples() const { return cueSamples; }
 
+	// The stems of the block getNextAudioBlock just rendered after their
+	// knob, before their mute and the fader -- what the spatial engine is fed
+	// (ruling R5: it mutes after the encoder). Same layout, validity and
+	// 0-samples rule as the cue block; the cue send is this block times the
+	// cue switch.
+	const juce::AudioBuffer<float>& getPreMuteBlock() const { return preMuteBuffer; }
+	int getPreMuteBlockSamples() const { return cueSamples; }
+
 	// Channel fader. Not applied here: the mixer puts it on every bus. The
 	// stem output is after knob and mute.
 	void setDeckGain (float gain) { deckGain = gain; }
@@ -177,7 +185,8 @@ private:
 	void readStems (const juce::AudioSourceChannelInfo& info);
 	void readRun (float* const* dest, int count, juce::int64 position);
 	void readStemRun (int stem, float* const* dest, int count, juce::int64 position);
-	void renderCue (int stem, const juce::AudioSourceChannelInfo& info);
+	void renderPreMute (int stem, const juce::AudioSourceChannelInfo& info);
+	void renderCue (int stem, int numSamples);
 	void renderScratch (const juce::AudioSourceChannelInfo& info);
 	void renderPlayback (const juce::AudioSourceChannelInfo& info);
 	void renderPath (bool stretched, const juce::AudioSourceChannelInfo& info);
@@ -229,8 +238,8 @@ private:
 	std::array<juce::SmoothedValue<float>, numStems> gainSmoothers;
 	// Audio thread only: the cue send's knob (without the mute) and switch.
 	std::array<juce::SmoothedValue<float>, numStems> cueKnobSmoothers, cueSwitchSmoothers;
-	juce::AudioBuffer<float> cueBuffer;
-	int cueSamples = 0;
+	juce::AudioBuffer<float> cueBuffer, preMuteBuffer;
+	int cueSamples = 0;   // of both blocks
 
 	StemReader stemReader { *this };
 	juce::ResamplingAudioSource resampler { &stemReader, false, numOutputChannels };

@@ -151,8 +151,15 @@ add_executable(stemdeck-spatial-tests
     spatial/DeckSpatial.cpp
     spatial/DeckSpatialAllocation.cpp
     spatial/DeckSpatialTiming.cpp
+    spatial/DeckSpatialPorts.cpp
     ${CMAKE_SOURCE_DIR}/Source/SteadyBed.cpp
     ${CMAKE_SOURCE_DIR}/Source/DeckSpatial.cpp
+    ${CMAKE_SOURCE_DIR}/Source/DeckSpatialPorts.cpp
+    ${CMAKE_SOURCE_DIR}/Source/StemDeckPlayer.cpp
+    ${CMAKE_SOURCE_DIR}/Source/KeyLockStretcher.cpp
+    ${CMAKE_SOURCE_DIR}/Source/KeyLock.cpp
+    ${CMAKE_SOURCE_DIR}/Source/Remote.cpp
+    ${CMAKE_SOURCE_DIR}/Source/GridEdit.cpp
     ${CMAKE_SOURCE_DIR}/Source/SpatialLaw.cpp
     ${CMAKE_SOURCE_DIR}/third_party/a3-engine/src/a3-engine/Laws.cpp
     ${CMAKE_SOURCE_DIR}/third_party/a3-engine/src/a3-engine/SpatialConfig.cpp)
@@ -160,7 +167,11 @@ target_include_directories(stemdeck-spatial-tests PRIVATE ${CMAKE_SOURCE_DIR}/So
 target_compile_definitions(stemdeck-spatial-tests PRIVATE
     STEMDECK_SPATIAL_DATA="${CMAKE_SOURCE_DIR}/third_party/a3-engine/data/spatial")
 target_compile_features(stemdeck-spatial-tests PRIVATE cxx_std_17)
-target_link_libraries(stemdeck-spatial-tests PRIVATE GTest::gtest GTest::gtest_main a3-iem-sd)
+target_link_libraries(stemdeck-spatial-tests PRIVATE GTest::gtest GTest::gtest_main a3-iem-sd PkgConfig::RUBBERBAND)
+# The player (Stage S2) includes the app's JuceHeader.h: StemDeck generates it.
+get_target_property(stemdeck_juce_header_dir StemDeck JUCE_GENERATED_SOURCES_DIRECTORY)
+target_include_directories(stemdeck-spatial-tests PRIVATE ${stemdeck_juce_header_dir})
+add_dependencies(stemdeck-spatial-tests StemDeck)
 add_dependencies(stemdeck-spatial-tests stemdeck-gtest-stamp)
 target_compile_options(stemdeck-spatial-tests PRIVATE -include ${gtest_stamp_header})
 gtest_discover_tests(stemdeck-spatial-tests)

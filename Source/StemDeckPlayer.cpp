@@ -272,6 +272,8 @@ void StemDeckPlayer::prepareToPlay (int samplesPerBlockExpected, double sampleRa
 
 	cueBuffer.setSize (numOutputChannels, maxBlock);
 	cueBuffer.clear();
+	preMuteBuffer.setSize (numOutputChannels, maxBlock);
+	preMuteBuffer.clear();
 	cueSamples = 0;
 
 	for (int i = 0; i < numStems; ++i)
@@ -354,7 +356,10 @@ void StemDeckPlayer::getNextAudioBlock (const juce::AudioSourceChannelInfo& info
 	for (int s = 0; s < numStems; ++s)
 	{
 		if (cueFits)
-			renderCue (s, info);
+		{
+			renderPreMute (s, info);
+			renderCue (s, info.numSamples);
+		}
 
 		auto& smoother = gainSmoothers[(size_t) s];
 		smoother.setTargetValue (stemMuted[(size_t) s] ? 0.0f : stemGain[(size_t) s].load());
@@ -386,33 +391,45 @@ void StemDeckPlayer::getNextAudioBlock (const juce::AudioSourceChannelInfo& info
 	}
 }
 
-// The stem as it is before its mute: the knob alone, then the cue switch.
-// Called from getNextAudioBlock with setLock held, before the stem's own gain
-// is applied to `info`; nothing is allocated here.
-void StemDeckPlayer::renderCue (int stem, const juce::AudioSourceChannelInfo& info)
+// The stem as it is before its mute: the knob alone. Called from
+// getNextAudioBlock with setLock held, before the stem's own gain is applied
+// to `info`; nothing is allocated here.
+void StemDeckPlayer::renderPreMute (int stem, const juce::AudioSourceChannelInfo& info)
 {
 	auto& knob = cueKnobSmoothers[(size_t) stem];
-	auto& send = cueSwitchSmoothers[(size_t) stem];
 	knob.setTargetValue (stemGain[(size_t) stem].load());
+
+	const auto knobFrom = knob.getCurrentValue();
+	knob.skip (info.numSamples);
+	const auto knobTo = knob.getCurrentValue();
+
+	for (int ch = stem * 2; ch < stem * 2 + 2; ++ch)
+	{
+		preMuteBuffer.copyFrom (ch, 0, *info.buffer, ch, info.startSample, info.numSamples);
+		preMuteBuffer.applyGainRamp (ch, 0, info.numSamples, knobFrom, knobTo);
+	}
+}
+
+// The cue send: the pre-mute stem through the cue switch. Called right after
+// renderPreMute for the same stem.
+void StemDeckPlayer::renderCue (int stem, int numSamples)
+{
+	auto& send = cueSwitchSmoothers[(size_t) stem];
 	send.setTargetValue (stemCue[(size_t) stem].load() ? 1.0f : 0.0f);
 
 	const auto sendFrom = send.getCurrentValue();
-	const auto knobFrom = knob.getCurrentValue();
-	knob.skip (info.numSamples);
-	send.skip (info.numSamples);
+	send.skip (numSamples);
 	const auto sendTo = send.getCurrentValue();
-	const auto knobTo = knob.getCurrentValue();
 
 	for (int ch = stem * 2; ch < stem * 2 + 2; ++ch)
 	{
 		if (sendFrom == 0.0f && sendTo == 0.0f)
 		{
-			cueBuffer.clear (ch, 0, info.numSamples);
+			cueBuffer.clear (ch, 0, numSamples);
 			continue;
 		}
-		cueBuffer.copyFrom (ch, 0, *info.buffer, ch, info.startSample, info.numSamples);
-		cueBuffer.applyGainRamp (ch, 0, info.numSamples, knobFrom, knobTo);
-		cueBuffer.applyGainRamp (ch, 0, info.numSamples, sendFrom, sendTo);
+		cueBuffer.copyFrom (ch, 0, preMuteBuffer, ch, 0, numSamples);
+		cueBuffer.applyGainRamp (ch, 0, numSamples, sendFrom, sendTo);
 	}
 }
 

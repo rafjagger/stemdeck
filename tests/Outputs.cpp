@@ -2,6 +2,8 @@
 
 #include "Outputs.h"
 
+#include <set>
+
 // StemDeck's one output mode since spec stemdeck-remote (2026-10-01): the five
 // stereo buses, switched by remote control from the desk. The 8x stereo
 // mode (every stem on its own pair) is gone, and since 2026-10-07 so are the
@@ -10,7 +12,7 @@
 TEST (Outputs, FiveStereoBusesThenTheCuePair)
 {
 	EXPECT_EQ (outputs::busChannelCount(), 10);
-	EXPECT_EQ (outputs::channelCount(), 12);
+	EXPECT_EQ (outputs::stereo::channelCount(), 12);
 	EXPECT_EQ (outputs::portName (0), "deck1_L");
 	EXPECT_EQ (outputs::portName (9), "aux_R");
 }
@@ -34,8 +36,62 @@ TEST (Outputs, TheCuePairComesLast)
 	EXPECT_EQ (outputs::cueChannel(), 10);
 }
 
+// Today's twelve carry no phones port; the spatial ports (R7) come after them.
 TEST (Outputs, NoPhonesPorts)
 {
-	for (int ch = 0; ch < outputs::channelCount(); ++ch)
+	for (int ch = 0; ch < outputs::stereo::channelCount(); ++ch)
 		EXPECT_EQ (outputs::portName (ch).find ("phones"), std::string::npos) << outputs::portName (ch);
+}
+
+// Stage S2 (ruling R7): after today's twelve, each deck adds its B-format, a
+// binaural cue and phones -- 20 channels, deck A first.
+TEST (Outputs, TodaysTwelvePortsKeepTheirNamesAndOrder)
+{
+	const char* expected[] = { "deck1_L", "deck1_R", "deck2_L", "deck2_R", "deck3_L", "deck3_R",
+							   "deck4_L", "deck4_R", "aux_L", "aux_R", "cue_L", "cue_R" };
+	ASSERT_EQ (outputs::stereo::channelCount(), (int) std::size (expected));
+	for (int ch = 0; ch < outputs::stereo::channelCount(); ++ch)
+		EXPECT_EQ (outputs::portName (ch), expected[ch]);
+}
+
+TEST (Outputs, EachDeckAddsTwentySpatialPorts)
+{
+	EXPECT_EQ (outputs::spatialFirstChannel (0), 12);
+	EXPECT_EQ (outputs::spatialFirstChannel (1), 32);
+	EXPECT_EQ (outputs::portName (12), "A_bformat_1");
+	EXPECT_EQ (outputs::portName (27), "A_bformat_16");
+	EXPECT_EQ (outputs::portName (28), "A_bcue_L");
+	EXPECT_EQ (outputs::portName (29), "A_bcue_R");
+	EXPECT_EQ (outputs::portName (30), "A_phones_L");
+	EXPECT_EQ (outputs::portName (31), "A_phones_R");
+	EXPECT_EQ (outputs::portName (32), "B_bformat_1");
+	EXPECT_EQ (outputs::portName (47), "B_bformat_16");
+	EXPECT_EQ (outputs::portName (48), "B_bcue_L");
+	EXPECT_EQ (outputs::portName (51), "B_phones_R");
+	EXPECT_EQ (outputs::channelCount(), 52);
+}
+
+TEST (Outputs, EveryPortNameIsUnique)
+{
+	std::set<std::string> names;
+	for (int ch = 0; ch < outputs::channelCount(); ++ch)
+		EXPECT_TRUE (names.insert (outputs::portName (ch)).second) << outputs::portName (ch);
+}
+
+// Without JACK: the buses are summed down onto fewer device outputs, as
+// today; the cue and every spatial channel go only to an output of their own.
+TEST (Outputs, SpatialChannelsAreNeverSummedDown)
+{
+	EXPECT_EQ (outputs::foldsInto (0, 2), 0);
+	EXPECT_EQ (outputs::foldsInto (3, 2), 1);
+	EXPECT_EQ (outputs::foldsInto (9, 2), 1);
+	EXPECT_EQ (outputs::foldsInto (9, 12), 9);
+	for (int ch = outputs::cueChannel(); ch < outputs::channelCount(); ++ch)
+	{
+		EXPECT_EQ (outputs::foldsInto (ch, 2), -1) << ch;
+		EXPECT_EQ (outputs::foldsInto (ch, ch), -1) << ch;
+		EXPECT_EQ (outputs::foldsInto (ch, ch + 1), ch) << ch;
+		EXPECT_EQ (outputs::foldsInto (ch, 64), ch) << ch;
+	}
+	EXPECT_EQ (outputs::foldsInto (0, 0), -1);
 }

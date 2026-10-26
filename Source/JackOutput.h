@@ -46,6 +46,9 @@ private:
 	jack_client_t* client = nullptr;
 	std::vector<jack_port_t*> ports;
 	std::vector<float*> channelPointers; // sized once, filled in the process callback
+	// What the source renders into, copied to the ports: wrapping more than
+	// JUCE's 32 preallocated channel pointers would allocate in every callback.
+	juce::AudioBuffer<float> renderBuffer;
 	std::vector<jack_port_t*> inputs;
 	std::vector<const float*> inputPointers;
 	InputSink* sink = nullptr;

@@ -507,18 +507,3 @@ TEST (DeckSpatial, CueDecoderRestartsClean)
 		EXPECT_LE (maxDifference (restarted, first.cue[(size_t) side]), 1e-5f) << "cue " << side;
 	}
 }
-
-TEST (DeckSpatial, ReportsItsNodeTimings)
-{
-	juce::ScopedJuceInitialiser_GUI juceInitialiser;
-	auto deck = preparedDeck (block, busyDeck);
-	render (*deck, noiseOnAllStems());
-	const auto t = deck->timing();
-	std::cout << "mean us per 128-block: encoders " << t.encoders << ", bed " << t.bed << ", cue bed " << t.cueBed
-	          << ", cue decoder " << t.cueDecoder << ", phones decoder " << t.phonesDecoder << std::endl;
-	EXPECT_GT (t.encoders, 0.0);
-	EXPECT_GT (t.bed, 0.0);
-	EXPECT_GT (t.cueBed, 0.0);
-	EXPECT_GT (t.cueDecoder, 0.0);
-	EXPECT_GT (t.phonesDecoder, 0.0);
-}

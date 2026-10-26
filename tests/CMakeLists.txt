@@ -150,6 +150,7 @@ add_executable(stemdeck-spatial-tests
     spatial/SteadyBed.cpp
     spatial/DeckSpatial.cpp
     spatial/DeckSpatialAllocation.cpp
+    spatial/DeckSpatialTiming.cpp
     ${CMAKE_SOURCE_DIR}/Source/SteadyBed.cpp
     ${CMAKE_SOURCE_DIR}/Source/DeckSpatial.cpp
     ${CMAKE_SOURCE_DIR}/Source/SpatialLaw.cpp

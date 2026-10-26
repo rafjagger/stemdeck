@@ -99,5 +99,7 @@ juce::File oneDeckSessionFile (const juce::File& settingsFile, const DeckInstanc
 
 // The one-deck file wins when it exists; otherwise the two-deck file is read
 // (never changed: two-deck mode still owns it) and the result is marked
-// `imported`, so that the first save makes the one-deck file the truth.
+// `imported`, so that the first save makes the one-deck file the truth. A
+// one-deck file that is corrupt or has the wrong root counts as absent and
+// falls through to the import (the start must not fail on it).
 OneDeckSession loadOrImport (const juce::File& oneDeckFile, const juce::File& twoDeckFile, const DeckInstance& instance);

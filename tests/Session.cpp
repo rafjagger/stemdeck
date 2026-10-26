@@ -352,3 +352,50 @@ TEST (OneDeckSession, TwoInstancesHaveTwoFiles)
 	EXPECT_EQ (b, juce::File ("/tmp/StemDeck/B/session.xml"));
 	EXPECT_NE (a, Session::file (settings));
 }
+
+// The two-deck file must read byte for byte as it always did: attribute order
+// is part of that (index first), pinned here against the order main writes.
+TEST (Session, TwoDeckXmlKeepsItsAttributeOrder)
+{
+	const auto xml = twoDeckSession().toXml();
+	const juce::StringArray deckOrder { "index", "set", "position", "playing", "cue", "loopStart", "loopEnd",
+		"repeat", "tempo", "tempoRange", "vinyl", "sync", "keyLock", "fader" };
+	const juce::StringArray stemOrder { "gain", "muted", "buses", "cue", "threeD", "azimuth", "elevation", "width", "lengthBars" };
+	const auto names = [] (const juce::XmlElement& e)
+	{
+		juce::StringArray out;
+		for (int i = 0; i < e.getNumAttributes(); ++i)
+			out.add (e.getAttributeName (i));
+		return out;
+	};
+
+	int decks = 0;
+	for (auto* deck : xml->getChildWithTagNameIterator ("Deck"))
+	{
+		++decks;
+		EXPECT_EQ (names (*deck), deckOrder);
+		for (auto* stem : deck->getChildWithTagNameIterator ("Stem"))
+			EXPECT_EQ (names (*stem), stemOrder);
+	}
+	EXPECT_EQ (decks, 2);
+}
+
+// Documented fallback: an unreadable one-deck file does not stop the start.
+TEST (OneDeckSession, ACorruptOneDeckFileFallsBackToTheImport)
+{
+	const auto dir = freshDir ("corrupt");
+	const DeckInstance instance { 'B' };
+	const auto twoDeckFile = dir.getChildFile ("session.xml");
+	const auto oneDeckFile = oneDeckSessionFile (dir.getChildFile ("settings.xml"), instance);
+	ASSERT_TRUE (twoDeckFile.replaceWithText (twoDeckSession().toXml()->toString()));
+	ASSERT_TRUE (oneDeckFile.getParentDirectory().createDirectory());
+
+	for (const char* junk : { "<<< not xml", "<WrongRoot/>" })
+	{
+		ASSERT_TRUE (oneDeckFile.replaceWithText (junk));
+		const auto s = loadOrImport (oneDeckFile, twoDeckFile, instance);
+		EXPECT_TRUE (s.imported);
+		EXPECT_EQ (s.deck.setId, "setB");
+	}
+	dir.deleteRecursively();
+}

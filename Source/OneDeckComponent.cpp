@@ -16,8 +16,8 @@ namespace
 {
 double nowSeconds() { return juce::Time::getMillisecondCounterHiRes() / 1000.0; }
 constexpr const char* phonesModeKey = "phonesMode";
-// Per deck: every instance shares the settings file. "1" take the panel at start if free, "0" never, unset: deck A by default.
-constexpr const char* panelHereKey = "panelHere.";
+// Per deck, in the deck's own settings file. "1" take the panel at start if free, "0" never, unset: deck A by default.
+constexpr const char* panelHereKey = "panelHere";
 constexpr const char* phonesLevelKey = "phonesLevel";
 constexpr const char* phonesMixKey = "phonesMix";
 constexpr int refreshHz = 60;   // the rolling waveform's
@@ -31,8 +31,9 @@ OneDeckComponent::OneDeckComponent (DeckInstance deck)
 {
 	setLookAndFeel (&lookAndFeel);
 	appProperties.setStorageParameters (appsettings::options());
+	instanceProperties.setStorageParameters (appsettings::instanceOptions (deck.letter));
 	formatManager.registerBasicFormats();
-	phonesMode = spatial::phonesModeFrom (settings().getValue (phonesModeKey).toStdString());
+	phonesMode = spatial::phonesModeFrom (instanceSettings().getValue (phonesModeKey).toStdString());
 
 	{
 		std::string truthError;
@@ -75,11 +76,11 @@ OneDeckComponent::OneDeckComponent (DeckInstance deck)
 	view.waveform().onSetDropped = [this] (const juce::String& id) { loadById (id); };
 	view.deckPanel().onSetDropped = [this] (const juce::String& id) { loadById (id); };
 	view.deckPanel().onStep = [this] (int direction) { step (direction); };
-	view.outputs().setPhones ((float) settings().getDoubleValue (phonesLevelKey, 1.0), (float) settings().getDoubleValue (phonesMixKey, 0.0));
+	view.outputs().setPhones ((float) instanceSettings().getDoubleValue (phonesLevelKey, 1.0), (float) instanceSettings().getDoubleValue (phonesMixKey, 0.0));
 	view.outputs().onPhonesChanged = [this] (float level, float mix)
 	{
-		settings().setValue (phonesLevelKey, level);
-		settings().setValue (phonesMixKey, mix);
+		instanceSettings().setValue (phonesLevelKey, level);
+		instanceSettings().setValue (phonesMixKey, mix);
 	};
 
 	rec.button.onClick = [this] { rec.toggle (audio->jackClient().getSampleRate()); };
@@ -324,15 +325,15 @@ void OneDeckComponent::updateDeviceStatus()
 //==============================================================================
 juce::String OneDeckComponent::panelPreferenceKey() const
 {
-	return juce::String (panelHereKey) + juce::String::charToString ((juce::juce_wchar) instance.letter);
+	return panelHereKey;
 }
 
 void OneDeckComponent::startPanel()
 {
 	const auto key = panelPreferenceKey();
 	std::optional<bool> stored;
-	if (settings().containsKey (key))
-		stored = settings().getBoolValue (key);
+	if (instanceSettings().containsKey (key))
+		stored = instanceSettings().getBoolValue (key);
 	panel::claimAtStart (panelOwnership, stored);
 	updatePanelOwner();
 }
@@ -377,7 +378,7 @@ void OneDeckComponent::handlePanel (const panel1::Event& e)
 	auto& column = view.column (e.stem);
 	switch (e.type)
 	{
-		case Type::shot:       column.oneShots().pad (e.shape).triggerClick(); break;
+		case Type::shot:       column.oneShots().press (e.shape); break;
 		case Type::stemCue:    column.cue().triggerClick(); break;
 		case Type::stemMute:   column.mute().triggerClick(); break;
 		case Type::lengthDown: column.oneShots().lengthDown().triggerClick(); break;
@@ -437,13 +438,13 @@ void OneDeckComponent::showSettings()
 	actions.onPhonesMode = [this] (spatial::PhonesMode mode)
 	{
 		phonesMode = mode;
-		settings().setValue (phonesModeKey, juce::String (spatial::phonesModeName (mode)));
+		instanceSettings().setValue (phonesModeKey, juce::String (spatial::phonesModeName (mode)));
 		updatePhonesDecoder();
 	};
 
 	actions.onPanelHere = [this] (bool here)
 	{
-		settings().setValue (panelPreferenceKey(), here);
+		instanceSettings().setValue (panelPreferenceKey(), here);
 		if (here)
 			panelOwnership.take();
 		else

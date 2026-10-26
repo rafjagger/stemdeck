@@ -44,6 +44,8 @@ public:
 	~OneDeckComponent() override;
 
 	juce::PropertiesFile& settings() { return *appProperties.getUserSettings(); }
+	// This deck's own: panel choice, phones, window place (~/.config/StemDeck/<X>/StemDeck.settings).
+	juce::PropertiesFile& instanceSettings() { return *instanceProperties.getUserSettings(); }
 
 	void paint (juce::Graphics&) override;
 	void resized() override;
@@ -75,6 +77,7 @@ private:
 	const DeckInstance instance;
 	DJLookAndFeel lookAndFeel;
 	juce::ApplicationProperties appProperties;
+	juce::ApplicationProperties instanceProperties;
 	coretruth::Chosen truth;
 	std::unique_ptr<DeckLink> deckLink;             // hello and the desk's 3D for this deck
 	std::unique_ptr<TruthKeeperLink> truthKeeper;   // also says whether Core is heard (R12)

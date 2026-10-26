@@ -41,14 +41,13 @@ public:
         const auto& options = std::get<LaunchOptions> (parsed);
 
         // -bformat: one deck per instance (R10); without it the two-deck app
-        // as it always was. Each keeps its window's place under its own key.
+        // as it always was. Each keeps its window's place in its own settings file.
         if (options.oneDeck)
         {
             const DeckInstance instance { options.deck };
             auto content = std::make_unique<OneDeckComponent> (instance);
-            auto& settings = content->settings();
-            mainWindow.reset (new MainWindow (juce::String (instance.title()), std::move (content), settings,
-                                              "windowState." + juce::String::charToString (instance.letter)));
+            auto& settings = content->instanceSettings();
+            mainWindow.reset (new MainWindow (juce::String (instance.title()), std::move (content), settings, "windowState"));
         }
         else
         {

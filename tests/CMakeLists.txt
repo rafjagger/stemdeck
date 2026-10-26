@@ -80,6 +80,8 @@ add_executable(stemdeck-tests
     PanelMapOneDeck.cpp
     ${CMAKE_SOURCE_DIR}/Source/PanelMapOneDeck.cpp
     PanelOwnership.cpp
+    AppSettings.cpp
+    ${CMAKE_SOURCE_DIR}/Source/AppSettings.cpp
     ${CMAKE_SOURCE_DIR}/Source/PanelOwnership.cpp
     ${CMAKE_SOURCE_DIR}/Source/Tips.cpp
     ${CMAKE_SOURCE_DIR}/Source/LibraryFolders.cpp
@@ -102,7 +104,7 @@ target_include_directories(stemdeck-tests PRIVATE ${CMAKE_SOURCE_DIR}/Source ${C
 # tests -- as a library of its own, JUCE's way for module code outside an app.
 add_library(stemdeck-tests-juce STATIC)
 target_link_libraries(stemdeck-tests-juce
-    PRIVATE juce::juce_core
+    PRIVATE juce::juce_core juce::juce_data_structures
     PUBLIC juce::juce_recommended_config_flags)
 target_compile_definitions(stemdeck-tests-juce PUBLIC JUCE_USE_CURL=0 JUCE_WEB_BROWSER=0 JUCE_STANDALONE_APPLICATION=0)
 target_compile_definitions(stemdeck-tests-juce INTERFACE $<TARGET_PROPERTY:stemdeck-tests-juce,COMPILE_DEFINITIONS>)

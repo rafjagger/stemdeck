@@ -195,7 +195,10 @@ MainComponent::MainComponent()
 
 	createSpatialPorts();
 	for (int d = 0; d < numDecks; ++d)
-		mixer.setSpatial (d, spatialPorts[(size_t) d].deckSpatial());
+	{
+		auto& ports = spatialPorts[(size_t) d];
+		mixer.setSpatial (d, ports.deckSpatial() != nullptr ? &ports : nullptr);
+	}
 	initialiseAudio();
 
 	if (appProperties.getUserSettings()->getValue ("syncSource") == "pio")
@@ -756,7 +759,7 @@ void MainComponent::gatherSpatial (int deckIndex, DeckSession& deck) const
 			deck.stems[s].width = carried[s].width;
 			continue;
 		}
-		const auto& controls = spatial->controls();
+		const auto& controls = spatialPorts[(size_t) deckIndex].settings();
 		deck.stems[s].threeD = controls.threeD[s].load();
 		deck.stems[s].azimuth = controls.azimuth[s].load();
 		deck.stems[s].elevation = controls.elevation[s].load();
@@ -772,7 +775,7 @@ void MainComponent::restoreSpatial (int deckIndex, const DeckSession& deck)
 	if (spatial == nullptr)
 		return;
 
-	auto& controls = spatial->controls();
+	auto& controls = spatialPorts[(size_t) deckIndex].settings();
 	for (size_t s = 0; s < deck.stems.size(); ++s)
 	{
 		controls.threeD[s].store ((float) deck.stems[s].threeD);

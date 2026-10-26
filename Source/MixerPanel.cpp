@@ -3,7 +3,7 @@
 #include "SurfaceJuce.h"
 #include "StemKnob.h"
 #include "StemSpatialPopup.h"
-#include "DeckSpatial.h"
+#include "DeckSpatialPorts.h"
 
 namespace
 {
@@ -250,7 +250,7 @@ void ChannelStrip::openSpatial (int stem)
 {
 	if (spatial == nullptr || stem < 0 || stem >= knobs.size())
 		return;
-	StemSpatialPopup::show (*knobs[stem], spatial->controls(), stem);
+	StemSpatialPopup::show (*knobs[stem], spatial->settings(), &spatial->motion(), stem);
 }
 
 void ChannelStrip::mouseDown (const juce::MouseEvent& e)

@@ -6,7 +6,7 @@
 #include "Session.h"
 #include "MeterBallistics.h"
 
-class DeckSpatial;
+class DeckSpatialPorts;
 
 // Vertical peak meter fed from a player's stem peaks, with the system's
 // ballistics (PeakMeter) and a line where the held peak stands.
@@ -113,9 +113,9 @@ public:
 	void setFaderBounds (juce::Rectangle<int> area);
 
 	// The deck's spatial engine, if it has one: a right-click or a long press
-	// on a stem's knob then opens that stem's 3D, direction and width
-	// (StemSpatialPopup). Without one (IEM refused) nothing opens.
-	void setSpatial (DeckSpatial* engine) { spatial = engine; }
+	// on a stem's knob then opens that stem's 3D, direction, width and
+	// one-shots (StemSpatialPopup). Without one (IEM refused) nothing opens.
+	void setSpatial (DeckSpatialPorts* engine) { spatial = engine; }
 	void openSpatial (int stem);
 
 	void mouseDown (const juce::MouseEvent&) override;
@@ -129,7 +129,7 @@ private:
 
 	StemDeckPlayer& player;
 	const int deckIndex;
-	DeckSpatial* spatial = nullptr;
+	DeckSpatialPorts* spatial = nullptr;
 
 	// A press held on a knob without moving it.
 	struct LongPress : juce::Timer
@@ -165,7 +165,7 @@ public:
 	const ChannelStrip& strip (int deckIndex) const { return deckIndex == 0 ? stripA : stripB; }
 	void refresh();
 
-	void setSpatial (int deckIndex, DeckSpatial* engine) { strip (deckIndex).setSpatial (engine); }
+	void setSpatial (int deckIndex, DeckSpatialPorts* engine) { strip (deckIndex).setSpatial (engine); }
 
 	// One bus switch under the one-stem-per-bus rule (Buses.h), across both
 	// decks: the players and the screen follow, and onBusesChanged answers

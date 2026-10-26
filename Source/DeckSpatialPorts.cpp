@@ -28,17 +28,47 @@ juce::String DeckSpatialPorts::create()
 	return {};
 }
 
-void DeckSpatialPorts::prepare (double sampleRate, int blockSize)
+void DeckSpatialPorts::prepare (double newSampleRate, int blockSize)
 {
+	sampleRate = newSampleRate;
 	silence.setSize (StemDeckPlayer::numOutputChannels, juce::jmax (blockSize, maxSilenceBlock));
 	silence.clear();
-	if (spatial != nullptr)
-		spatial->prepare (sampleRate, blockSize);
+	if (spatial == nullptr)
+		return;
+	copySettings (true);   // a fresh deck starts at the session's poses
+	spatial->prepare (sampleRate, blockSize);
 }
 
-void DeckSpatialPorts::followPlayer (const StemDeckPlayer& player)
+// The pose is the one-shots' to write, block by block; only prepare, before
+// any block, takes the home as it is.
+void DeckSpatialPorts::copySettings (bool withPose)
 {
 	auto& controls = spatial->controls();
+	const auto copy = [] (const std::atomic<float>& from, std::atomic<float>& to)
+	{
+		to.store (from.load (std::memory_order_relaxed), std::memory_order_relaxed);
+	};
+	for (size_t s = 0; s < (size_t) DeckSpatial::stems; ++s)
+	{
+		copy (userSettings.threeD[s], controls.threeD[s]);
+		if (! withPose)
+			continue;
+		copy (userSettings.azimuth[s], controls.azimuth[s]);
+		copy (userSettings.elevation[s], controls.elevation[s]);
+		copy (userSettings.width[s], controls.width[s]);
+	}
+}
+
+// The one-shots run in the deck's beat time (R8): its grid at the playhead,
+// its tempo and rate, frozen while it is paused.
+void DeckSpatialPorts::followPlayer (const StemDeckPlayer& player, int numSamples)
+{
+	auto& controls = spatial->controls();
+	copySettings (false);
+	const auto grid = player.getBeatGrid();
+	const motionlite::Clock clock { grid.isValid() ? std::optional<double> (grid.beatsAt (player.getPosition())) : std::nullopt,
+									grid.bpm, player.getEffectiveRate(), player.isPlaying() };
+	stemMotion.advance (clock, numSamples / sampleRate, userSettings, controls);
 	for (int s = 0; s < DeckSpatial::stems; ++s)
 	{
 		controls.muted[(size_t) s].store (player.isStemMuted (s), std::memory_order_relaxed);
@@ -57,7 +87,7 @@ void DeckSpatialPorts::render (const StemDeckPlayer& player, juce::AudioBuffer<f
 		return;
 	}
 
-	followPlayer (player);
+	followPlayer (player, numSamples);
 	if (player.getPreMuteBlockSamples() == numSamples)
 	{
 		process (player.getPreMuteBlock().getArrayOfReadPointers(), outputs, firstChannel, 0, numSamples);

@@ -3,6 +3,7 @@
 #include <gtest/gtest.h>
 
 #include "DeckSpatialFixture.h"
+#include "TwoDeckFixture.h"
 
 #include <atomic>
 #include <cstdlib>
@@ -198,4 +199,46 @@ TEST (DeckSpatialAllocation, StandingAndResumingDoNotAllocate)
 	EXPECT_EQ (count.allocated, 0);
 	EXPECT_EQ (count.released, 0);
 	EXPECT_GT (deck->timing().encoders, 0.0) << "the pose moves and the resume ran the encoders";
+}
+
+// Stage S3: the deck's real audio path (the ports fed by a playing player)
+// while presses of every shape, SHIFT and not, stops and length keys go in:
+// neither the press nor the block that takes it allocates. The player itself
+// renders outside the count.
+using twodeck::DeckSpatialMotion;
+
+TEST_F (DeckSpatialMotion, APressDoesNotAllocateOnTheAudioThread)
+{
+	const motionlite::Shape shapes[] = { motionlite::Shape::orbit, motionlite::Shape::ping, motionlite::Shape::rise,
+	                                     motionlite::Shape::scat };
+	setAllStems (false, true, 1.0f);
+	player.setBeatGrid ({ 120.0, 0.0 });
+	player.play();
+	auto& motion = ports.motion();
+	AllocationCount total;
+	bool moved = false;
+
+	for (int b = 0; b < twodeck::blocksFor (2.0); ++b)
+	{
+		player.getNextAudioBlock (juce::AudioSourceChannelInfo (&deck, 0, block));
+		const auto count = countDuring ([&]
+		{
+			if (b % 25 == 3)
+			{
+				const int n = b / 25;
+				motion.press (n % DeckSpatial::stems, shapes[n % 4], n % 2 == 0, (std::uint64_t) n);
+				(n % 3 == 0 ? motion.lengthDown (n % DeckSpatial::stems) : motion.lengthUp (n % DeckSpatial::stems));
+			}
+			if (b % 25 == 15)
+				motion.press ((b / 25) % DeckSpatial::stems, shapes[(b / 25) % 4], false, 9);   // a stop
+			ports.render (player, bus, outputs::spatialFirstChannel (0), block);
+			for (int s = 0; s < DeckSpatial::stems; ++s)
+				moved = moved || motion.stemState (s) == motionlite::PadState::running;
+		});
+		total.allocated += count.allocated;
+		total.released += count.released;
+	}
+	EXPECT_EQ (total.allocated, 0);
+	EXPECT_EQ (total.released, 0);
+	EXPECT_TRUE (moved) << "the counted blocks ran shots";
 }

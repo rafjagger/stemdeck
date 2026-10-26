@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include <gtest/gtest.h>
 
+#include "DeckMotion.h"
 #include "StemSpatialPopup.h"
 
 // A popup is a component: it needs JUCE's GUI initialised, no X window.
@@ -60,4 +61,33 @@ TEST (StemSpatialPopup, PaintsEveryState)
 		const auto image = popup.createComponentSnapshot (popup.getLocalBounds());
 		EXPECT_EQ (image.getWidth(), 400);
 	}
+}
+
+// Stage S3: the pads, the length keys and SHIFT go through the deck's motion
+// queue; the audio thread's next block takes them.
+TEST (StemSpatialPopup, PadsPressThroughTheMotionQueue)
+{
+	juce::ScopedJuceInitialiser_GUI init;
+	DeckSpatial::Controls controls, played;
+	DeckMotion motion;
+	StemSpatialPopup popup (controls, 1, &motion);
+	popup.setSize (400, 400);
+	const motionlite::Clock clock { 5.0, 120.0, 1.0, true };
+
+	popup.lengthUp().onClick();
+	popup.pad (motionlite::Shape::ping).onClick();
+	motion.advance (clock, 0.0, controls, played);
+	EXPECT_EQ (motion.padState (1, motionlite::Shape::ping), motionlite::PadState::armed);
+	EXPECT_DOUBLE_EQ (motion.lengthBars (1), 8.0);
+	EXPECT_EQ (motion.stemState (0), motionlite::PadState::idle) << "only that stem's";
+
+	popup.shift().setToggleState (true, juce::dontSendNotification);
+	popup.pad (motionlite::Shape::orbit).onClick();
+	motion.advance (clock, 0.0, controls, played);
+	EXPECT_EQ (motion.padState (1, motionlite::Shape::orbit), motionlite::PadState::running);
+
+	popup.refresh();
+	EXPECT_EQ (popup.lengthText(), juce::String ("8 BARS"));
+	const auto image = popup.createComponentSnapshot (popup.getLocalBounds());
+	EXPECT_EQ (image.getWidth(), 400);
 }

@@ -1,0 +1,156 @@
+// SPDX-FileCopyrightText: 2026 Raphael Eismann
+// SPDX-License-Identifier: GPL-3.0-or-later
+#include "DeckMotion.h"
+
+namespace
+{
+constexpr int shapeCount = 4;
+
+bool validStem (int stem)
+{
+	return stem >= 0 && stem < DeckMotion::stems;
+}
+
+spatial::Pose homeOf (const DeckSpatial::Controls& settings, size_t stem)
+{
+	return { settings.azimuth[stem].load (std::memory_order_relaxed), settings.elevation[stem].load (std::memory_order_relaxed),
+			 settings.width[stem].load (std::memory_order_relaxed) };
+}
+}
+
+DeckMotion::DeckMotion() = default;
+
+bool DeckMotion::press (int stem, motionlite::Shape shape, bool shift, std::uint64_t seed)
+{
+	return push ({ Kind::press, stem, shape, shift, seed });
+}
+
+bool DeckMotion::lengthDown (int stem)
+{
+	return push ({ Kind::lengthDown, stem });
+}
+
+bool DeckMotion::lengthUp (int stem)
+{
+	return push ({ Kind::lengthUp, stem });
+}
+
+bool DeckMotion::push (const Command& command)
+{
+	if (! validStem (command.stem))
+		return false;
+	const auto scope = fifo.write (1);
+	if (scope.blockSize1 + scope.blockSize2 != 1)
+		return false;
+	commands[(size_t) (scope.blockSize1 == 1 ? scope.startIndex1 : scope.startIndex2)] = command;
+	return true;
+}
+
+void DeckMotion::drain()
+{
+	const auto scope = fifo.read (fifo.getNumReady());
+	const auto run = [this] (int start, int count)
+	{
+		for (int i = start; i < start + count; ++i)
+		{
+			const auto& command = commands[(size_t) i];
+			auto& motion = motions[(size_t) command.stem];
+			switch (command.kind)
+			{
+				case Kind::press: motion.press (command.shape, command.shift, command.seed); break;
+				case Kind::lengthDown: motion.lengthDown(); break;
+				case Kind::lengthUp: motion.lengthUp(); break;
+			}
+		}
+	};
+	run (scope.startIndex1, scope.blockSize1);
+	run (scope.startIndex2, scope.blockSize2);
+}
+
+void DeckMotion::advance (const motionlite::Clock& clock, double blockSeconds, const DeckSpatial::Controls& settings,
+						  DeckSpatial::Controls& played)
+{
+	for (size_t s = 0; s < (size_t) stems; ++s)
+		motions[s].setHome (homeOf (settings, s));
+	drain();
+
+	for (size_t s = 0; s < (size_t) stems; ++s)
+	{
+		const auto frame = motions[s].advance (clock, blockSeconds);
+		played.azimuth[s].store (frame.pose.azimuth, std::memory_order_relaxed);
+		played.elevation[s].store (frame.pose.elevation, std::memory_order_relaxed);
+		played.width[s].store (frame.pose.width, std::memory_order_relaxed);   // one-shots leave it home
+		played.envelope[s].store (frame.envelope, std::memory_order_relaxed);
+		publish ((int) s, frame.pose);
+	}
+	hasBeat.store (clock.beat.has_value(), std::memory_order_relaxed);
+	lastBeat.store (clock.beat.value_or (0.0), std::memory_order_relaxed);
+}
+
+void DeckMotion::publish (int stem, const spatial::Pose& pose)
+{
+	const auto& motion = motions[(size_t) stem];
+	auto& out = published[(size_t) stem];
+	for (int shape = 0; shape < shapeCount; ++shape)
+		out.pads[(size_t) shape].store ((std::uint8_t) motion.state ((motionlite::Shape) shape), std::memory_order_relaxed);
+	out.lengthBars.store ((float) motion.lengthBars(), std::memory_order_relaxed);
+	out.azimuth.store (pose.azimuth, std::memory_order_relaxed);
+	out.elevation.store (pose.elevation, std::memory_order_relaxed);
+	out.width.store (pose.width, std::memory_order_relaxed);
+	const auto progress = motion.progress();
+	out.progressNow.store (progress ? progress->first : 0, std::memory_order_relaxed);
+	out.progressTotal.store (progress ? progress->second : 0, std::memory_order_relaxed);
+}
+
+motionlite::PadState DeckMotion::padState (int stem, motionlite::Shape shape) const
+{
+	if (! validStem (stem))
+		return motionlite::PadState::idle;
+	return (motionlite::PadState) published[(size_t) stem].pads[(size_t) shape].load (std::memory_order_relaxed);
+}
+
+motionlite::PadState DeckMotion::stemState (int stem) const
+{
+	auto state = motionlite::PadState::idle;
+	for (int shape = 0; shape < shapeCount; ++shape)
+	{
+		const auto pad = padState (stem, (motionlite::Shape) shape);
+		if (pad == motionlite::PadState::running)
+			return pad;
+		if (pad == motionlite::PadState::armed)
+			state = pad;
+	}
+	return state;
+}
+
+double DeckMotion::lengthBars (int stem) const
+{
+	return validStem (stem) ? (double) published[(size_t) stem].lengthBars.load (std::memory_order_relaxed) : 4.0;
+}
+
+spatial::Pose DeckMotion::posePlayed (int stem) const
+{
+	if (! validStem (stem))
+		return {};
+	const auto& out = published[(size_t) stem];
+	return { out.azimuth.load (std::memory_order_relaxed), out.elevation.load (std::memory_order_relaxed),
+			 out.width.load (std::memory_order_relaxed) };
+}
+
+std::optional<std::pair<int, int>> DeckMotion::progress (int stem) const
+{
+	if (! validStem (stem))
+		return std::nullopt;
+	const auto& out = published[(size_t) stem];
+	const int total = out.progressTotal.load (std::memory_order_relaxed);
+	if (total <= 0)
+		return std::nullopt;
+	return std::pair<int, int> { out.progressNow.load (std::memory_order_relaxed), total };
+}
+
+std::optional<double> DeckMotion::beat() const
+{
+	if (! hasBeat.load (std::memory_order_relaxed))
+		return std::nullopt;
+	return lastBeat.load (std::memory_order_relaxed);
+}

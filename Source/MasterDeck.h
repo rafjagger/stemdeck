@@ -21,7 +21,8 @@ int chooseMaster (int pressed, std::array<bool, 2> playing, int current, bool au
 // hears another player start claiming master after its own press gives it
 // up -- the handover the link does not do for us (stemdeck#3). A claim
 // already running when this instance joined the link is older than any press
-// here, even if it is first heard a moment after the join. A claim not heard
+// here, even if it is first heard a moment after the join and the join came
+// after the press. A claim not heard
 // for `silence` is forgotten. Pure: the times are the caller's.
 class InstanceMaster
 {

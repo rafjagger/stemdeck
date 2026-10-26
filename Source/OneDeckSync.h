@@ -26,7 +26,7 @@ public:
 
 	void setSynced (bool synced);   // the SYNC key, or a restored session
 	bool isSynced() const { return synced; }
-	void pressMaster (double seconds);
+	void pressMaster (double seconds);   // refused (stays off) on a deck without a grid
 	bool isMaster() const { return master.isMaster(); }
 	bool wantsLink() const { return synced || isMaster(); }
 

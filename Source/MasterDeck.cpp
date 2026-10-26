@@ -1,5 +1,6 @@
 #include "MasterDeck.h"
 
+#include <algorithm>
 #include <cstddef>
 
 int chooseMaster (int pressed, std::array<bool, 2> playing, int current, bool automatic)
@@ -43,8 +44,10 @@ void InstanceMaster::onStatus (int device, bool claimsMaster, double seconds)
 		return;
 	}
 
-	// A new claim -- unless heard just after joining: then it was running already.
-	const auto since = seconds - joinedAt <= joinGrace ? joinedAt - joinGrace : seconds;
+	// A new claim -- unless heard just after joining: then it was running
+	// already, older than any press here, even one made before the join (the
+	// link may start on a retry, seconds after MASTER was pressed).
+	const auto since = seconds - joinedAt <= joinGrace ? std::min (joinedAt - joinGrace, claimedAt) : seconds;
 	claims[device] = { since, seconds };
 }
 

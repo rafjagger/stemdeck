@@ -19,6 +19,9 @@ void OneDeckSync::setSynced (bool on)
 
 void OneDeckSync::pressMaster (double seconds)
 {
+	// Without a grid there is nothing to publish: refused, not lit, no claim.
+	if (! master.isMaster() && ! player.getBeatGrid().isValid())
+		return;
 	master.press (seconds);
 	panel.setMaster (master.isMaster());
 	if (master.isMaster())

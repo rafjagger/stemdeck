@@ -123,3 +123,25 @@ TEST (MasterDeck, ASilentClaimIsForgotten)
 	EXPECT_FALSE (master.yieldIfOvertaken (12.0)) << "silent for two seconds: gone";
 	EXPECT_TRUE (master.isMaster());
 }
+
+// Fix round 1: MASTER pressed while the link could not start yet; it joins on
+// a retry two seconds later. The running master's claim, heard on joining, is
+// still older than the press: this deck keeps master, and the old master --
+// listening all along -- hears this deck's claim as new and yields.
+TEST (MasterDeck, AJoinAfterThePressKeepsTheNewMaster)
+{
+	constexpr int here = 6;
+	InstanceMaster pressed, old;
+	old.joined (1.0);
+	old.press (2.0);
+
+	pressed.press (10.0);
+	pressed.joined (12.0);
+	pressed.onStatus (other, true, 12.1);
+	EXPECT_FALSE (pressed.yieldIfOvertaken (12.1));
+	EXPECT_TRUE (pressed.isMaster());
+
+	old.onStatus (here, true, 12.2);
+	EXPECT_TRUE (old.yieldIfOvertaken (12.2));
+	EXPECT_FALSE (old.isMaster());
+}

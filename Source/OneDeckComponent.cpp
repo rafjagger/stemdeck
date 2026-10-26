@@ -285,13 +285,22 @@ void OneDeckComponent::updateLink()
 
 void OneDeckComponent::showSyncStatus()
 {
+	// 60 times a second: only a change is written.
+	const auto show = [this] (const std::string& text, const std::string& tooltip)
+	{
+		const auto newText = juce::String::fromUTF8 (text.c_str());
+		const auto newTooltip = juce::String::fromUTF8 (tooltip.c_str());
+		if (syncSourceButton.getButtonText() != newText)
+			syncSourceButton.setButtonText (newText);
+		if (syncSourceButton.getTooltip() != newTooltip)
+			syncSourceButton.setTooltip (newTooltip);
+	};
+
 	if (! linkPorts.complete())
 	{
-		syncSourceButton.setButtonText (syncLabels::sourceButton (true));
-		syncSourceButton.setTooltip (syncLabels::linkUnavailable());
+		show (syncLabels::sourceButton (true), syncLabels::linkUnavailable());
 		return;
 	}
-	syncSourceButton.setTooltip (syncLabels::linkSyncTooltip());
 
 	const auto now = nowSeconds();
 	const auto& clock = sync.clock();
@@ -300,7 +309,7 @@ void OneDeckComponent::showSyncStatus()
 					: sync.isMaster()    ? syncLabels::sendingMaster (instance.letter - 'A')
 					: clock.bpm() <= 0.0 ? syncLabels::nothingHeard()
 										 : syncLabels::following (clock.bpm(), clock.isLive (now) ? clock.leader (now) : 0);
-	syncSourceButton.setButtonText (juce::String::fromUTF8 (text.c_str()));
+	show (text, syncLabels::linkSyncTooltip());
 }
 
 //==============================================================================

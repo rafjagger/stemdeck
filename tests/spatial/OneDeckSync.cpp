@@ -15,6 +15,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include <array>
 #include <chrono>
 #include <thread>
 
@@ -28,13 +29,41 @@ constexpr int deckA = 6, deckB = 8;   // DeckInstance::proLinkDevice()
 const uint32_t loopback = htonl (INADDR_LOOPBACK);
 const uint32_t loopbackBroadcast = htonl (0x7fffffff);   // 127.255.255.255
 
-// Ports of their own, not the truth's 50000-50002: a link on this machine stays untouched.
+// Three distinct free UDP ports, as the kernel hands them out (held open
+// together, so none comes twice).
+std::array<int, 3> freePorts()
+{
+	std::array<int, 3> fds {}, ports {};
+	for (size_t i = 0; i < fds.size(); ++i)
+	{
+		fds[i] = socket (AF_INET, SOCK_DGRAM, 0);
+		sockaddr_in address {};
+		address.sin_family = AF_INET;
+		address.sin_addr.s_addr = htonl (INADDR_LOOPBACK);
+		socklen_t length = sizeof (address);
+		bind (fds[i], reinterpret_cast<sockaddr*> (&address), sizeof (address));
+		getsockname (fds[i], reinterpret_cast<sockaddr*> (&address), &length);
+		ports[i] = ntohs (address.sin_port);
+	}
+	for (auto fd : fds)
+		close (fd);
+	return ports;
+}
+
+// Ports of their own, not the truth's 50000-50002: a link on this machine
+// stays untouched. Picked free per test binary run, so two ctest runs at once
+// do not hear each other's packets (CTest's RESOURCE_LOCK covers one run).
 osctruth::ProLinkPorts testPorts()
 {
-	osctruth::ProLinkPorts ports;
-	ports.announce = 47810;
-	ports.beat = 47811;
-	ports.status = 47812;
+	static const auto ports = []
+	{
+		const auto [announce, beat, status] = freePorts();
+		osctruth::ProLinkPorts free;
+		free.announce = announce;
+		free.beat = beat;
+		free.status = status;
+		return free;
+	}();
 	return ports;
 }
 
@@ -233,4 +262,20 @@ TEST_F (OneDeckSyncTest, RestoredSyncIsLitOnlyWhereSyncIsAvailable)
 	view.deckPanel().setSyncAvailable (true);
 	view.deckPanel().restoreState (session);
 	EXPECT_TRUE (view.deckPanel().isSyncEnabled());
+}
+
+// Ruling: MASTER on a deck without a grid is refused -- it could not publish,
+// and a second lit MASTER would contradict "one master". With a grid it works.
+TEST_F (OneDeckSyncTest, MasterWithoutAGridIsRefused)
+{
+	player().setBeatGrid ({});
+	sync.pressMaster (9.0);
+	EXPECT_FALSE (sync.isMaster());
+	EXPECT_FALSE (view.deckPanel().isMasterLit());
+	EXPECT_FALSE (sync.wantsLink()) << "no claim, no link";
+
+	player().setBeatGrid ({ 120.0, 0.0 });
+	sync.pressMaster (10.0);
+	EXPECT_TRUE (sync.isMaster());
+	EXPECT_TRUE (view.deckPanel().isMasterLit());
 }

@@ -240,4 +240,8 @@ target_compile_options(stemdeck-spatial-tests PRIVATE -include ${gtest_stamp_hea
 if(XVFB_RUN)
     set_target_properties(stemdeck-spatial-tests PROPERTIES CROSSCOMPILING_EMULATOR "${XVFB_RUN};-a")
 endif()
-gtest_discover_tests(stemdeck-spatial-tests)
+# The link's loopback socket tests share their ports between the two
+# "instances" in one test: one at a time within a ctest run.
+gtest_discover_tests(stemdeck-spatial-tests TEST_FILTER "-ProLinkOnOneHost.*")
+gtest_discover_tests(stemdeck-spatial-tests TEST_FILTER "ProLinkOnOneHost.*"
+    PROPERTIES RESOURCE_LOCK stemdeck-prolink-loopback)

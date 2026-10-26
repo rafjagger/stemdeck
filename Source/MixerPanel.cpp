@@ -1,4 +1,6 @@
 #include "MixerPanel.h"
+
+#include "KnobSetup.h"
 #include "Theme.h"
 #include "SurfaceJuce.h"
 #include "StemGainKnob.h"
@@ -229,13 +231,8 @@ void ChannelStrip::showBuses (int stem)
 
 void ChannelStrip::nudgeStemGain (int stem, double detents)
 {
-	// Some two turns of an encoder from silence to the top.
-	constexpr double detentShare = 1.0 / 48.0;
 	if (auto* knob = knobs[stem])
-	{
-		const auto travel = knob->valueToProportionOfLength (knob->getValue()) + detents * detentShare;
-		knob->setValue (knob->proportionOfLengthToValue (juce::jlimit (0.0, 1.0, travel)), juce::sendNotificationSync);
-	}
+		knobsetup::nudge (*knob, detents);
 }
 
 void ChannelStrip::toggleMute (int stem)

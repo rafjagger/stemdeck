@@ -4,6 +4,7 @@
 
 #include "DeckSpatialPorts.h"
 #include "StemDeckPlayer.h"
+#include "KnobSetup.h"
 #include "StemGainKnob.h"
 #include "Theme.h"
 
@@ -17,20 +18,14 @@ namespace
 
 	void setUpKnob (juce::Slider& knob, juce::Range<double> range, double step, double fresh, const juce::String& suffix)
 	{
-		knob.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
-		knob.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
-		knob.setRange (range.getStart(), range.getEnd(), step);
-		knob.setDoubleClickReturnValue (true, fresh);
-		knob.setPopupDisplayEnabled (true, true, nullptr);
+		knobsetup::rotaryKnob (knob, range.getStart(), range.getEnd(), step, fresh);
 		knob.setTextValueSuffix (suffix);
-		knob.setMouseClickGrabsKeyboardFocus (false);
 	}
 
 	void setUpSwitch (juce::TextButton& key, juce::Colour on, juce::Colour inkOn)
 	{
 		key.setClickingTogglesState (true);
-		key.setMouseClickGrabsKeyboardFocus (false);
-		key.setWantsKeyboardFocus (false);
+		knobsetup::untabbableKey (key);
 		key.setColour (juce::TextButton::buttonOnColourId, on);
 		key.setColour (juce::TextButton::textColourOnId, inkOn);
 	}

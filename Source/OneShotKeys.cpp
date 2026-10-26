@@ -3,6 +3,7 @@
 #include "OneShotKeys.h"
 
 #include "DeckMotion.h"
+#include "KnobSetup.h"
 
 #include <cmath>
 
@@ -17,8 +18,7 @@ namespace
 	void setUpKey (juce::TextButton& key, const juce::String& text)
 	{
 		key.setButtonText (text);
-		key.setMouseClickGrabsKeyboardFocus (false);
-		key.setWantsKeyboardFocus (false);
+		knobsetup::untabbableKey (key);
 	}
 
 	juce::String barsNumber (double bars)

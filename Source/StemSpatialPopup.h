@@ -32,11 +32,11 @@ public:
 	juce::Slider& width() { return widthSlider; }
 	StemViewer& viewer() { return stemViewer; }
 	// With a DeckMotion only.
-	juce::TextButton& pad (motionlite::Shape shape) { return oneShots->pad (shape); }
-	juce::TextButton& lengthDown() { return oneShots->lengthDown(); }
-	juce::TextButton& lengthUp() { return oneShots->lengthUp(); }
+	juce::TextButton& pad (motionlite::Shape shape) { jassert (oneShots != nullptr); return oneShots->pad (shape); }
+	juce::TextButton& lengthDown() { jassert (oneShots != nullptr); return oneShots->lengthDown(); }
+	juce::TextButton& lengthUp() { jassert (oneShots != nullptr); return oneShots->lengthUp(); }
 	juce::TextButton& shift() { return shiftKey; }
-	juce::String lengthText() const { return oneShots->length().getText(); }
+	juce::String lengthText() const { jassert (oneShots != nullptr); return oneShots->length().getText(); }
 
 	void setStemColour (juce::Colour);
 	// Reads what the audio thread last did into the pads, the length and the

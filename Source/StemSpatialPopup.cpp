@@ -3,6 +3,7 @@
 #include "StemSpatialPopup.h"
 
 #include "DeckMotion.h"
+#include "KnobSetup.h"
 
 namespace
 {
@@ -59,8 +60,7 @@ StemSpatialPopup::StemSpatialPopup (DeckSpatial::Controls& c, int stem, DeckMoti
 		oneShots = std::make_unique<OneShotKeys> (*motion, (int) stemIndex, [this] { return takeShift(); });
 		oneShots->addTo (*this);
 		shiftKey.setButtonText ("SHIFT");
-		shiftKey.setMouseClickGrabsKeyboardFocus (false);
-		shiftKey.setWantsKeyboardFocus (false);
+		knobsetup::untabbableKey (shiftKey);
 		shiftKey.setClickingTogglesState (true);
 		addAndMakeVisible (shiftKey);
 	}

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "OneDeckView.h"
 
+#include "KnobSetup.h"
 #include "SurfaceJuce.h"
 #include "SurfaceLayout.h"
 #include "Theme.h"
@@ -24,14 +25,8 @@ namespace
 
 	void setUpPhonesKnob (juce::Slider& knob, double fresh, std::function<juce::String (double)> text)
 	{
-		knob.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
-		knob.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
-		knob.setRange (0.0, 1.0, 0.01);
-		knob.setValue (fresh, juce::dontSendNotification);
-		knob.setDoubleClickReturnValue (true, fresh);
-		knob.setPopupDisplayEnabled (true, true, nullptr);
+		knobsetup::rotaryKnob (knob, 0.0, 1.0, 0.01, fresh);
 		knob.textFromValueFunction = std::move (text);
-		knob.setMouseClickGrabsKeyboardFocus (false);
 		// Neutral: the phones are no stem and no state.
 		knob.setColour (juce::Slider::rotarySliderFillColourId, Theme::textDim);
 	}
@@ -227,8 +222,7 @@ OneDeckView::OneDeckView (OneDeckAudio& a, juce::AudioFormatManager& formats, in
 	host.onAnalysing = [this] (bool analysing) { panel.setAnalysing (analysing); };
 
 	shiftKey.setClickingTogglesState (true);
-	shiftKey.setMouseClickGrabsKeyboardFocus (false);
-	shiftKey.setWantsKeyboardFocus (false);
+	knobsetup::untabbableKey (shiftKey);
 	shiftKey.setColour (juce::TextButton::buttonOnColourId, Theme::deck (deckIndex));
 	shiftKey.setTooltip ("The next pad starts now, not on the next bar");
 	addAndMakeVisible (shiftKey);

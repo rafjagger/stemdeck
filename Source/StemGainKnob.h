@@ -3,6 +3,7 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include "KnobSetup.h"
 #include "StemKnob.h"
 
 // A stem's GAIN knob, the same on the mixer's strip and on the one-deck
@@ -23,14 +24,8 @@ namespace stemgain
 
 	inline void setUp (juce::Slider& knob)
 	{
-		knob.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
-		knob.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
-		knob.setRange (stemKnobMinimumDb, 6.0, 0.1);
+		knobsetup::rotaryKnob (knob, stemKnobMinimumDb, 6.0, 0.1, 0.0);
 		knob.setSkewFactorFromMidPoint (-12.0);
-		knob.setValue (0.0, juce::dontSendNotification);
-		knob.setDoubleClickReturnValue (true, 0.0);
-		knob.setPopupDisplayEnabled (true, true, nullptr);
 		knob.textFromValueFunction = dbText;
-		knob.setMouseClickGrabsKeyboardFocus (false);
 	}
 }

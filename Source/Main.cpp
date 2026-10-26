@@ -8,6 +8,10 @@
 
 #include <JuceHeader.h>
 #include "MainComponent.h"
+#include "DeckInstance.h"
+#include "LaunchOptions.h"
+
+#include <iostream>
 
 //==============================================================================
 class djApplication_LaurentKleinApplication  : public juce::JUCEApplication
@@ -23,14 +27,33 @@ public:
     //==============================================================================
     void initialise (const juce::String& commandLine) override
     {
-        // This method is where you should put your application's initialisation code..
+        const auto parsed = parseLaunch (toStdStrings (getCommandLineParameterArray()));
 
-        mainWindow.reset (new MainWindow (getApplicationName()));
+        if (const auto* why = std::get_if<std::string> (&parsed))
+        {
+            std::cerr << "StemDeck: " << *why << std::endl;
+            setApplicationReturnValue (2);
+            quit();
+            return;
+        }
+
+        const auto& options = std::get<LaunchOptions> (parsed);
+        auto title = getApplicationName();
+
+        // The one-deck screen lands in S4.4; until then -bformat only names the
+        // window and the two-deck UI runs as it always did.
+        if (options.oneDeck)
+        {
+            title = DeckInstance { options.deck }.title();
+            juce::Logger::writeToLog ("one-deck mode lands in S4.4");
+        }
+
+        mainWindow.reset (new MainWindow (title));
 
         // The rig's service starts it with --fullscreen: the i3 rule alone
         // missed it, catching one of the windows JUCE builds and drops again
         // while StemDeck comes up (2026-09-30).
-        if (commandLine.contains ("--fullscreen"))
+        if (options.fullscreen)
             mainWindow->setFullScreen (true);
     }
 
@@ -113,6 +136,14 @@ public:
     };
 
 private:
+    static std::vector<std::string> toStdStrings (const juce::StringArray& words)
+    {
+        std::vector<std::string> out;
+        for (const auto& word : words)
+            out.push_back (word.toStdString());
+        return out;
+    }
+
     std::unique_ptr<MainWindow> mainWindow;
 };
 

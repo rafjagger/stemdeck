@@ -85,6 +85,10 @@ add_executable(stemdeck-tests
     ${CMAKE_SOURCE_DIR}/Source/KeyLockStretcher.cpp
     Session.cpp
     ${CMAKE_SOURCE_DIR}/Source/Session.cpp
+    LaunchOptions.cpp
+    ${CMAKE_SOURCE_DIR}/Source/LaunchOptions.cpp
+    DeckInstance.cpp
+    ${CMAKE_SOURCE_DIR}/Source/DeckInstance.cpp
     SpatialLaw.cpp
     ${CMAKE_SOURCE_DIR}/Source/SpatialLaw.cpp
     ${CMAKE_SOURCE_DIR}/third_party/a3-engine/src/a3-engine/Laws.cpp)

@@ -92,6 +92,8 @@ target_precompile_headers(StemDeck PRIVATE
 
 target_sources(StemDeck PRIVATE
     Source/Main.cpp
+    Source/LaunchOptions.cpp
+    Source/DeckInstance.cpp
     Source/MainComponent.cpp
     Source/OscTruth.cpp
     Source/OscTruthFile.cpp

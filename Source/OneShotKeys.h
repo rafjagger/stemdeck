@@ -28,6 +28,10 @@ public:
 	// Reads what the audio thread last did into the faces and the length.
 	void refresh();
 
+	// What a click on the key does, now. triggerClick() answers asynchronously,
+	// after a SHIFT release in the same frame would have taken the shift away.
+	void press (motionlite::Shape);
+
 	juce::TextButton& pad (motionlite::Shape shape) { return pads[(size_t) shape]; }
 	juce::TextButton& lengthDown() { return shorter; }
 	juce::TextButton& lengthUp() { return longer; }
@@ -39,7 +43,6 @@ public:
 	static juce::String stateLine (const DeckMotion&, int stem);
 
 private:
-	void press (motionlite::Shape);
 	void lookOfPad (motionlite::Shape);
 
 	DeckMotion& motion;

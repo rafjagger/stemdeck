@@ -44,6 +44,7 @@ void DeckSpatialPorts::followPlayer (const StemDeckPlayer& player)
 		controls.muted[(size_t) s].store (player.isStemMuted (s), std::memory_order_relaxed);
 		controls.cued[(size_t) s].store (player.isStemCued (s), std::memory_order_relaxed);
 	}
+	controls.playing.store (player.isPlaying(), std::memory_order_relaxed);   // stopped and silent, it stands (R14)
 }
 
 void DeckSpatialPorts::render (const StemDeckPlayer& player, juce::AudioBuffer<float>& outputs, int firstChannel, int numSamples)

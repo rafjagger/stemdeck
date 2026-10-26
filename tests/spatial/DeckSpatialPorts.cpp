@@ -239,3 +239,23 @@ TEST_F (TwoDeckSpatial, TwoDeckControlsAreFixed)
 		EXPECT_EQ (c.cued[(size_t) s].load(), s == 1) << s;
 	}
 }
+
+// R14: the spatial deck stands while the player does, and plays when it plays.
+TEST_F (TwoDeckSpatial, TheSpatialDeckFollowsThePlayersTransport)
+{
+	auto& c = ports.deckSpatial()->controls();
+	setAllStems (false, true, 1.0f);
+	renderBlock();
+	EXPECT_FALSE (c.playing.load());
+
+	player.play();
+	renderBlock();
+	EXPECT_TRUE (c.playing.load());
+
+	player.stop();
+	renderBlocks (blocksFor (0.1));
+	ports.deckSpatial()->resetTiming();
+	renderBlocks (blocksFor (0.1));
+	EXPECT_FALSE (c.playing.load());
+	EXPECT_EQ (ports.deckSpatial()->timing().encoders, 0.0) << "a stopped deck stands";
+}

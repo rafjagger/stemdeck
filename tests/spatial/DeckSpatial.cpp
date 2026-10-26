@@ -507,3 +507,154 @@ TEST (DeckSpatial, CueDecoderRestartsClean)
 		EXPECT_LE (maxDifference (restarted, first.cue[(size_t) side]), 1e-5f) << "cue " << side;
 	}
 }
+
+// R14: a standing deck -- not playing, silent, every ramp settled -- runs no
+// encoder and no bed; its bformat and aux are exactly 0.0f.
+namespace
+{
+constexpr int playedBlocks = 30, standingBlocks = 100;
+constexpr int standFrom = playedBlocks * block, resumeAt = (playedBlocks + standingBlocks) * block;
+
+// Noise, then silence while the deck stands, then the noise again.
+StemInputs playStandPlay()
+{
+	auto in = noiseOnAllStems();
+	for (auto& channel : in.channels)
+		std::fill (channel.begin() + standFrom, channel.begin() + resumeAt, 0.0f);
+	return in;
+}
+
+void expectBformatNearFrom (const Rendered& a, const Rendered& b, int from, float tolerance, const std::string& what)
+{
+	for (int c = 0; c < spatial::bformatChannels; ++c)
+		EXPECT_LE (maxDifference (a.bformat[(size_t) c], b.bformat[(size_t) c], from), tolerance) << what << ", bformat " << c;
+}
+
+void expectStereoNearFrom (const Rendered& a, const Rendered& b, int from, float tolerance, const std::string& what)
+{
+	for (int side = 0; side < 2; ++side)
+	{
+		EXPECT_LE (maxDifference (a.cue[(size_t) side], b.cue[(size_t) side], from), tolerance) << what << ", cue " << side;
+		EXPECT_LE (maxDifference (a.aux[(size_t) side], b.aux[(size_t) side], from), tolerance) << what << ", aux " << side;
+		EXPECT_LE (maxDifference (a.phones[(size_t) side], b.phones[(size_t) side], from), tolerance) << what << ", phones " << side;
+	}
+}
+
+void movePose (DeckSpatial::Controls& c)
+{
+	for (int s = 0; s < DeckSpatial::stems; ++s)
+	{
+		c.azimuth[(size_t) s] = 100.0f - 50.0f * (float) s;
+		c.elevation[(size_t) s] = 40.0f - 5.0f * (float) s;
+		c.width[(size_t) s] = 80.0f - 15.0f * (float) s;
+	}
+}
+}
+
+TEST (DeckSpatial, AStandingDeckCostsNothingAndIsSilent)
+{
+	juce::ScopedJuceInitialiser_GUI juceInitialiser;
+	const int stopAt = 50 * block, measureFrom = 60 * block, measuredBlocks = 200;
+	StemInputs in (measureFrom + measuredBlocks * block);
+	for (int s = 0; s < DeckSpatial::stems; ++s)
+		in.playNoise (s, 10 * (s + 1));
+	for (auto& channel : in.channels)
+		std::fill (channel.begin() + stopAt, channel.end(), 0.0f);
+
+	auto deck = preparedDeck (block, busyDeck);
+	const auto out = render (*deck, in, { block, true, [&] (int first)
+	{
+		if (first == stopAt)
+			deck->controls().playing = false;
+		if (first == measureFrom)
+			deck->resetTiming();
+	} });
+
+	const auto t = deck->timing();
+	EXPECT_EQ (t.encoders, 0.0);
+	EXPECT_EQ (t.bed, 0.0);
+	EXPECT_EQ (t.cueBed, 0.0);
+	for (int c = 0; c < spatial::bformatChannels; ++c)
+		EXPECT_TRUE (exactlySilent (out.bformat[(size_t) c], measureFrom)) << "bformat " << c;
+	for (int side = 0; side < 2; ++side)
+		EXPECT_TRUE (exactlySilent (out.aux[(size_t) side], measureFrom)) << "aux " << side;
+	EXPECT_GT (deck->decoderRuns().phones, 0) << "the phones follow R12 unchanged";
+
+	// The cue decoder finished its hold-over on silence and stopped.
+	deck->resetTiming();
+	render (*deck, StemInputs (8 * block));
+	EXPECT_EQ (deck->decoderRuns().cue, 0);
+	EXPECT_EQ (deck->timing().encoders, 0.0);
+}
+
+TEST (DeckSpatial, StartingAgainSoundsAsNeverStopped)
+{
+	juce::ScopedJuceInitialiser_GUI juceInitialiser;
+	const auto in = playStandPlay();
+	auto always = preparedDeck (block, busyDeck);
+	auto stood = preparedDeck (block, busyDeck);
+	const auto reference = render (*always, in);
+	const auto out = render (*stood, in, { block, true, [&] (int first)
+	{
+		stood->controls().playing = first < standFrom || first >= resumeAt;
+		if (first == standFrom + 10 * block)
+			stood->resetTiming();
+		if (first == resumeAt)
+			EXPECT_EQ (stood->timing().encoders, 0.0) << "it did stand";
+	} });
+
+	expectBformatNearFrom (out, reference, resumeAt + block, 1e-6f, "from the second resumed block");
+	expectBformatNearFrom (out, reference, resumeAt, 1e-6f, "the first resumed block too");
+	expectStereoNearFrom (out, reference, resumeAt, 1e-6f, "resumed");
+}
+
+TEST (DeckSpatial, APoseChangedWhileStandingIsThereOnResume)
+{
+	juce::ScopedJuceInitialiser_GUI juceInitialiser;
+	const auto in = playStandPlay();
+	const int moveAt = standFrom + 50 * block;
+	auto always = preparedDeck (block, busyDeck);
+	auto stood = preparedDeck (block, busyDeck);
+	const auto reference = render (*always, in, { block, true, [&] (int first)
+	{
+		if (first == moveAt)
+			movePose (always->controls());
+	} });
+	const auto out = render (*stood, in, { block, true, [&] (int first)
+	{
+		stood->controls().playing = first < standFrom || first >= resumeAt;
+		if (first == moveAt)
+			movePose (stood->controls());
+	} });
+
+	expectBformatNearFrom (out, reference, resumeAt, 1e-5f, "the new pose from the first resumed block");
+	for (int c = 0; c < spatial::bformatChannels; ++c)
+		EXPECT_TRUE (exactlySilent (out.bformat[(size_t) c], standFrom + block, resumeAt)) << "standing, bformat " << c;
+}
+
+TEST (DeckSpatial, APlayingDeckOnSilenceKeepsEncoding)
+{
+	juce::ScopedJuceInitialiser_GUI juceInitialiser;
+	auto deck = preparedDeck (block, busyDeck);
+	render (*deck, StemInputs (20 * block));
+	deck->resetTiming();
+	render (*deck, StemInputs (20 * block));
+	EXPECT_GT (deck->timing().encoders, 0.0) << "one-shots move during silent passages";
+	EXPECT_GT (deck->timing().bed, 0.0);
+}
+
+TEST (DeckSpatial, AMovingRampKeepsAStoppedDeckRunning)
+{
+	juce::ScopedJuceInitialiser_GUI juceInitialiser;
+	auto deck = preparedDeck (block, [] (DeckSpatial::Controls& c) { busyDeck (c); c.playing = false; });
+	render (*deck, StemInputs (20 * block));
+	deck->resetTiming();
+	deck->controls().muted[0] = true;   // its 10 ms ramp moves for four blocks
+	render (*deck, StemInputs (2 * block));
+	EXPECT_GT (deck->timing().encoders, 0.0);
+
+	render (*deck, StemInputs (4 * block));
+	deck->resetTiming();
+	render (*deck, StemInputs (20 * block));
+	EXPECT_EQ (deck->timing().encoders, 0.0) << "settled, it stands again";
+}

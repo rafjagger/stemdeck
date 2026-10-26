@@ -13,7 +13,7 @@
 #include <vector>
 
 // The CPU gate's measurement, shared by the timing test and the standalone
-// tool: one deck, 4 stems moving, three decoder configurations.
+// tool: one deck, 4 stems moving, three decoder configurations, and a standing deck.
 namespace sdtest
 {
 struct TimingRow
@@ -22,7 +22,7 @@ struct TimingRow
 	double totalMean = 0.0, totalP99 = 0.0;   // µs per 128-block, whole process() call
 	DeckSpatial::Timing nodes {};              // mean µs per node group
 };
-using TimingTable = std::array<TimingRow, 3>;
+using TimingTable = std::array<TimingRow, 4>;
 
 namespace detail
 {
@@ -43,8 +43,11 @@ inline void movePoses (DeckSpatial::Controls& c, int blockIndex)
 	}
 }
 
-inline TimingRow measure (const char* name, int blocks, bool cued, bool phones)
+enum class Deck { standing, playing };
+
+inline TimingRow measure (const char* name, int blocks, bool cued, bool phones, Deck deckState = Deck::playing)
 {
+	const bool standing = deckState == Deck::standing;
 	auto deck = preparedDeck (block, [&] (DeckSpatial::Controls& c)
 	{
 		for (int s = 0; s < DeckSpatial::stems; ++s)
@@ -55,11 +58,13 @@ inline TimingRow measure (const char* name, int blocks, bool cued, bool phones)
 		c.phonesDecoderOn = phones;
 		c.phonesMix = 0.5f;
 		c.phonesLevel = 1.0f;
+		c.playing = ! standing;
 	});
 
 	StemInputs in (block);
-	for (int s = 0; s < DeckSpatial::stems; ++s)
-		in.playNoise (s, 10 * (s + 1));
+	if (! standing)   // standing: silent, poses still (one-shots freeze while paused)
+		for (int s = 0; s < DeckSpatial::stems; ++s)
+			in.playNoise (s, 10 * (s + 1));
 	std::array<const float*, 8> stems {};
 	for (size_t c = 0; c < stems.size(); ++c)
 		stems[c] = in.channels[c].data();
@@ -82,7 +87,8 @@ inline TimingRow measure (const char* name, int blocks, bool cued, bool phones)
 	const int warmUp = 400;   // ramps settle, decoders prime
 	for (int i = 0; i < warmUp; ++i)
 	{
-		movePoses (controls, i);
+		if (! standing)
+			movePoses (controls, i);
 		deck->process (stems.data(), outputs, block);
 	}
 	deck->resetTiming();
@@ -91,7 +97,8 @@ inline TimingRow measure (const char* name, int blocks, bool cued, bool phones)
 	perBlock.reserve ((size_t) blocks);
 	for (int i = 0; i < blocks; ++i)
 	{
-		movePoses (controls, warmUp + i);
+		if (! standing)
+			movePoses (controls, warmUp + i);
 		const auto start = std::chrono::steady_clock::now();
 		deck->process (stems.data(), outputs, block);
 		perBlock.push_back (std::chrono::duration<double, std::micro> (std::chrono::steady_clock::now() - start).count());
@@ -109,10 +116,12 @@ inline TimingRow measure (const char* name, int blocks, bool cued, bool phones)
 }
 }
 
-// (a) bed + 4 encoders, nothing cued, phones decoder off; (b) all cued, cue decoder on; (c) (b) + phones decoder.
+// (0) a standing deck (R14); (a) bed + 4 encoders, nothing cued, phones decoder off; (b) all cued, cue
+// decoder on; (c) (b) + phones decoder.
 inline TimingTable spatialTiming (int blocks)
 {
-	return { detail::measure ("(a) bed + encoders, idle decoders", blocks, false, false),
+	return { detail::measure ("(0) standing deck", blocks, false, false, detail::Deck::standing),
+	         detail::measure ("(a) bed + encoders, idle decoders", blocks, false, false),
 	         detail::measure ("(b) + cue decoder (all cued)", blocks, true, false),
 	         detail::measure ("(c) + phones decoder", blocks, true, true) };
 }

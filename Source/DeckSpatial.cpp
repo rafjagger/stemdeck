@@ -44,6 +44,18 @@ GainSpan fill (juce::LinearSmoothedValue<float>& ramp, float* gains, int count)
 	return GainSpan::varying;
 }
 
+bool samePose (const a3::StereoPose& a, const a3::StereoPose& b)
+{
+	return exactly (a.azimuth, b.azimuth) && exactly (a.elevation, b.elevation) && exactly (a.roll, b.roll)
+	    && exactly (a.width, b.width);
+}
+
+bool exactlySilent (const float* samples, int count)
+{
+	const auto range = FVO::findMinAndMax (samples, count);
+	return exactly (range.getStart(), 0.0f) && exactly (range.getEnd(), 0.0f);
+}
+
 bool active (const juce::LinearSmoothedValue<float>& ramp)
 {
 	return ramp.isSmoothing() || ! exactly (ramp.getTargetValue(), 0.0f);
@@ -120,6 +132,10 @@ struct DeckSpatial::Stem
 	std::unique_ptr<a3::IemNode> encoder;
 	juce::AudioBuffer<float> io;   // 2 in, 16 out
 	Ramp moving, mute, cue;
+	a3::StereoPose pose {};        // the pose last handed to the encoder
+	int glideRemaining = 0;        // samples IEM's high-quality smoothing still glides towards it
+
+	bool rampsSettled() const { return ! (moving.isSmoothing() || mute.isSmoothing() || cue.isSmoothing()); }
 };
 
 DeckSpatial::DeckSpatial() = default;
@@ -170,7 +186,9 @@ void DeckSpatial::prepare (double sampleRate, int newBlockSize)
 		auto& stem = *stemNodes[(size_t) s];
 		// Before prepare: IEM's own width default is 0, and the warm-up block
 		// settles the encoder's smoothing on the stem's pose.
-		stem.encoder->setStereoPose (poseOf (s));
+		stem.pose = poseOf (s);
+		stem.glideRemaining = 0;
+		stem.encoder->setStereoPose (stem.pose);
 		stem.encoder->prepare (sampleRate, blockSize);
 		stem.io.setSize (busChannels, blockSize);
 		for (auto* ramp : { &stem.moving, &stem.mute, &stem.cue })
@@ -219,8 +237,16 @@ void DeckSpatial::readControls()
 		stem.moving.setTargetValue (spatial::movingGain (threeD));
 		stem.mute.setTargetValue (state.muted[i].load (std::memory_order_relaxed) ? 0.0f : 1.0f);
 		stem.cue.setTargetValue (state.cued[i].load (std::memory_order_relaxed) ? 1.0f : 0.0f);
-		stem.encoder->setStereoPose (poseOf (s));
+		const auto pose = poseOf (s);
+		if (! samePose (pose, stem.pose))
+		{
+			// IEM's high-quality mode glides to a new pose over one prepared block.
+			stem.pose = pose;
+			stem.glideRemaining = blockSize;
+		}
+		stem.encoder->setStereoPose (pose);
 	}
+	deckPlaying = state.playing.load (std::memory_order_relaxed);
 	const auto weights = spatial::phonesWeights (state.phonesLevel.load (std::memory_order_relaxed),
 	                                             state.phonesMix.load (std::memory_order_relaxed));
 	phonesCueWeight.setTargetValue (weights.cue);
@@ -249,14 +275,62 @@ bool DeckSpatial::cueWanted() const
 void DeckSpatial::processChunk (const float* const* stemsPreMute, const Outputs& out, int offset, int count)
 {
 	readControls();
-	const bool cueInUse = cueWanted();
+	const bool standing = stands (stemsPreMute, offset, count);
+	const bool cueInUse = ! standing && cueWanted();
 	for (auto* buffer : { &mainSum, &cueSum, &bedIn, &cueBedIn, &auxSum })
 		buffer->clear (0, count);
-	for (int s = 0; s < stems; ++s)
-		encodeStem (*stemNodes[(size_t) s], stemsPreMute[2 * s] + offset, stemsPreMute[2 * s + 1] + offset, count);
-	renderMain (out, offset, count);
+	if (standing)
+	{
+		renderSilentMain (out, offset, count);
+	}
+	else
+	{
+		for (int s = 0; s < stems; ++s)
+			encodeStem (*stemNodes[(size_t) s], stemsPreMute[2 * s] + offset, stemsPreMute[2 * s + 1] + offset, count);
+		renderMain (out, offset, count);
+	}
 	renderCue (out, offset, count, cueInUse);
 	renderPhones (out, offset, count);
+}
+
+// R14: not playing, every stem's pre-mute input exactly 0.0f, no gain ramp
+// moving. Every path is then linear in silence: encoders and beds would add 0.
+bool DeckSpatial::stands (const float* const* stemsPreMute, int offset, int count) const
+{
+	if (deckPlaying)
+		return false;
+	for (const auto& stem : stemNodes)
+		if (! stem->rampsSettled())
+			return false;
+	for (int c = 0; c < 2 * stems; ++c)
+		if (! exactlySilent (stemsPreMute[c] + offset, count))
+			return false;
+	return true;
+}
+
+// A standing deck's ports are exactly 0.0f. An encoder whose pose moved runs
+// once on silence, so the deck resumes at that pose instead of gliding from
+// the last one it encoded (a deck that never stood glided on its silence).
+void DeckSpatial::renderSilentMain (const Outputs& out, int offset, int count)
+{
+	for (auto& stem : stemNodes)
+		finishGlide (*stem);
+	for (auto* port : out.bformat)
+		if (port != nullptr)
+			FVO::clear (port + offset, count);
+	for (auto* port : out.aux)
+		if (port != nullptr)
+			FVO::clear (port + offset, count);
+}
+
+void DeckSpatial::finishGlide (Stem& stem)
+{
+	if (stem.glideRemaining <= 0)
+		return;
+	const int remaining = juce::jmin (stem.glideRemaining, blockSize);
+	stem.io.clear (0, remaining);
+	timed (encoderClock.ticks, [&] { runNode (*stem.encoder, stem.io, remaining); });
+	stem.glideRemaining = 0;
 }
 
 // Moving share g·x into the stem's StereoEncoder, steady share x - g·x into the
@@ -282,6 +356,7 @@ void DeckSpatial::encodeStem (Stem& stem, const float* left, const float* right,
 		FVO::subtract (steady[side], in[side], encoderIn, count);
 	}
 	timed (encoderClock.ticks, [&] { runNode (*stem.encoder, stem.io, count); });
+	stem.glideRemaining = juce::jmax (0, stem.glideRemaining - count);
 
 	for (int c = 0; c < busChannels; ++c)
 	{

@@ -11,7 +11,7 @@ class StemDeckPlayer;
 // One deck's spatial ports in two-deck mode (stage S2): its DeckSpatial fed
 // from the player's pre-mute block, written to the deck's 20 output channels
 // (Outputs.h) -- B-format, the binaural cue, and phones carrying that cue.
-// Mute and cue follow the player's stems each block; deck 3D stays 1 and
+// Mute, cue and transport follow the player each block; deck 3D stays 1 and
 // StemDeck's own phones decoder off (no phones UI here). AUX is not rendered:
 // the AUX bus stays the AUX.
 class DeckSpatialPorts

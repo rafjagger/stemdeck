@@ -160,3 +160,42 @@ TEST (DeckSpatialAllocation, ProcessDoesNotAllocate)
 	EXPECT_GT (deck->decoderRuns().cue, 0) << "the cue decoder ran in the counted blocks";
 	EXPECT_GT (deck->decoderRuns().phones, 0) << "the phones decoder ran in the counted blocks";
 }
+
+// R14: standing, moving a pose while standing (one silent encoder run), and resuming.
+TEST (DeckSpatialAllocation, StandingAndResumingDoNotAllocate)
+{
+	juce::ScopedJuceInitialiser_GUI juceInitialiser;
+	constexpr int blocks = 120, longestCall = 4096;
+	const Signal quiet = silence (longestCall);
+	std::array<Signal, spatial::bformatChannels + 6> ports;
+	for (auto& port : ports)
+		port = silence (longestCall);
+	std::array<const float*, 8> stems {};
+	stems.fill (quiet.data());
+	DeckSpatial::Outputs outputs;
+	for (size_t ch = 0; ch < outputs.bformat.size(); ++ch)
+		outputs.bformat[ch] = ports[ch].data();
+	for (size_t side = 0; side < 2; ++side)
+	{
+		outputs.cue[side] = ports[16 + side].data();
+		outputs.aux[side] = ports[18 + side].data();
+		outputs.phones[side] = ports[20 + side].data();
+	}
+	auto deck = preparedDeck (block, [] (DeckSpatial::Controls& c) { c.playing = false; c.cued[0] = true; });
+	auto& c = deck->controls();
+
+	const auto count = countDuring ([&]
+	{
+		for (int b = 0; b < blocks; ++b)
+		{
+			c.playing = b >= 100;
+			if (b % 10 == 5)
+				c.azimuth[(size_t) (b / 10 % DeckSpatial::stems)] = (float) (7 * b % 360) - 180.0f;
+			const int callSizes[] = { block, 1, 7, 300, longestCall };
+			deck->process (stems.data(), outputs, callSizes[b % 5]);
+		}
+	});
+	EXPECT_EQ (count.allocated, 0);
+	EXPECT_EQ (count.released, 0);
+	EXPECT_GT (deck->timing().encoders, 0.0) << "the pose moves and the resume ran the encoders";
+}

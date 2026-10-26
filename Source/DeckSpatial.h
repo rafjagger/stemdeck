@@ -21,7 +21,8 @@ class SteadyBed;
 // a BinauralDecoder; AUX as the plain stereo sum; phones for standalone use.
 // The encoders are fed pre-MUTE and MUTE applies to their output (ruling R5),
 // so the cue stays pre-mute. Every gain ramps over 10 ms; every volume at its
-// minimum is exact silence (R4). The decoders run only while used (R12).
+// minimum is exact silence (R4). The decoders run only while used (R12), and a
+// standing deck runs no encoder and no bed at all (R14).
 class DeckSpatial
 {
 public:
@@ -35,6 +36,7 @@ public:
 		std::atomic<float> deckThreeD { 1.0f }, phonesLevel { 1.0f }, phonesMix { 0.0f };
 		std::atomic<bool> phonesDecoderOn { false };   // the app sets it from spatial::phonesDecoderRuns
 		std::array<std::atomic<float>, stems> envelope {};   // a one-shot's 3D envelope; 0 = none
+		std::atomic<bool> playing { true };   // false, silent and settled, the deck stands (R14)
 	};
 
 	// A null entry: that output is not rendered.
@@ -73,6 +75,9 @@ private:
 	DeckSpatial();
 	void readControls();
 	void processChunk (const float* const* stemsPreMute, const Outputs&, int offset, int count);
+	bool stands (const float* const* stemsPreMute, int offset, int count) const;
+	void finishGlide (Stem&);
+	void renderSilentMain (const Outputs&, int offset, int count);
 	void encodeStem (Stem&, const float* left, const float* right, int count);
 	a3::StereoPose poseOf (int stem) const;
 	void renderMain (const Outputs&, int offset, int count);
@@ -82,6 +87,7 @@ private:
 	bool cueWanted() const;
 
 	Controls state;
+	bool deckPlaying = true;   // state.playing, as read for this chunk
 	std::array<std::unique_ptr<Stem>, stems> stemNodes;
 	std::unique_ptr<SteadyBed> mainBed, cueBed;
 	std::unique_ptr<a3::IemNode> cueDecoder, phonesDecoder;

@@ -327,6 +327,105 @@ TEST (DeckSpatial, PhonesDecoderOffWhenNotEnabled)
 	}
 }
 
+TEST (DeckSpatial, PhonesDecoderStopsAtOnceWhenDisconnected)
+{
+	juce::ScopedJuceInitialiser_GUI juceInitialiser;
+	const auto in = noiseOnAllStems();
+	auto deck = preparedDeck (block, [] (DeckSpatial::Controls& c) { busyDeck (c); c.phonesMix = 1.0f; });
+	render (*deck, in);
+	const auto ranConnected = deck->decoderRuns().phones;
+	EXPECT_EQ (ranConnected, (std::int64_t) oneSecond);
+	render (*deck, in, { block, false, {} });
+	EXPECT_EQ (deck->decoderRuns().phones, ranConnected) << "no hold-over once the phones are gone";
+}
+
+TEST (DeckSpatial, PhonesDecoderHoldsOverWhenTurnedOff)
+{
+	juce::ScopedJuceInitialiser_GUI juceInitialiser;
+	const auto in = noiseOnAllStems();
+	const int turnOff = 64 * block;
+	auto deck = preparedDeck (block, busyDeck);
+	render (*deck, in, { block, true, [&] (int first)
+	{
+		if (first == turnOff)
+		{
+			deck->controls().phonesDecoderOn = false;
+			deck->resetTiming();
+		}
+	} });
+	const int rampBlocks = (rampSamples + block - 1) / block;
+	EXPECT_EQ (deck->decoderRuns().phones, (std::int64_t) (rampBlocks * block + DecoderGate::holdOverSamples));
+
+	deck->resetTiming();
+	const auto after = render (*deck, in);
+	EXPECT_EQ (deck->decoderRuns().phones, 0);
+	EXPECT_EQ (deck->timing().phonesDecoder, 0.0);
+	const float cueWeight = spatial::phonesWeights (0.8f, 0.5f).cue;
+	for (int side = 0; side < 2; ++side)
+	{
+		Signal cueShare (after.cue[(size_t) side]);
+		for (auto& sample : cueShare)
+			sample *= cueWeight;
+		EXPECT_EQ (maxDifference (after.phones[(size_t) side], cueShare), 0.0f) << "no mix share, phones " << side;
+	}
+}
+
+TEST (DeckSpatial, PhonesDecoderReconnectsClean)
+{
+	juce::ScopedJuceInitialiser_GUI juceInitialiser;
+	const auto in = noiseOnAllStems();
+	// mix 1: the phones are the decoded mix alone, so a stale decoder tail would show
+	const auto setUp = [] (DeckSpatial::Controls& c) { busyDeck (c); c.phonesMix = 1.0f; };
+	auto deck = preparedDeck (block, setUp);
+	render (*deck, in);                          // decoding the mix
+	render (*deck, in, { block, false, {} });    // unplugged mid-signal: a hard stop
+
+	StemInputs oneBlock (block);
+	for (size_t c = 0; c < oneBlock.channels.size(); ++c)
+		std::copy (in.channels[c].begin(), in.channels[c].begin() + block, oneBlock.channels[c].begin());
+	const auto reconnected = render (*deck, oneBlock);
+	auto fresh = preparedDeck (block, setUp);
+	const auto first = render (*fresh, oneBlock);
+	for (int side = 0; side < 2; ++side)
+	{
+		EXPECT_FALSE (exactlySilent (first.phones[(size_t) side]));
+		EXPECT_LE (maxDifference (reconnected.phones[(size_t) side], first.phones[(size_t) side]), 1e-5f) << "phones " << side;
+	}
+}
+
+TEST (DeckSpatial, OnePhonesOutputAloneIsClearedNotDecoded)
+{
+	juce::ScopedJuceInitialiser_GUI juceInitialiser;
+	const auto in = noiseOnAllStems();
+	auto deck = preparedDeck (block, [] (DeckSpatial::Controls& c) { busyDeck (c); c.phonesMix = 1.0f; });
+	Signal left (oneSecond, 0.5f);   // garbage the deck must overwrite
+	for (int offset = 0; offset < oneSecond; offset += block)
+	{
+		const int count = std::min (block, oneSecond - offset);
+		std::array<const float*, 8> stems {};
+		for (size_t c = 0; c < stems.size(); ++c)
+			stems[c] = in.channels[c].data() + offset;
+		DeckSpatial::Outputs outputs;
+		outputs.phones[0] = left.data() + offset;
+		deck->process (stems.data(), outputs, count);
+	}
+	EXPECT_TRUE (exactlySilent (left));
+	EXPECT_EQ (deck->decoderRuns().phones, 0);
+}
+
+TEST (DeckSpatial, AnEmptyCallIsNoBlock)
+{
+	juce::ScopedJuceInitialiser_GUI juceInitialiser;
+	auto deck = preparedDeck (block, busyDeck);
+	std::array<const float*, 8> stems {};
+	deck->process (stems.data(), {}, 0);
+	const auto t = deck->timing();
+	EXPECT_EQ (t.encoders, 0.0);
+	EXPECT_EQ (t.bed, 0.0);
+	render (*deck, noiseOnAllStems());
+	EXPECT_GT (deck->timing().encoders, 0.0);
+}
+
 TEST (DeckSpatial, CueDecoderStopsAfterTheHoldOver)
 {
 	juce::ScopedJuceInitialiser_GUI juceInitialiser;

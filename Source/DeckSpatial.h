@@ -44,7 +44,8 @@ public:
 		std::array<float*, 2> cue {}, aux {}, phones {};
 	};
 
-	// Mean µs per process() call since resetTiming(); 0 for a node never called. Audio thread only.
+	// Mean µs per process() call (S1.4 calls with 128-sample blocks) since resetTiming();
+	// 0 for a node never called. Audio thread only.
 	struct Timing { double encoders, bed, cueBed, cueDecoder, phonesDecoder; };
 	// Samples each decoder ran since resetTiming(). Audio thread only.
 	struct DecoderRuns { std::int64_t cue, phones; };
@@ -60,7 +61,7 @@ public:
 	Timing timing() const;
 	DecoderRuns decoderRuns() const;
 	void resetTiming();
-	float movingGainNow (int stem) const;   // the encoder input gain where the ramp is now
+	float movingGainNow (int stem) const;   // the encoder input gain where the ramp is now; audio thread only, for tests
 
 private:
 	struct Stem;
@@ -75,6 +76,7 @@ private:
 	void renderMain (const Outputs&, int offset, int count);
 	void renderCue (const Outputs&, int offset, int count, bool wanted);
 	void renderPhones (const Outputs&, int offset, int count);
+	void primePhonesDecoder();
 	bool cueWanted() const;
 
 	Controls state;
@@ -82,6 +84,8 @@ private:
 	std::unique_ptr<SteadyBed> mainBed, cueBed;
 	std::unique_ptr<a3::IemNode> cueDecoder, phonesDecoder;
 	DecoderGate cueGate, phonesGate;
+	bool phonesDecoding = false;       // the phones decoder ran in the last chunk
+	bool phonesDecoderStale = false;   // it may hold a tail: stopped hard, before its hold-over ran out
 	Ramp phonesCueWeight, phonesMixWeight;
 
 	// Prepared at blockSize: 16-ch sums and decoder io, stereo bed inputs, per-sample gains.

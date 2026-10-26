@@ -18,6 +18,15 @@ constexpr float iemOrderThree = 4.0f;   // IEM's choice value for 3rd order (0 =
 // The per-chunk scratch rows.
 enum Row { movingRow, muteRow, cueRow, steadyLeft, steadyRight, scratchRows };
 
+// R4 compares against 0.0f and 1.0f on purpose: silence is exactly 0, not "near 0".
+bool exactly (float value, float expected)
+{
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wfloat-equal"
+	return value == expected;
+#pragma GCC diagnostic pop
+}
+
 // What a chunk of a gain ramp is: all 0.0f and all 1.0f are shortcuts, and the
 // first keeps a silenced path exactly silent.
 enum class GainSpan { zero, unity, varying };
@@ -28,7 +37,7 @@ GainSpan fill (juce::LinearSmoothedValue<float>& ramp, float* gains, int count)
 	{
 		const float value = ramp.getTargetValue();
 		FVO::fill (gains, value, count);
-		return value == 0.0f ? GainSpan::zero : (value == 1.0f ? GainSpan::unity : GainSpan::varying);
+		return exactly (value, 0.0f) ? GainSpan::zero : (exactly (value, 1.0f) ? GainSpan::unity : GainSpan::varying);
 	}
 	for (int i = 0; i < count; ++i)
 		gains[i] = ramp.getNextValue();
@@ -37,7 +46,7 @@ GainSpan fill (juce::LinearSmoothedValue<float>& ramp, float* gains, int count)
 
 bool active (const juce::LinearSmoothedValue<float>& ramp)
 {
-	return ramp.isSmoothing() || ramp.getTargetValue() != 0.0f;
+	return ramp.isSmoothing() || ! exactly (ramp.getTargetValue(), 0.0f);
 }
 
 void addScaled (float* destination, const float* source, const float* gains, GainSpan span, int count)
@@ -96,6 +105,7 @@ std::unique_ptr<a3::IemNode> binauralDecoder (juce::String& error)
 	return decoder;
 }
 
+// A vDSO clock read either side of a node: kept in production so S1.4/S2 can report per-node figures.
 template <typename Work>
 void timed (std::int64_t& ticks, Work&& work)
 {
@@ -197,6 +207,8 @@ void DeckSpatial::prepare (double sampleRate, int newBlockSize)
 	phonesMixWeight.setCurrentAndTargetValue (phonesMixWeight.getTargetValue());
 	cueGate.reset();
 	phonesGate.reset();
+	phonesDecoderStale = false;
+	phonesDecoding = false;
 	resetTiming();
 }
 
@@ -223,7 +235,7 @@ void DeckSpatial::readControls()
 void DeckSpatial::process (const float* const* stemsPreMute, const Outputs& out, int numSamples)
 {
 	jassert (blockSize > 0);
-	if (blockSize <= 0)
+	if (blockSize <= 0 || numSamples <= 0)
 		return;
 	juce::ScopedNoDenormals noDenormals;
 	++timedBlocks;
@@ -337,19 +349,38 @@ void DeckSpatial::renderCue (const Outputs& out, int offset, int count, bool wan
 }
 
 // Standalone phones: the cue's share plus the deck's B-format, binaural. The
-// decoder runs only while the phones are rendered and the mix share is above 0.
+// decoder runs only while both phones outputs are rendered and the mix share
+// is above 0; turned off or mixed out it gets the cue's hold-over, unplugged it
+// stops at once (R12), and its next start primes it with silence first.
 void DeckSpatial::renderPhones (const Outputs& out, int offset, int count)
 {
-	const bool connected = out.phones[0] != nullptr && out.phones[1] != nullptr;
-	const bool wanted = connected && active (phonesMixWeight);
 	float* cueWeight = scratch.getWritePointer (movingRow);
 	float* mixWeight = scratch.getWritePointer (muteRow);
+	const bool connected = out.phones[0] != nullptr && out.phones[1] != nullptr;
+	if (! connected)
+	{
+		phonesCueWeight.skip (count);
+		phonesMixWeight.skip (count);
+		phonesGate.reset();
+		phonesDecoding = false;
+		for (auto* phones : out.phones)
+			if (phones != nullptr)
+				FVO::clear (phones + offset, count);
+		return;
+	}
+
+	const bool wanted = active (phonesMixWeight);
 	const GainSpan cueSpan = fill (phonesCueWeight, cueWeight, count);
 	const GainSpan mixSpan = fill (phonesMixWeight, mixWeight, count);
-
 	const bool decoding = phonesGate.next (wanted, count);
+	const bool starting = decoding && ! phonesDecoding;
+	if (phonesDecoding && ! decoding)
+		phonesDecoderStale = false;   // a hold-over that ran out leaves it empty
+	phonesDecoding = decoding;
 	if (decoding)
 	{
+		if (starting && phonesDecoderStale)
+			primePhonesDecoder();
 		if (wanted)
 			for (int c = 0; c < busChannels; ++c)
 				FVO::copy (phonesDecoderIo.getWritePointer (c), mainSum.getReadPointer (c), count);
@@ -357,9 +388,8 @@ void DeckSpatial::renderPhones (const Outputs& out, int offset, int count)
 			phonesDecoderIo.clear (0, count);
 		timed (phonesDecoderClock.ticks, [&] { runNode (*phonesDecoder, phonesDecoderIo, count); });
 		phonesDecoderSamples += count;
+		phonesDecoderStale = true;   // until a hold-over runs out
 	}
-	if (! connected)
-		return;
 	for (int side = 0; side < 2; ++side)
 	{
 		float* phones = out.phones[(size_t) side] + offset;
@@ -368,6 +398,20 @@ void DeckSpatial::renderPhones (const Outputs& out, int offset, int count)
 		if (decoding && wanted)
 			addScaled (phones, phonesDecoderIo.getReadPointer (side), mixWeight, mixSpan, count);
 	}
+}
+
+// After a hard stop the decoder still holds the tail of what it last heard:
+// a hold-over's worth of silence, output discarded, empties it.
+void DeckSpatial::primePhonesDecoder()
+{
+	for (int primed = 0; primed < DecoderGate::holdOverSamples; primed += blockSize)
+	{
+		const int count = juce::jmin (blockSize, DecoderGate::holdOverSamples - primed);
+		phonesDecoderIo.clear (0, count);
+		timed (phonesDecoderClock.ticks, [&] { runNode (*phonesDecoder, phonesDecoderIo, count); });
+		phonesDecoderSamples += count;
+	}
+	phonesDecoderStale = false;
 }
 
 DeckSpatial::Timing DeckSpatial::timing() const

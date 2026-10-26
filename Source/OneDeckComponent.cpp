@@ -100,6 +100,8 @@ OneDeckComponent::OneDeckComponent (DeckInstance deck)
 	rec.button.setEnabled (audio->usingJack());
 
 	truthKeeper = coretruth::follow (truth);
+	deckLink = std::make_unique<DeckLink> (instance.oscDeck(), host.spatialPorts().settings().deckThreeD);
+	deckLink->start (truth.path, truth.hash);
 
 	setSize (768, 1024);
 	restoreSession();
@@ -112,6 +114,7 @@ OneDeckComponent::OneDeckComponent (DeckInstance deck)
 OneDeckComponent::~OneDeckComponent()
 {
 	stopTimer();
+	deckLink.reset();   // before the deck whose 3D it writes
 	panelDevice.reset();   // dark, and no more presses
 	panelOwnership.release();
 	saveSession();

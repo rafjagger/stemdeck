@@ -28,6 +28,10 @@ namespace remote
 		// `prodj.live`). Optional likewise: empty in a truth from before them,
 		// and then StemDeck listens to neither and shows no badge.
 		std::string pointer, live;
+		// A one-deck instance's words (`stemdeck.3d`, `stemdeck.deck-hello`).
+		// Optional: empty in a truth from before them, and then a one-deck
+		// StemDeck sends no deck hello and takes no 3D.
+		std::string deckThreeD, deckHello;
 	};
 
 	// One switch, 0-based inside StemDeck: deck 0-1, stem 0-3, bus 0-4 (1-4, AUX).
@@ -41,6 +45,22 @@ namespace remote
 	std::string reportAddress (const Words& words, int deck, int stem);
 	bool isRecall (const Words& words, const std::string& address);
 	std::string vuAddress (const Words& words, int deck, int stem);
+	// One-deck mode (-bformat --deck X), `oscDeck` the truth's {deck} (A -> 1).
+	// The desk's 3D for this deck, 0..1; none for another deck, without the
+	// truth's word, or for NaN.
+	std::optional<float> parseDeckThreeD (const Words& words, const std::string& address, int oscDeck, float value);
+	// The hello's address for the deck; empty when the truth has no word for it.
+	std::string deckHelloAddress (const Words& words, int oscDeck);
+
+	struct Outgoing
+	{
+		std::string address, text;
+	};
+	// Everything a one-deck instance sends every 2 s: the deck hello with the
+	// host, nothing without the word. No bus reports, no stem meters (those
+	// are the two-deck instance's).
+	std::vector<Outgoing> oneDeckSends (const Words& words, int oscDeck, const std::string& host);
+
 	unsigned maskOf (const std::array<bool, buses::count>& on);
 
 	// The rms of `samples` values whose squares sum to `sumOfSquares`; 0 for none.

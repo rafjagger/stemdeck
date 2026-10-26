@@ -123,6 +123,30 @@ namespace remote
 		return fill (words.vu, { { "n", firstStemMeter + deck * stemsPerDeck + stem } });
 	}
 
+	std::optional<float> parseDeckThreeD (const Words& words, const std::string& address, int oscDeck, float value)
+	{
+		if (words.deckThreeD.empty() || std::isnan (value))
+			return std::nullopt;
+		const auto fields = match (words.deckThreeD, address);
+		const auto deck = fields ? fields->find ("deck") : std::map<std::string, int>::const_iterator();
+		if (! fields || deck == fields->end() || deck->second != oscDeck)
+			return std::nullopt;
+		return std::clamp (value, 0.0f, 1.0f);
+	}
+
+	std::string deckHelloAddress (const Words& words, int oscDeck)
+	{
+		return words.deckHello.empty() ? std::string() : fill (words.deckHello, { { "deck", oscDeck } });
+	}
+
+	std::vector<Outgoing> oneDeckSends (const Words& words, int oscDeck, const std::string& host)
+	{
+		const auto hello = deckHelloAddress (words, oscDeck);
+		if (hello.empty())
+			return {};
+		return { { hello, host } };
+	}
+
 	unsigned maskOf (const std::array<bool, buses::count>& on)
 	{
 		unsigned mask = 0;

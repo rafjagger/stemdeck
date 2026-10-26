@@ -533,3 +533,83 @@ TEST (Remote, OptionalPointerWords)
 	EXPECT_EQ (with.live, "/prodj/live");
 	EXPECT_EQ (with.bus, "/stemdeck/{deck}/{stem}/bus/{bus}");
 }
+
+// A one-deck instance (-bformat --deck X): it says hello with its number and
+// host, and takes the desk's 3D for its deck from Core. The words are the
+// truth's (stemdeck.3d, stemdeck.deck-hello); a truth without them gives
+// empty words and the instance stays silent on them.
+namespace
+{
+	remote::Words deckWords()
+	{
+		auto w = words;
+		w.deckThreeD = "/stemdeck/{deck}/3d";
+		w.deckHello = "/stemdeck/{deck}/hello";
+		return w;
+	}
+}
+
+TEST (Remote, DeckThreeDIsForThisDeckOnly)
+{
+	const auto w = deckWords();
+	const auto mine = remote::parseDeckThreeD (w, "/stemdeck/1/3d", 1, 0.25f);
+	ASSERT_TRUE (mine.has_value());
+	EXPECT_FLOAT_EQ (*mine, 0.25f);
+	EXPECT_FALSE (remote::parseDeckThreeD (w, "/stemdeck/1/3d", 2, 0.25f).has_value());
+	EXPECT_TRUE (remote::parseDeckThreeD (w, "/stemdeck/2/3d", 2, 0.5f).has_value());
+	EXPECT_FALSE (remote::parseDeckThreeD (w, "/stemdeck/1/4d", 1, 0.5f).has_value());
+	EXPECT_FALSE (remote::parseDeckThreeD (w, "/stemdeck/1/1/3d", 1, 0.5f).has_value());
+	EXPECT_FALSE (remote::parseDeckThreeD (words, "/stemdeck/1/3d", 1, 0.5f).has_value());   // no word, no 3D
+}
+
+TEST (Remote, DeckThreeDIsClamped)
+{
+	const auto w = deckWords();
+	EXPECT_FLOAT_EQ (*remote::parseDeckThreeD (w, "/stemdeck/1/3d", 1, 1.7f), 1.0f);
+	EXPECT_FLOAT_EQ (*remote::parseDeckThreeD (w, "/stemdeck/1/3d", 1, -0.3f), 0.0f);
+	EXPECT_FALSE (remote::parseDeckThreeD (w, "/stemdeck/1/3d", 1, std::nanf ("")).has_value());
+}
+
+TEST (Remote, DeckHelloCarriesTheHost)
+{
+	const auto w = deckWords();
+	EXPECT_EQ (remote::deckHelloAddress (w, 2), "/stemdeck/2/hello");
+	const auto sends = remote::oneDeckSends (w, 1, "a3nuc1");
+	ASSERT_EQ (sends.size(), 1u);
+	EXPECT_EQ (sends[0].address, "/stemdeck/1/hello");
+	EXPECT_EQ (sends[0].text, "a3nuc1");
+}
+
+TEST (Remote, ATruthWithoutTheNewWordsSendsNoDeckHello)
+{
+	EXPECT_TRUE (remote::deckHelloAddress (words, 1).empty());
+	EXPECT_TRUE (remote::oneDeckSends (words, 1, "a3nuc1").empty());
+}
+
+TEST (Remote, OneDeckSendsNoBusReports)
+{
+	const auto w = deckWords();
+	for (const auto& send : remote::oneDeckSends (w, 1, "a3nuc1"))
+	{
+		for (int deck = 0; deck < 2; ++deck)
+			for (int stem = 0; stem < 4; ++stem)
+			{
+				EXPECT_NE (send.address, remote::reportAddress (w, deck, stem));
+				EXPECT_NE (send.address, remote::vuAddress (w, deck, stem));
+			}
+	}
+}
+
+TEST (Remote, OptionalDeckWordsAreReadFromTheTruth)
+{
+	std::string error;
+	const auto old = truthWith ("");
+	EXPECT_TRUE (osctruth::readRemoteWords (old, error).deckThreeD.empty());
+	std::filesystem::remove (old);
+	const auto made = truthWith (R"(, "stemdeck.3d": {"pattern": "/stemdeck/{deck}/3d"},
+								   "stemdeck.deck-hello": {"pattern": "/stemdeck/{deck}/hello"})");
+	const auto with = osctruth::readRemoteWords (made, error);
+	std::filesystem::remove (made);
+	EXPECT_EQ (with.deckThreeD, "/stemdeck/{deck}/3d");
+	EXPECT_EQ (with.deckHello, "/stemdeck/{deck}/hello");
+}

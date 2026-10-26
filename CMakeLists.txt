@@ -99,6 +99,7 @@ target_sources(StemDeck PRIVATE
     Source/OscTruthFile.cpp
     Source/Remote.cpp
     Source/RemoteLink.cpp
+    Source/DeckLink.cpp
     Source/RemotePointer.cpp
     Source/PointerInjector.cpp
     Source/TruthKeeperLink.cpp

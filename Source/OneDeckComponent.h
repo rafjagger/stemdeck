@@ -7,6 +7,7 @@
 #include "AudioOutput.h"
 #include "CoreTruth.h"
 #include "DeckInstance.h"
+#include "DeckLink.h"
 #include "OneDeckAudio.h"
 #include "OneDeckView.h"
 #include "PanelDevice.h"
@@ -65,6 +66,7 @@ private:
 	DJLookAndFeel lookAndFeel;
 	juce::ApplicationProperties appProperties;
 	coretruth::Chosen truth;
+	std::unique_ptr<DeckLink> deckLink;             // hello and the desk's 3D for this deck
 	std::unique_ptr<TruthKeeperLink> truthKeeper;   // also says whether Core is heard (R12)
 
 	juce::AudioFormatManager formatManager;

@@ -34,9 +34,10 @@ void DeckLink::start (const std::string& path, const juce::String& hash)
 				  << (error.empty() ? std::string ("the truth names no core, mixer or stemdeck osc") : error) << std::endl;
 		return;
 	}
-	if (! receiver.connect (endpoints.ownPort))
+	const auto listenPort = remote::deckListenPort (endpoints.ownPort, oscDeck);
+	if (! receiver.connect (listenPort))
 	{
-		std::cerr << "StemDeck: cannot listen on " << endpoints.ownPort << " -- no 3D from Core" << std::endl;
+		std::cerr << "StemDeck: cannot listen on " << listenPort << " -- no 3D from Core" << std::endl;
 		return;
 	}
 	receiver.addListener (this);

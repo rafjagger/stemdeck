@@ -613,3 +613,14 @@ TEST (Remote, OptionalDeckWordsAreReadFromTheTruth)
 	EXPECT_EQ (with.deckThreeD, "/stemdeck/{deck}/3d");
 	EXPECT_EQ (with.deckHello, "/stemdeck/{deck}/hello");
 }
+
+// Two one-deck instances on one host cannot share a port: deck k listens on
+// the truth's stemdeck.osc port + (k - 1).
+TEST (Remote, DeckListenPortFollowsTheDeckNumber)
+{
+	EXPECT_EQ (remote::deckListenPort (7780, 1), 7780);
+	EXPECT_EQ (remote::deckListenPort (7780, 2), 7781);
+	EXPECT_EQ (remote::deckListenPort (7780, 4), 7783);
+	EXPECT_EQ (remote::deckListenPort (7780, 0), -1);
+	EXPECT_EQ (remote::deckListenPort (0, 1), -1);
+}

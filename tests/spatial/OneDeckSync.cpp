@@ -3,6 +3,7 @@
 #include <gtest/gtest.h>
 
 #include "DeckInstance.h"
+#include "DeckLink.h"
 #include "OneDeckAudio.h"
 #include "OneDeckSync.h"
 #include "OneDeckView.h"
@@ -17,6 +18,8 @@
 
 #include <array>
 #include <chrono>
+#include <filesystem>
+#include <fstream>
 #include <thread>
 
 // S4.7: decks in separate instances (-bformat --deck A / B) stay in sync over
@@ -278,4 +281,89 @@ TEST_F (OneDeckSyncTest, MasterWithoutAGridIsRefused)
 	sync.pressMaster (10.0);
 	EXPECT_TRUE (sync.isMaster());
 	EXPECT_TRUE (view.deckPanel().isMasterLit());
+}
+
+// S4.6b: two decks on one host each take their own deck 3D, on the truth's
+// stemdeck.osc port + (deck - 1). Loopback only; ports picked free at run time.
+namespace
+{
+bool bindable (int port)
+{
+	const auto fd = socket (AF_INET, SOCK_DGRAM, 0);
+	sockaddr_in address {};
+	address.sin_family = AF_INET;
+	address.sin_addr.s_addr = htonl (INADDR_ANY);
+	address.sin_port = htons ((uint16_t) port);
+	const auto ok = bind (fd, reinterpret_cast<sockaddr*> (&address), sizeof (address)) == 0;
+	close (fd);
+	return ok;
+}
+
+// A base port whose successor is free too, below the kernel's ephemeral range
+// (32768+): the instances' own sockets then cannot take the second port.
+int freePairBase()
+{
+	for (int port = 20000 + (int) (::getpid() % 5000) * 2; port < 32000; port += 2)
+		if (bindable (port) && bindable (port + 1))
+			return port;
+	return -1;
+}
+
+std::string writeTruth (int coreOsc, int mixerOsc, int stemdeckOsc)
+{
+	const auto path = std::filesystem::temp_directory_path() / ("stemdeck-decklink-" + std::to_string (::getpid()) + ".json");
+	std::ofstream (path) << R"({"hosts": {"core": "127.0.0.1", "mixer": "127.0.0.1"},
+		"listeners": [
+			{"program": "core", "role": "osc", "host": "any", "port": )" << coreOsc << R"(},
+			{"program": "mixer", "role": "osc", "host": "mixer", "port": )" << mixerOsc << R"(},
+			{"program": "stemdeck", "role": "osc", "host": "any", "port": )" << stemdeckOsc << R"(}],
+		"addresses": {
+			"stemdeck.bus": {"pattern": "/stemdeck/{deck}/{stem}/bus/{bus}"},
+			"stemdeck.buses": {"pattern": "/stemdeck/{deck}/{stem}/buses"},
+			"stemdeck.recall": {"pattern": "/stemdeck/recall"},
+			"vu": {"pattern": "/vu/{n}"},
+			"device.hello": {"pattern": "/device/hello"},
+			"stemdeck.3d": {"pattern": "/stemdeck/{deck}/3d"},
+			"stemdeck.deck-hello": {"pattern": "/stemdeck/{deck}/hello"}}})";
+	return path.string();
+}
+
+void sendThreeD (int port, const char* address, float value)
+{
+	juce::OSCSender sender;
+	ASSERT_TRUE (sender.connect ("127.0.0.1", port));
+	ASSERT_TRUE (sender.send (juce::OSCMessage (juce::String (address), value)));
+}
+
+void pump (int milliseconds)
+{
+	juce::MessageManager::getInstance()->runDispatchLoopUntil (milliseconds);
+}
+}
+
+TEST (DeckLinkOnOneHost, TwoDecksBindDistinctPortsAndEachTakesItsOwnThreeD)
+{
+	const auto [core, mixer, unused] = freePorts();
+	(void) unused;
+	const auto base = freePairBase();
+	ASSERT_GT (base, 0);
+	const auto truth = writeTruth (core, mixer, base);
+	std::atomic<float> threeDA { 1.0f }, threeDB { 1.0f };
+	{
+		DeckLink deckA (1, threeDA), deckB (2, threeDB);
+		deckA.start (truth, "hash");
+		deckB.start (truth, "hash");
+		pump (100);   // JUCE's receiver threads take a moment to read: a datagram sent at once can be lost
+
+		sendThreeD (base + 1, "/stemdeck/2/3d", 0.25f);
+		pump (200);
+		EXPECT_FLOAT_EQ (threeDB.load(), 0.25f);
+		EXPECT_FLOAT_EQ (threeDA.load(), 1.0f);
+
+		sendThreeD (base, "/stemdeck/1/3d", 0.5f);
+		pump (200);
+		EXPECT_FLOAT_EQ (threeDA.load(), 0.5f);
+		EXPECT_FLOAT_EQ (threeDB.load(), 0.25f);
+	}
+	std::filesystem::remove (truth);
 }

@@ -61,6 +61,11 @@ namespace remote
 	// are the two-deck instance's).
 	std::vector<Outgoing> oneDeckSends (const Words& words, int oscDeck, const std::string& host);
 
+	// The port deck `oscDeck` (1-based) listens on: the truth's stemdeck.osc
+	// port + (deck - 1), so two decks on one host do not fight for one port.
+	// -1 for a deck below 1 or a port that is none.
+	int deckListenPort (int stemdeckOscPort, int oscDeck);
+
 	unsigned maskOf (const std::array<bool, buses::count>& on);
 
 	// The rms of `samples` values whose squares sum to `sumOfSquares`; 0 for none.

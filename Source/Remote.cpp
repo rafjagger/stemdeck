@@ -134,6 +134,13 @@ namespace remote
 		return std::clamp (value, 0.0f, 1.0f);
 	}
 
+	int deckListenPort (int stemdeckOscPort, int oscDeck)
+	{
+		if (stemdeckOscPort <= 0 || oscDeck < 1)
+			return -1;
+		return stemdeckOscPort + oscDeck - 1;
+	}
+
 	std::string deckHelloAddress (const Words& words, int oscDeck)
 	{
 		return words.deckHello.empty() ? std::string() : fill (words.deckHello, { { "deck", oscDeck } });

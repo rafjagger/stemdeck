@@ -207,6 +207,9 @@ add_executable(stemdeck-spatial-tests
     ${CMAKE_SOURCE_DIR}/Source/KeyLockStretcher.cpp
     ${CMAKE_SOURCE_DIR}/Source/KeyLock.cpp
     ${CMAKE_SOURCE_DIR}/Source/Remote.cpp
+    ${CMAKE_SOURCE_DIR}/Source/DeckLink.cpp
+    ${CMAKE_SOURCE_DIR}/Source/OscTruthFile.cpp
+    ${CMAKE_SOURCE_DIR}/Source/OscTruth.cpp
     ${CMAKE_SOURCE_DIR}/Source/GridEdit.cpp
     ${CMAKE_SOURCE_DIR}/Source/SpatialLaw.cpp
     ${CMAKE_SOURCE_DIR}/Source/OneDeckView.cpp
@@ -242,6 +245,8 @@ if(XVFB_RUN)
 endif()
 # The link's loopback socket tests share their ports between the two
 # "instances" in one test: one at a time within a ctest run.
-gtest_discover_tests(stemdeck-spatial-tests TEST_FILTER "-ProLinkOnOneHost.*")
+gtest_discover_tests(stemdeck-spatial-tests TEST_FILTER "-ProLinkOnOneHost.*:DeckLinkOnOneHost.*")
 gtest_discover_tests(stemdeck-spatial-tests TEST_FILTER "ProLinkOnOneHost.*"
     PROPERTIES RESOURCE_LOCK stemdeck-prolink-loopback)
+gtest_discover_tests(stemdeck-spatial-tests TEST_FILTER "DeckLinkOnOneHost.*"
+    PROPERTIES RESOURCE_LOCK stemdeck-decklink-loopback)

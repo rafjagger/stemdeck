@@ -6,6 +6,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <climits>
 #include <unistd.h>
 
 namespace
@@ -90,4 +91,71 @@ TEST (PanelOwnership, AnInstanceThatWantedItTakesItOnlyWhenFree)
 	EXPECT_TRUE (a.holds());
 	a.release();
 	EXPECT_TRUE (b.claimIfFree());
+}
+
+TEST (PanelOwnership, AValidLockOfAnotherIsNeverOverwrittenByAClaim)
+{
+	TempDir dir;
+	panel::Ownership a (dir.lock(), 'A'), b (dir.lock(), 'B');
+	b.take();
+	EXPECT_FALSE (a.claimIfFree());
+	EXPECT_FALSE (a.claimByDefault());
+	EXPECT_TRUE (b.holds());
+}
+
+TEST (PanelOwnership, TwoClaimersOnAFreeLockLeaveOneHolder)
+{
+	TempDir dir;
+	panel::Ownership a (dir.lock(), 'A'), b (dir.lock(), 'B');
+	const auto first = b.claimIfFree();
+	const auto second = a.claimIfFree();
+	EXPECT_TRUE (first);
+	EXPECT_FALSE (second);
+	EXPECT_EQ ((int) a.holds() + (int) b.holds(), 1);
+}
+
+TEST (PanelOwnership, ALockOfADeadHolderIsFree)
+{
+	TempDir dir;
+	panel::Ownership crashed (dir.lock(), 'B', INT_MAX);
+	crashed.take();
+	panel::Ownership a (dir.lock(), 'A');
+	EXPECT_FALSE (a.holds());
+	EXPECT_TRUE (a.claimByDefault());
+	EXPECT_TRUE (a.holds());
+	EXPECT_FALSE (crashed.holds());
+}
+
+TEST (PanelOwnership, ReleaseLeavesALockAnotherProcessTookUnderTheSameLetter)
+{
+	TempDir dir;
+	panel::Ownership old (dir.lock(), 'B', ::getpid()), newer (dir.lock(), 'B', ::getppid());
+	newer.take();
+	old.release();
+	EXPECT_TRUE (std::filesystem::exists (dir.lock()));
+	EXPECT_TRUE (newer.holds());
+}
+
+TEST (PanelOwnership, TheStartDecisionIsPerDeck)
+{
+	for (const char letter : { 'A', 'B' })
+	{
+		const auto claims = [letter] (std::optional<bool> stored)
+		{
+			TempDir dir;
+			panel::Ownership o (dir.lock(), letter);
+			return panel::claimAtStart (o, stored);
+		};
+		EXPECT_EQ (claims (std::nullopt), letter == 'A') << letter;   // absent: A claims, B does not
+		EXPECT_TRUE (claims (true)) << letter;                        // a stored value wins for that deck
+		EXPECT_FALSE (claims (false)) << letter;
+	}
+}
+
+TEST (PanelOwnership, AStoredOnClaimsOnlyWhenFree)
+{
+	TempDir dir;
+	panel::Ownership a (dir.lock(), 'A'), b (dir.lock(), 'B');
+	ASSERT_TRUE (panel::claimAtStart (a, std::nullopt));
+	EXPECT_FALSE (panel::claimAtStart (b, true));
 }

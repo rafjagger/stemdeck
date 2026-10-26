@@ -15,7 +15,8 @@ namespace
 {
 double nowSeconds() { return juce::Time::getMillisecondCounterHiRes() / 1000.0; }
 constexpr const char* phonesModeKey = "phonesMode";
-constexpr const char* panelHereKey = "panelHere";   // "1" take it at start if free, "0" never, unset: deck A by default
+// Per deck: every instance shares the settings file. "1" take the panel at start if free, "0" never, unset: deck A by default.
+constexpr const char* panelHereKey = "panelHere.";
 constexpr const char* phonesLevelKey = "phonesLevel";
 constexpr const char* phonesMixKey = "phonesMix";
 constexpr int refreshHz = 60;   // the rolling waveform's
@@ -235,13 +236,18 @@ void OneDeckComponent::updateDeviceStatus()
 }
 
 //==============================================================================
+juce::String OneDeckComponent::panelPreferenceKey() const
+{
+	return juce::String (panelHereKey) + juce::String::charToString ((juce::juce_wchar) instance.letter);
+}
+
 void OneDeckComponent::startPanel()
 {
-	const auto wanted = settings().getValue (panelHereKey);
-	if (wanted == "1")
-		panelOwnership.claimIfFree();
-	else if (wanted != "0")
-		panelOwnership.claimByDefault();
+	const auto key = panelPreferenceKey();
+	std::optional<bool> stored;
+	if (settings().containsKey (key))
+		stored = settings().getBoolValue (key);
+	panel::claimAtStart (panelOwnership, stored);
 	updatePanelOwner();
 }
 
@@ -351,7 +357,7 @@ void OneDeckComponent::showSettings()
 
 	actions.onPanelHere = [this] (bool here)
 	{
-		settings().setValue (panelHereKey, here ? "1" : "0");
+		settings().setValue (panelPreferenceKey(), here);
 		if (here)
 			panelOwnership.take();
 		else

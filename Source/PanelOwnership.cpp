@@ -3,8 +3,11 @@
 #include "PanelOwnership.h"
 
 #include <cctype>
+#include <cerrno>
+#include <csignal>
 #include <fcntl.h>
 #include <fstream>
+#include <sys/file.h>
 #include <system_error>
 #include <unistd.h>
 
@@ -12,29 +15,82 @@ namespace panel
 {
 	namespace
 	{
-		// The letter in the file; 0 for no file, an empty or unreadable one.
-		char letterIn (const std::filesystem::path& file)
+		struct Lock
+		{
+			char letter = 0;
+			int pid = 0;
+		};
+
+		// Nothing for no file, an empty or garbled one.
+		std::optional<Lock> read (const std::filesystem::path& file)
 		{
 			std::ifstream in (file);
-			char letter = 0;
-			if (in >> letter && std::isalpha ((unsigned char) letter))
-				return letter;
-			return 0;
+			Lock lock;
+			if (in >> lock.letter >> lock.pid && std::isalpha ((unsigned char) lock.letter) && lock.pid > 0)
+				return lock;
+			return std::nullopt;
 		}
 
-		void write (const std::filesystem::path& file, char letter)
+		bool alive (int pid)
+		{
+			return ::kill (pid, 0) == 0 || errno == EPERM;
+		}
+
+		bool freeLock (const std::optional<Lock>& lock)
+		{
+			return ! lock || ! alive (lock->pid);
+		}
+
+		// Written whole beside the lock and renamed over it: a reader sees the old or the new, never half.
+		void write (const std::filesystem::path& file, char letter, int pid)
 		{
 			std::error_code ignored;
 			std::filesystem::create_directories (file.parent_path(), ignored);
-			std::ofstream (file, std::ios::trunc) << letter << '\n';
+			auto temporary = file;
+			temporary += ".tmp." + std::to_string (pid);
+			{
+				std::ofstream out (temporary, std::ios::trunc);
+				out << letter << ' ' << pid << '\n';
+			}
+			std::filesystem::rename (temporary, file, ignored);
 		}
+
+		// Exclusive for as long as it lives; changes to the lock are made under it.
+		class Guard
+		{
+		public:
+			explicit Guard (const std::filesystem::path& file)
+			{
+				std::error_code ignored;
+				std::filesystem::create_directories (file.parent_path(), ignored);
+				auto path = file;
+				path += ".guard";
+				descriptor = ::open (path.c_str(), O_RDWR | O_CREAT | O_CLOEXEC, 0644);
+				if (descriptor >= 0)
+					::flock (descriptor, LOCK_EX);
+			}
+			~Guard()
+			{
+				if (descriptor >= 0)
+					::close (descriptor);   // the flock goes with it
+			}
+			Guard (const Guard&) = delete;
+			Guard& operator= (const Guard&) = delete;
+
+		private:
+			int descriptor = -1;
+		};
 	}
 
-	Ownership::Ownership (std::filesystem::path lockFile, char deckLetter) : file (std::move (lockFile)), letter (deckLetter) {}
+	Ownership::Ownership (std::filesystem::path lockFile, char deckLetter, int processId)
+		: file (std::move (lockFile)), letter (deckLetter), pid (processId) {}
+
+	int Ownership::currentProcess() { return (int) ::getpid(); }
 
 	bool Ownership::holds() const
 	{
-		return letterIn (file) == letter;
+		const auto lock = read (file);
+		return lock && lock->letter == letter && lock->pid == pid;
 	}
 
 	bool Ownership::claimByDefault()
@@ -44,34 +100,35 @@ namespace panel
 
 	bool Ownership::claimIfFree()
 	{
+		const Guard guard (file);
 		if (holds())
 			return true;
-		if (letterIn (file) != 0)
+		if (! freeLock (read (file)))
 			return false;
-
-		// Created exclusively: two instances starting in the same instant do not both win.
-		std::error_code ignored;
-		std::filesystem::create_directories (file.parent_path(), ignored);
-		std::filesystem::remove (file, ignored);   // an empty or garbled leftover
-		const auto fd = ::open (file.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0644);
-		if (fd < 0)
-			return holds();
-		const char text[] = { letter, '\n' };
-		const auto written = ::write (fd, text, sizeof text);
-		::close (fd);
-		return written == (ssize_t) sizeof text && holds();
+		write (file, letter, pid);
+		return holds();
 	}
 
 	void Ownership::take()
 	{
-		write (file, letter);
+		const Guard guard (file);
+		write (file, letter, pid);
 	}
 
 	void Ownership::release()
 	{
+		// Under the guard nobody can take it between this check and the remove.
+		const Guard guard (file);
 		if (! holds())
 			return;
 		std::error_code ignored;
 		std::filesystem::remove (file, ignored);
+	}
+
+	bool claimAtStart (Ownership& ownership, std::optional<bool> storedPreference)
+	{
+		if (! storedPreference)
+			return ownership.claimByDefault();
+		return *storedPreference && ownership.claimIfFree();
 	}
 }

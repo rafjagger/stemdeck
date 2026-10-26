@@ -53,6 +53,7 @@ private:
 	OneDeckSession gatherSession() const;
 	void updateDeviceStatus();
 	// The A³ Motion panel: held by one instance (panel.lock). Looked at every half second.
+	juce::String panelPreferenceKey() const;
 	void startPanel();
 	void updatePanelOwner();
 	void handlePanel (const panel1::Event&);

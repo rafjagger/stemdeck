@@ -11,7 +11,7 @@ namespace motionlite
 	{
 		constexpr double pi = 3.14159265358979323846;
 		constexpr double assumedBpm = 120.0;
-		constexpr double minBars = 0.5, maxBars = 8.0;
+		constexpr double minBars = 0.5, maxBars = 8.0, defaultBars = 4.0;
 		constexpr double returnBeats = 1.0;
 		constexpr float pingSwing = 60.0f, riseTop = 60.0f, scatMaxElevation = 45.0f;
 
@@ -88,8 +88,19 @@ namespace motionlite
 
 	void StemMotion::setHome (spatial::Pose newHome) { home = newHome; }
 
-	void StemMotion::lengthDown() { lengthBarsValue = std::max (minBars, lengthBarsValue / 2.0); }
-	void StemMotion::lengthUp() { lengthBarsValue = std::min (maxBars, lengthBarsValue * 2.0); }
+	double validLength (double bars)
+	{
+		for (double valid = minBars; valid <= maxBars; valid *= 2.0)
+			if (std::abs (bars - valid) < 1e-9)
+				return bars;
+		return defaultBars;
+	}
+
+	double shorterLength (double bars) { return std::max (minBars, bars / 2.0); }
+	double longerLength (double bars) { return std::min (maxBars, bars * 2.0); }
+
+	void StemMotion::lengthDown() { lengthBarsValue = shorterLength (lengthBarsValue); }
+	void StemMotion::lengthUp() { lengthBarsValue = longerLength (lengthBarsValue); }
 
 	void StemMotion::press (Shape shape, bool shift, std::uint64_t seed)
 	{

@@ -27,12 +27,28 @@ bool DeckMotion::press (int stem, motionlite::Shape shape, bool shift, std::uint
 
 bool DeckMotion::lengthDown (int stem)
 {
-	return push ({ Kind::lengthDown, stem });
+	if (! push ({ Kind::lengthDown, stem }))
+		return false;
+	lengthMirror[(size_t) stem] = motionlite::shorterLength (lengthMirror[(size_t) stem]);
+	return true;
 }
 
 bool DeckMotion::lengthUp (int stem)
 {
-	return push ({ Kind::lengthUp, stem });
+	if (! push ({ Kind::lengthUp, stem }))
+		return false;
+	lengthMirror[(size_t) stem] = motionlite::longerLength (lengthMirror[(size_t) stem]);
+	return true;
+}
+
+bool DeckMotion::setLength (int stem, double bars)
+{
+	Command command { Kind::setLength, stem };
+	command.bars = bars;
+	if (! push (command))
+		return false;
+	lengthMirror[(size_t) stem] = motionlite::validLength (bars);
+	return true;
 }
 
 bool DeckMotion::push (const Command& command)
@@ -60,6 +76,7 @@ void DeckMotion::drain()
 				case Kind::press: motion.press (command.shape, command.shift, command.seed); break;
 				case Kind::lengthDown: motion.lengthDown(); break;
 				case Kind::lengthUp: motion.lengthUp(); break;
+				case Kind::setLength: motion.setLengthBars (command.bars); break;
 			}
 		}
 	};
@@ -93,7 +110,6 @@ void DeckMotion::publish (int stem, const spatial::Pose& pose)
 	auto& out = published[(size_t) stem];
 	for (int shape = 0; shape < shapeCount; ++shape)
 		out.pads[(size_t) shape].store ((std::uint8_t) motion.state ((motionlite::Shape) shape), std::memory_order_relaxed);
-	out.lengthBars.store ((float) motion.lengthBars(), std::memory_order_relaxed);
 	out.azimuth.store (pose.azimuth, std::memory_order_relaxed);
 	out.elevation.store (pose.elevation, std::memory_order_relaxed);
 	out.width.store (pose.width, std::memory_order_relaxed);
@@ -125,7 +141,7 @@ motionlite::PadState DeckMotion::stemState (int stem) const
 
 double DeckMotion::lengthBars (int stem) const
 {
-	return validStem (stem) ? (double) published[(size_t) stem].lengthBars.load (std::memory_order_relaxed) : 4.0;
+	return validStem (stem) ? lengthMirror[(size_t) stem].load (std::memory_order_relaxed) : 4.0;
 }
 
 spatial::Pose DeckMotion::posePlayed (int stem) const

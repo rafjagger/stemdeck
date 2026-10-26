@@ -1,5 +1,6 @@
 #include "Session.h"
 #include "Buses.h"
+#include "MotionLite.h"
 
 #include <cmath>
 
@@ -51,6 +52,7 @@ std::unique_ptr<juce::XmlElement> Session::toXml() const
 			stem->setAttribute ("azimuth", deck.stems[s].azimuth);
 			stem->setAttribute ("elevation", deck.stems[s].elevation);
 			stem->setAttribute ("width", deck.stems[s].width);
+			stem->setAttribute ("lengthBars", deck.stems[s].lengthBars);
 		}
 	}
 
@@ -118,6 +120,7 @@ Session Session::fromXml (const juce::XmlElement& xml)
 			deck.stems[s].azimuth = wrapDegrees (stem->getDoubleAttribute ("azimuth", defaults.azimuth));
 			deck.stems[s].elevation = juce::jlimit (-90.0, 90.0, stem->getDoubleAttribute ("elevation", defaults.elevation));
 			deck.stems[s].width = juce::jlimit (0.0, 360.0, stem->getDoubleAttribute ("width", defaults.width));
+			deck.stems[s].lengthBars = motionlite::validLength (stem->getDoubleAttribute ("lengthBars", defaults.lengthBars));
 			deck.stems[s].buses = buses::fromStored ((unsigned) stem->getIntAttribute ("buses", (int) buses::defaultMask ((int) s)));
 			++s;
 		}

@@ -304,6 +304,22 @@ TEST (MotionLite, AShotStartedByASeekWhilePausedStaysFrozen)
 	EXPECT_EQ (motion.state (Shape::orbit), PadState::running);
 }
 
+TEST (MotionLite, SetLengthTakesOnlyTheValidSet)
+{
+	StemMotion motion;
+	for (const double bars : { 0.5, 1.0, 2.0, 4.0, 8.0 })
+	{
+		motion.setLengthBars (bars);
+		EXPECT_DOUBLE_EQ (motion.lengthBars(), bars);
+	}
+	motion.setLengthBars (2.0);
+	motion.setLengthBars (3.0);
+	EXPECT_DOUBLE_EQ (motion.lengthBars(), 4.0);
+	motion.setLengthBars (1.0);
+	motion.setLengthBars (std::nan (""));
+	EXPECT_DOUBLE_EQ (motion.lengthBars(), 4.0);
+}
+
 TEST (MotionLite, ALengthChangeAfterThePressLeavesTheArmedShotAlone)
 {
 	auto motion = makeMotion();

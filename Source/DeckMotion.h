@@ -30,13 +30,16 @@ public:
 	bool press (int stem, motionlite::Shape, bool shift, std::uint64_t seed);
 	bool lengthDown (int stem);
 	bool lengthUp (int stem);
+	bool setLength (int stem, double bars);   // a restored session; anything outside the valid set is 4
 
 	// Audio thread, once per block: settings give each stem's home, 3D and
 	// width; played gets the pose, the width and the envelope. Allocation-free.
 	void advance (const motionlite::Clock&, double blockSeconds, const DeckSpatial::Controls& settings,
 				  DeckSpatial::Controls& played);
 
-	// Any thread: as of the last advance.
+	// Any thread. The length is what the message thread last asked for, so a
+	// session restored before the first block reads back as it was restored.
+	// Everything else here is as of the last advance.
 	motionlite::PadState padState (int stem, motionlite::Shape) const;
 	motionlite::PadState stemState (int stem) const;   // running, else armed, else idle
 	double lengthBars (int stem) const;
@@ -45,7 +48,7 @@ public:
 	std::optional<double> beat() const;                              // the deck's beat; none without a grid
 
 private:
-	enum class Kind : std::uint8_t { press, lengthDown, lengthUp };
+	enum class Kind : std::uint8_t { press, lengthDown, lengthUp, setLength };
 	struct Command
 	{
 		Kind kind = Kind::press;
@@ -53,12 +56,13 @@ private:
 		motionlite::Shape shape = motionlite::Shape::orbit;
 		bool shift = false;
 		std::uint64_t seed = 0;
+		double bars = 0.0;
 	};
 
 	struct Published
 	{
 		std::array<std::atomic<std::uint8_t>, 4> pads {};
-		std::atomic<float> lengthBars { 4.0f }, azimuth { 0.0f }, elevation { 0.0f }, width { 60.0f };
+		std::atomic<float> azimuth { 0.0f }, elevation { 0.0f }, width { 60.0f };
 		std::atomic<int> progressNow { 0 }, progressTotal { 0 };
 	};
 
@@ -72,6 +76,7 @@ private:
 	std::array<Command, queueSize> commands {};
 	std::array<motionlite::StemMotion, stems> motions {};
 	std::array<Published, stems> published {};
+	std::array<std::atomic<double>, stems> lengthMirror { 4.0, 4.0, 4.0, 4.0 };
 	std::atomic<double> lastBeat { 0.0 };
 	std::atomic<bool> hasBeat { false };
 };

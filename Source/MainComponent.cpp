@@ -751,6 +751,9 @@ void MainComponent::gatherSpatial (int deckIndex, DeckSession& deck) const
 	const auto& carried = restoredSpatial[(size_t) deckIndex];
 	for (size_t s = 0; s < deck.stems.size(); ++s)
 	{
+		// The motion object exists with or without an engine and remembers the
+		// length it was given, so this needs no carried copy.
+		deck.stems[s].lengthBars = spatialPorts[(size_t) deckIndex].motion().lengthBars ((int) s);
 		if (spatial == nullptr)
 		{
 			deck.stems[s].threeD = carried[s].threeD;
@@ -770,6 +773,8 @@ void MainComponent::gatherSpatial (int deckIndex, DeckSession& deck) const
 void MainComponent::restoreSpatial (int deckIndex, const DeckSession& deck)
 {
 	restoredSpatial[(size_t) deckIndex] = deck.stems;
+	for (size_t s = 0; s < deck.stems.size(); ++s)
+		spatialPorts[(size_t) deckIndex].motion().setLength ((int) s, deck.stems[s].lengthBars);
 
 	auto* spatial = spatialPorts[(size_t) deckIndex].deckSpatial();
 	if (spatial == nullptr)

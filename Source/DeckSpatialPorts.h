@@ -32,6 +32,7 @@ public:
 	DeckSpatial::Controls& settings() { return userSettings; }
 	const DeckSpatial::Controls& settings() const { return userSettings; }
 	DeckMotion& motion() { return stemMotion; }
+	const DeckMotion& motion() const { return stemMotion; }
 
 private:
 	void followPlayer (const StemDeckPlayer&, int numSamples);

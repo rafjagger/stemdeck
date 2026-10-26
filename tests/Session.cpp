@@ -159,3 +159,42 @@ TEST (Session, GarbageSpatialValuesAreClamped)
 	EXPECT_DOUBLE_EQ (back.stems[1].elevation, -90.0);
 	EXPECT_DOUBLE_EQ (back.stems[1].width, 360.0);
 }
+
+TEST (Session, LengthRoundTripsAndOldSessionsHaveFour)
+{
+	Session session;
+	session.decks[1].stems[2].lengthBars = 0.5;
+	session.decks[0].stems[0].lengthBars = 8.0;
+	const auto back = throughXml (session);
+	EXPECT_DOUBLE_EQ (back.decks[1].stems[2].lengthBars, 0.5);
+	EXPECT_DOUBLE_EQ (back.decks[0].stems[0].lengthBars, 8.0);
+	EXPECT_DOUBLE_EQ (back.decks[0].stems[1].lengthBars, 4.0);
+
+	auto xml = Session().toXml();
+	for (auto* deck : xml->getChildIterator())
+		if (deck->hasTagName ("Deck"))
+			for (auto* stem : deck->getChildWithTagNameIterator ("Stem"))
+				stem->removeAttribute ("lengthBars");
+	for (const auto& deck : Session::fromXml (*xml).decks)
+		for (const auto& stem : deck.stems)
+			EXPECT_DOUBLE_EQ (stem.lengthBars, 4.0);
+}
+
+TEST (Session, AStoredLengthOutsideTheValidSetReadsAsFour)
+{
+	auto xml = Session().toXml();
+	auto* first = xml->getChildByName ("Deck")->getChildByName ("Stem");
+	first->setAttribute ("lengthBars", 3.0);
+	auto* second = first->getNextElementWithTagName ("Stem");
+	second->setAttribute ("lengthBars", "garbage");
+	auto* third = second->getNextElementWithTagName ("Stem");
+	third->setAttribute ("lengthBars", 16.0);
+	auto* fourth = third->getNextElementWithTagName ("Stem");
+	fourth->setAttribute ("lengthBars", 2.0);
+
+	const auto back = Session::fromXml (*xml).decks[0];
+	EXPECT_DOUBLE_EQ (back.stems[0].lengthBars, 4.0);
+	EXPECT_DOUBLE_EQ (back.stems[1].lengthBars, 4.0);
+	EXPECT_DOUBLE_EQ (back.stems[2].lengthBars, 4.0);
+	EXPECT_DOUBLE_EQ (back.stems[3].lengthBars, 2.0);
+}

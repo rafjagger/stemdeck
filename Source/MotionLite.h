@@ -29,6 +29,11 @@ namespace motionlite
 	// Rises and falls by one per beat at both ends, capped at 1.
 	float envelope (double t, double lengthBeats);
 
+	// One-shot lengths in bars: ½, 1, 2, 4, 8. Anything else reads as the default 4.
+	double validLength (double bars);
+	double shorterLength (double bars);   // halved, clamped
+	double longerLength (double bars);    // doubled, clamped
+
 	class StemMotion
 	{
 	public:
@@ -36,6 +41,7 @@ namespace motionlite
 		void press (Shape, bool shift, std::uint64_t seed);
 		void lengthDown();
 		void lengthUp();
+		void setLengthBars (double bars) { lengthBarsValue = validLength (bars); }
 		double lengthBars() const { return lengthBarsValue; }
 		PadState state (Shape) const;
 		std::optional<std::pair<int, int>> progress() const;

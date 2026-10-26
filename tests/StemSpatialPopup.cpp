@@ -65,6 +65,39 @@ TEST (StemSpatialPopup, PaintsEveryState)
 
 // Stage S3: the pads, the length keys and SHIFT go through the deck's motion
 // queue; the audio thread's next block takes them.
+TEST (DeckMotion, SetLengthReachesTheStemAndReadsBackBeforeAnyBlock)
+{
+	DeckSpatial::Controls controls, played;
+	DeckMotion motion;
+	const motionlite::Clock clock { 5.0, 120.0, 1.0, true };
+
+	EXPECT_TRUE (motion.setLength (2, 0.5));
+	EXPECT_DOUBLE_EQ (motion.lengthBars (2), 0.5) << "readable at once, as a restore is gathered before the first block";
+	EXPECT_DOUBLE_EQ (motion.lengthBars (1), 4.0);
+	motion.advance (clock, 0.0, controls, played);
+	EXPECT_DOUBLE_EQ (motion.lengthBars (2), 0.5);
+
+	motion.lengthUp (2);
+	EXPECT_DOUBLE_EQ (motion.lengthBars (2), 1.0);
+	motion.advance (clock, 0.0, controls, played);
+	EXPECT_DOUBLE_EQ (motion.lengthBars (2), 1.0) << "the audio thread agrees with the mirror";
+
+	motion.setLength (2, 3.0);
+	motion.advance (clock, 0.0, controls, played);
+	EXPECT_DOUBLE_EQ (motion.lengthBars (2), 4.0);
+	EXPECT_FALSE (motion.setLength (9, 2.0));
+}
+
+TEST (DeckMotion, ARestoredLengthIsTheOneTheNextShotUses)
+{
+	DeckSpatial::Controls controls, played;
+	DeckMotion motion;
+	motion.setLength (0, 1.0);
+	motion.press (0, motionlite::Shape::orbit, true, 1);
+	motion.advance ({ 5.0, 120.0, 1.0, true }, 0.0, controls, played);
+	EXPECT_EQ (motion.progress (0), (std::pair<int, int> { 1, 4 }));   // 1 bar = 4 beats
+}
+
 TEST (StemSpatialPopup, PadsPressThroughTheMotionQueue)
 {
 	juce::ScopedJuceInitialiser_GUI init;

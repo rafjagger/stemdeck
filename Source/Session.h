@@ -23,6 +23,7 @@ struct StemMixState
 	double threeD = 0.0;                          // 0..1
 	double azimuth = 0.0, elevation = 0.0;        // home direction, degrees; azimuth -180..180, elevation -90..90
 	double width = 60.0;                          // degrees, 0..360 (IEM StereoEncoder)
+	double lengthBars = 4.0;                      // one-shot length: 0.5, 1, 2, 4 or 8 bars
 };
 
 struct DeckSession

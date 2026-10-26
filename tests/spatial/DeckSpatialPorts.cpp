@@ -5,6 +5,7 @@
 #include "DeckSpatialPorts.h"
 #include "Outputs.h"
 #include "StemDeckPlayer.h"
+#include "StemKnob.h"
 
 #include <memory>
 #include <stdexcept>
@@ -16,7 +17,6 @@ namespace
 constexpr double rate = 44100.0;
 constexpr int block = 128;
 constexpr int stems = StemDeckPlayer::numStems;
-constexpr float knobMinimumDb = -60.0f;   // MixerPanel.cpp's minDb, the bottom of a stem knob
 constexpr int bformatFirst = 0, cueFirst = 16, phonesFirst = 18;
 
 int blocksFor (double seconds) { return (int) (seconds * rate) / block + 1; }
@@ -118,7 +118,7 @@ TEST_F (TwoDeckSpatial, StemGainMinimumIsExactSilenceOnEverySpatialPort)
 	ASSERT_GT (spatialPeak (cueFirst), 0.0f) << "and into its cue";
 
 	for (int s = 0; s < stems; ++s)
-		player.setStemGain (s, juce::Decibels::decibelsToGain (knobMinimumDb, knobMinimumDb));
+		player.setStemGain (s, juce::Decibels::decibelsToGain (stemKnobMinimumDb, stemKnobMinimumDb));
 	renderBlocks (blocksFor (0.5));
 
 	for (int i = 0; i < blocksFor (0.2); ++i)

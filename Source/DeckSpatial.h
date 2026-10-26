@@ -29,7 +29,7 @@ public:
 
 	struct Controls   // written from any thread, read once per block
 	{
-		Controls();
+		Controls() { for (auto& w : width) w = spatial::Pose{}.width; }   // inline: the GUI tests build one without IEM
 		std::array<std::atomic<float>, stems> threeD {}, azimuth {}, elevation {}, width {};   // width default 60
 		std::array<std::atomic<bool>, stems> muted {}, cued {};
 		std::atomic<float> deckThreeD { 1.0f }, phonesLevel { 1.0f }, phonesMix { 0.0f };

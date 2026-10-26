@@ -105,6 +105,9 @@ private:
 	void restoreSession();
 	void gatherSpatial (int deckIndex, DeckSession&) const;
 	void restoreSpatial (int deckIndex, const DeckSession&);
+	// What the session held for each stem's spatial values, kept for a deck
+	// without a spatial engine, which would otherwise save the defaults.
+	std::array<decltype (DeckSession::stems), numDecks> restoredSpatial {};
 	juce::String lastSessionText;
 	int sessionCountdown = 0;
 	void updateDeviceStatus();

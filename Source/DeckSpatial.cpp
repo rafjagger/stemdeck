@@ -122,12 +122,6 @@ struct DeckSpatial::Stem
 	Ramp moving, mute, cue;
 };
 
-DeckSpatial::Controls::Controls()
-{
-	for (auto& w : width)
-		w = spatial::Pose{}.width;
-}
-
 DeckSpatial::DeckSpatial() = default;
 DeckSpatial::~DeckSpatial() = default;
 

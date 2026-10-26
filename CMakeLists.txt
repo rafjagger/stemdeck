@@ -160,6 +160,7 @@ target_sources(StemDeck PRIVATE
     Source/SteadyBed.cpp
     Source/DeckSpatial.cpp
     Source/DeckSpatialPorts.cpp
+    Source/StemSpatialPopup.cpp
     third_party/a3-engine/src/a3-engine/Laws.cpp)
 target_include_directories(StemDeck PRIVATE third_party/a3-engine/src)
 

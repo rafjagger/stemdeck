@@ -123,6 +123,8 @@ gtest_discover_tests(stemdeck-tests)
 # by unsetting DISPLAY: JUCE then falls back to :0.0, the rig's screen).
 add_executable(stemdeck-gui-tests
     PointerInjector.cpp
+    StemSpatialPopup.cpp
+    ${CMAKE_SOURCE_DIR}/Source/StemSpatialPopup.cpp
     ${CMAKE_SOURCE_DIR}/Source/PointerInjector.cpp
     ${CMAKE_SOURCE_DIR}/Source/RemotePointer.cpp)
 target_include_directories(stemdeck-gui-tests PRIVATE ${CMAKE_SOURCE_DIR}/Source)
@@ -130,7 +132,7 @@ target_compile_features(stemdeck-gui-tests PRIVATE cxx_std_17)
 target_compile_definitions(stemdeck-gui-tests PRIVATE
     JUCE_USE_CURL=0 JUCE_WEB_BROWSER=0 JUCE_STANDALONE_APPLICATION=0 JUCE_MODAL_LOOPS_PERMITTED=1)
 target_link_libraries(stemdeck-gui-tests PRIVATE GTest::gtest GTest::gtest_main
-    juce::juce_gui_basics juce::juce_recommended_config_flags)
+    juce::juce_gui_basics juce::juce_audio_basics juce::juce_recommended_config_flags)
 add_dependencies(stemdeck-gui-tests stemdeck-gtest-stamp)
 target_compile_options(stemdeck-gui-tests PRIVATE -include ${gtest_stamp_header})
 

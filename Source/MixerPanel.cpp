@@ -1,10 +1,14 @@
 #include "MixerPanel.h"
 #include "Theme.h"
 #include "SurfaceJuce.h"
+#include "StemKnob.h"
+#include "StemSpatialPopup.h"
+#include "DeckSpatial.h"
 
 namespace
 {
-	constexpr float minDb = -60.0f; // bottom of knobs and fader = silence
+	constexpr float minDb = stemKnobMinimumDb;
+	constexpr int longPressMs = 600;   // a touch has no right button
 	const auto clipColour = juce::Colour (0xffe04848);
 
 	juce::String busName (int bus) { return juce::String (buses::name (bus)); }
@@ -154,6 +158,12 @@ void OutputMeters::resized()
 //==============================================================================
 ChannelStrip::ChannelStrip (StemDeckPlayer& p, int index) : player (p), deckIndex (index)
 {
+	longPress.onFire = [this]
+	{
+		if (pressedStem >= 0)
+			openSpatial (std::exchange (pressedStem, -1));
+	};
+
 	for (int s = 0; s < StemSet::numStems; ++s)
 	{
 		auto* knob = knobs.add (new juce::Slider (juce::Slider::RotaryHorizontalVerticalDrag, juce::Slider::NoTextBox));
@@ -165,6 +175,7 @@ ChannelStrip::ChannelStrip (StemDeckPlayer& p, int index) : player (p), deckInde
 		knob->textFromValueFunction = dbText;
 		knob->setColour (juce::Slider::rotarySliderFillColourId, Theme::stem (s));
 		knob->setMouseClickGrabsKeyboardFocus (false);
+		knob->addMouseListener (this, false);   // right-click and long press, beside the knob's own drag
 		knob->onValueChange = [this, s, knob]
 		{
 			player.setStemGain (s, juce::Decibels::decibelsToGain ((float) knob->getValue(), minDb));
@@ -225,6 +236,45 @@ ChannelStrip::ChannelStrip (StemDeckPlayer& p, int index) : player (p), deckInde
 	// The deck's four stems metered in the fader's slot, pre-fader: the meters
 	// behind, the fader's ticks and cap drawn over them (2026-10-08).
 	fader.getProperties().set (DJLookAndFeel::meterInSlot, true);
+}
+
+int ChannelStrip::knobIndexOf (const juce::Component* component) const
+{
+	for (int s = 0; s < knobs.size(); ++s)
+		if (knobs[s] == component)
+			return s;
+	return -1;
+}
+
+void ChannelStrip::openSpatial (int stem)
+{
+	if (spatial == nullptr || stem < 0 || stem >= knobs.size())
+		return;
+	StemSpatialPopup::show (*knobs[stem], spatial->controls(), stem);
+}
+
+void ChannelStrip::mouseDown (const juce::MouseEvent& e)
+{
+	const auto stem = knobIndexOf (e.eventComponent);
+	if (stem < 0 || spatial == nullptr)
+		return;
+	if (e.mods.isPopupMenu())
+		return openSpatial (stem);
+
+	pressedStem = stem;
+	longPress.startTimer (longPressMs);
+}
+
+void ChannelStrip::mouseDrag (const juce::MouseEvent& e)
+{
+	if (e.mouseWasDraggedSinceMouseDown())
+		longPress.stopTimer();
+}
+
+void ChannelStrip::mouseUp (const juce::MouseEvent&)
+{
+	longPress.stopTimer();
+	pressedStem = -1;
 }
 
 void ChannelStrip::saveState (DeckSession& state) const

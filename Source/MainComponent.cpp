@@ -194,6 +194,8 @@ MainComponent::MainComponent()
 	}
 
 	createSpatialPorts();
+	for (int d = 0; d < numDecks; ++d)
+		mixer.setSpatial (d, spatialPorts[(size_t) d].deckSpatial());
 	initialiseAudio();
 
 	if (appProperties.getUserSettings()->getValue ("syncSource") == "pio")
@@ -737,17 +739,24 @@ Session MainComponent::gatherSession() const
 	return session;
 }
 
-// The spatial state is the deck's DeckSpatial::Controls; with no spatial engine
-// (IEM refused) the defaults stay in the file as they were read.
+// The spatial state is the deck's DeckSpatial::Controls. With no spatial engine
+// (IEM refused) nothing changes it, so the values read at restore are written
+// back as they were: a session saved meanwhile must not reset them.
 void MainComponent::gatherSpatial (int deckIndex, DeckSession& deck) const
 {
 	auto* spatial = spatialPorts[(size_t) deckIndex].deckSpatial();
-	if (spatial == nullptr)
-		return;
-
-	const auto& controls = spatial->controls();
+	const auto& carried = restoredSpatial[(size_t) deckIndex];
 	for (size_t s = 0; s < deck.stems.size(); ++s)
 	{
+		if (spatial == nullptr)
+		{
+			deck.stems[s].threeD = carried[s].threeD;
+			deck.stems[s].azimuth = carried[s].azimuth;
+			deck.stems[s].elevation = carried[s].elevation;
+			deck.stems[s].width = carried[s].width;
+			continue;
+		}
+		const auto& controls = spatial->controls();
 		deck.stems[s].threeD = controls.threeD[s].load();
 		deck.stems[s].azimuth = controls.azimuth[s].load();
 		deck.stems[s].elevation = controls.elevation[s].load();
@@ -757,6 +766,8 @@ void MainComponent::gatherSpatial (int deckIndex, DeckSession& deck) const
 
 void MainComponent::restoreSpatial (int deckIndex, const DeckSession& deck)
 {
+	restoredSpatial[(size_t) deckIndex] = deck.stems;
+
 	auto* spatial = spatialPorts[(size_t) deckIndex].deckSpatial();
 	if (spatial == nullptr)
 		return;

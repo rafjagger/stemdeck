@@ -6,17 +6,23 @@
 #include <optional>
 
 // Which StemDeck instance holds the A³ Motion panel (-bformat: one instance a
-// deck, one panel). A lock file, ~/.config/StemDeck/panel.lock, holds
+// deck, one panel). A lock file in the runtime directory (cleared at boot) holds
 // "<letter> <pid>" of the instance that has it. Pure: no JUCE, the path is a
 // parameter.
 //
 // The instance holding it opens the panel's port; the others never do. A lock
 // is free when there is no file, when it is empty or garbled, or when its pid
-// is no longer alive (a crashed holder). Every change of the lock happens under
+// is no longer alive (a crashed holder) or belongs to another program (a pid
+// recycled after a reboot, or a SIGTERM that never released it). Every change of the lock happens under
 // an flock on "<lock>.guard", so two instances starting in the same instant
 // cannot both win and a release never removes what another instance took.
 namespace panel
 {
+	// $XDG_RUNTIME_DIR/stemdeck-panel.lock; without it /tmp/stemdeck-<uid>/panel.lock
+	// in a folder made 0700 (fallbackBase is a parameter for tests).
+	std::filesystem::path lockFilePath (const char* runtimeDir, unsigned uid,
+										const std::filesystem::path& fallbackBase = "/tmp");
+
 	class Ownership
 	{
 	public:

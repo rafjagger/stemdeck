@@ -159,3 +159,43 @@ TEST (PanelOwnership, AStoredOnClaimsOnlyWhenFree)
 	ASSERT_TRUE (panel::claimAtStart (a, std::nullopt));
 	EXPECT_FALSE (panel::claimAtStart (b, true));
 }
+
+TEST (PanelLockPath, LivesUnderTheRuntimeDirWhenThereIsOne)
+{
+	TempDir dir;
+	std::filesystem::create_directories (dir.path);
+	EXPECT_EQ (panel::lockFilePath (dir.path.c_str(), 1000, dir.path / "tmp"), dir.path / "stemdeck-panel.lock");
+}
+
+TEST (PanelLockPath, FallsBackToAPrivateFolderPerUser)
+{
+	TempDir dir;
+	std::filesystem::create_directories (dir.path);
+	for (const char* none : { static_cast<const char*> (nullptr), "" })
+	{
+		const auto path = panel::lockFilePath (none, 1234, dir.path);
+		EXPECT_EQ (path, dir.path / "stemdeck-1234" / "panel.lock");
+		const auto mode = std::filesystem::status (path.parent_path()).permissions() & std::filesystem::perms::mask;
+		EXPECT_EQ (mode, std::filesystem::perms::owner_all);
+	}
+}
+
+TEST (PanelOwnership, ALockNamingALiveProcessOfAnotherProgramIsFree)
+{
+	TempDir dir;
+	// pid 1 is alive and never stemdeck's own program.
+	panel::Ownership stale (dir.lock(), 'B', 1);
+	stale.take();
+	panel::Ownership a (dir.lock(), 'A');
+	EXPECT_TRUE (a.claimByDefault());
+	EXPECT_TRUE (a.holds());
+}
+
+TEST (PanelOwnership, ALockNamingALiveProcessOfTheSameProgramIsHeld)
+{
+	TempDir dir;
+	panel::Ownership other (dir.lock(), 'B');   // this very process stands in for another instance
+	other.take();
+	panel::Ownership a (dir.lock(), 'A');
+	EXPECT_FALSE (a.claimByDefault());
+}

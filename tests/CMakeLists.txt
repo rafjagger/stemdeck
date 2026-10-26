@@ -143,7 +143,21 @@ endif()
 gtest_discover_tests(stemdeck-gui-tests)
 
 # a3-engine's IEM nodes, compiled into StemDeck's own JUCE (stemdeck-juce).
-add_executable(stemdeck-spatial-tests spatial/IemInStemDeck.cpp)
+# One deck's spatial engine beside them; a3-engine's SpatialConfig reads the
+# engine's own bed files for the SteadyBed reference.
+add_executable(stemdeck-spatial-tests
+    spatial/IemInStemDeck.cpp
+    spatial/SteadyBed.cpp
+    spatial/DeckSpatial.cpp
+    spatial/DeckSpatialAllocation.cpp
+    ${CMAKE_SOURCE_DIR}/Source/SteadyBed.cpp
+    ${CMAKE_SOURCE_DIR}/Source/DeckSpatial.cpp
+    ${CMAKE_SOURCE_DIR}/Source/SpatialLaw.cpp
+    ${CMAKE_SOURCE_DIR}/third_party/a3-engine/src/a3-engine/Laws.cpp
+    ${CMAKE_SOURCE_DIR}/third_party/a3-engine/src/a3-engine/SpatialConfig.cpp)
+target_include_directories(stemdeck-spatial-tests PRIVATE ${CMAKE_SOURCE_DIR}/Source ${CMAKE_SOURCE_DIR}/third_party/a3-engine/src)
+target_compile_definitions(stemdeck-spatial-tests PRIVATE
+    STEMDECK_SPATIAL_DATA="${CMAKE_SOURCE_DIR}/third_party/a3-engine/data/spatial")
 target_compile_features(stemdeck-spatial-tests PRIVATE cxx_std_17)
 target_link_libraries(stemdeck-spatial-tests PRIVATE GTest::gtest GTest::gtest_main a3-iem-sd)
 add_dependencies(stemdeck-spatial-tests stemdeck-gtest-stamp)

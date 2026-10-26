@@ -157,6 +157,8 @@ target_sources(StemDeck PRIVATE
     Source/PanelLink.cpp
     Source/PanelDevice.cpp
     Source/SpatialLaw.cpp
+    Source/SteadyBed.cpp
+    Source/DeckSpatial.cpp
     third_party/a3-engine/src/a3-engine/Laws.cpp)
 target_include_directories(StemDeck PRIVATE third_party/a3-engine/src)
 

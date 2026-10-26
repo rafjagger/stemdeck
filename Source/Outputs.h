@@ -51,7 +51,8 @@ namespace outputs
 	// StemDeck-<X>, and only these 22 -- no bus ports.
 	namespace oneDeck
 	{
-		inline SpatialLayout layout() { return { bformatChannels + 6, 0, bformatChannels, bformatChannels + 2, bformatChannels + 4 }; }
+		inline constexpr int channels = bformatChannels + 6;   // B-format, cue, AUX, phones
+		inline SpatialLayout layout() { return { channels, 0, bformatChannels, bformatChannels + 2, bformatChannels + 4 }; }
 		inline int channelCount() { return layout().channels; }
 
 		inline std::string portName (int channel)

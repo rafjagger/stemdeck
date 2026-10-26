@@ -5,7 +5,7 @@
 #include "AppSettings.h"
 #include "OscTruthFile.h"
 #include "SettingsPanel.h"
-#include "StemKnob.h"
+#include "SurfaceLayout.h"
 #include "Tips.h"
 
 #include <iostream>
@@ -14,6 +14,11 @@ namespace
 {
 double nowSeconds() { return juce::Time::getMillisecondCounterHiRes() / 1000.0; }
 constexpr const char* phonesModeKey = "phonesMode";
+constexpr const char* phonesLevelKey = "phonesLevel";
+constexpr const char* phonesMixKey = "phonesMix";
+constexpr int refreshHz = 60;   // the rolling waveform's
+// Shares of the window's height: the top bar and the library (the two-deck screen's 3 % and about 22 %).
+constexpr float topBarShare = 0.035f, libraryShare = 0.24f;
 }
 
 OneDeckComponent::OneDeckComponent (DeckInstance deck)
@@ -26,7 +31,9 @@ OneDeckComponent::OneDeckComponent (DeckInstance deck)
 
 	{
 		std::string truthError;
-		rec.setMeterParameters (osctruth::readMeterParameters (truth.path, truthError));
+		const auto meterParameters = osctruth::readMeterParameters (truth.path, truthError);
+		rec.setMeterParameters (meterParameters);
+		view.setMeterParameters (meterParameters);
 		if (! truthError.empty())
 			std::cerr << "StemDeck: " << truthError << std::endl;
 	}
@@ -36,32 +43,47 @@ OneDeckComponent::OneDeckComponent (DeckInstance deck)
 	if (const auto error = deckAudio.createSpatial(); error.isNotEmpty())
 		spatialError = error;
 
-	deckLabel.setText (juce::String (instance.title()), juce::dontSendNotification);
-	deckLabel.setFont (juce::FontOptions (28.0f, juce::Font::bold));
-	deckLabel.setColour (juce::Label::textColourId, Theme::deck (instance.letter - 'A'));
-	setLabel.setColour (juce::Label::textColourId, Theme::text);
+	const auto deckColour = Theme::deck (instance.letter - 'A');
+	deckLabel.setText ("DECK " + juce::String::charToString ((juce::juce_wchar) instance.letter), juce::dontSendNotification);
+	deckLabel.setJustificationType (juce::Justification::centred);
+	deckLabel.setColour (juce::Label::backgroundColourId, deckColour);
+	deckLabel.setColour (juce::Label::textColourId, juce::Colours::black);
 	deviceStatus.setColour (juce::Label::textColourId, Theme::textDim);
-	for (auto* label : { &deckLabel, &setLabel, &deviceStatus })
+	deviceStatus.setMinimumHorizontalScale (0.6f);
+	for (auto* label : { &deckLabel, &deviceStatus })
 		addAndMakeVisible (label);
 
-	loadButton.setTooltip ("Load the set selected in the library");
-	loadButton.onClick = [this] { if (const auto* set = library.selectedSet()) loadSet (*set); };
-	playButton.setClickingTogglesState (false);
-	playButton.setColour (juce::TextButton::buttonOnColourId, Theme::play);
-	playButton.onClick = [this] { togglePlay(); };
+	// Shown as the two-deck bar has them, not pressable: Auto DJ needs two
+	// decks (B15); SYNC's source and the master are across instances (S4.7).
+	autoDjButton.setEnabled (false);
+	autoDjButton.setTooltip ("Auto DJ needs two decks: the two-deck StemDeck");
+	syncSourceButton.setEnabled (false);
+	syncSourceButton.setTooltip ("SYNC across StemDeck instances: not yet");
 	settingsButton.onClick = [this] { showSettings(); };
-	for (auto* button : { &loadButton, &playButton, &settingsButton })
+	for (auto* button : { &autoDjButton, &syncSourceButton, &settingsButton })
 	{
 		button->setMouseClickGrabsKeyboardFocus (false);
 		addAndMakeVisible (button);
 	}
 
+	addAndMakeVisible (view);
+	view.waveform().onSetDropped = [this] (const juce::String& id) { loadById (id); };
+	view.deckPanel().onSetDropped = [this] (const juce::String& id) { loadById (id); };
+	view.deckPanel().onStep = [this] (int direction) { step (direction); };
+	view.outputs().setPhones ((float) settings().getDoubleValue (phonesLevelKey, 1.0), (float) settings().getDoubleValue (phonesMixKey, 0.0));
+	view.outputs().onPhonesChanged = [this] (float level, float mix)
+	{
+		settings().setValue (phonesLevelKey, level);
+		settings().setValue (phonesMixKey, mix);
+	};
+
 	rec.button.onClick = [this] { rec.toggle (audio->jackClient().getSampleRate()); };
 	rec.addTo (*this);
 
 	addAndMakeVisible (library);
-	// Either of the library's Load keys loads the one deck (one Load in S4.4b).
+	library.setOneDeck (deckColour);
 	library.onLoadSet = [this] (const StemSet& set, int) { loadSet (set); };
+	library.onOrderChanged = [this] { findSteps(); };
 	library.lookUpBeatGrid = [this] (const StemSet& set) { return analysisCache.find (set); };
 	creatorLink = std::make_unique<StemCreatorLink> (library, stemCreator, settings(), *this);
 
@@ -79,7 +101,7 @@ OneDeckComponent::OneDeckComponent (DeckInstance deck)
 	restoreSession();
 	updatePhonesDecoder();
 	updateDeviceStatus();
-	startTimerHz (30);
+	startTimerHz (refreshHz);
 }
 
 OneDeckComponent::~OneDeckComponent()
@@ -101,18 +123,30 @@ void OneDeckComponent::loadSet (const StemSet& set)
 		juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Cannot load the set", error);
 		return;
 	}
-	setLabel.setText (set.name, juce::dontSendNotification);
+	view.setSet (set);
+	findSteps();
 }
 
-void OneDeckComponent::togglePlay()
+void OneDeckComponent::loadById (const juce::String& setId)
 {
-	auto& player = deckAudio.host().player();
-	if (! player.isLoaded())
-		return;
-	if (player.isPlaying())
-		player.pause();
-	else
-		player.play();
+	if (const auto* set = library.findSet (setId))
+		loadSet (*set);
+}
+
+// |< >|: the set beside the loaded one in its folder, in the library's order.
+void OneDeckComponent::step (int direction)
+{
+	if (const auto* set = library.neighbourInFolder (deckAudio.host().loadedSetId(), direction))
+		loadSet (*set);
+}
+
+void OneDeckComponent::findSteps()
+{
+	const auto& id = deckAudio.host().loadedSetId();
+	const auto* previous = library.neighbourInFolder (id, -1);
+	const auto* next = library.neighbourInFolder (id, 1);
+	view.deckPanel().setStepsAvailable (previous != nullptr, next != nullptr, previous != nullptr ? previous->name : juce::String(),
+										next != nullptr ? next->name : juce::String());
 }
 
 // R12, every tick: the phones ports heard (under JACK connected, on a device
@@ -139,17 +173,12 @@ void OneDeckComponent::restoreSession()
 
 	library.restoreState (restored.library);
 	host.restoreSpatial (deck);
-	for (int s = 0; s < StemDeckPlayer::numStems; ++s)
-	{
-		const auto& stem = deck.stems[(size_t) s];
-		player.setStemGain (s, juce::Decibels::decibelsToGain ((float) stem.gainDb, stemKnobMinimumDb));
-		player.setStemMuted (s, stem.muted);
-		player.setStemCue (s, stem.cue);
-	}
 
 	if (deck.setId.isNotEmpty())
 		if (const auto* set = library.findSet (library.idFromStored (deck.setId)))
 			loadSet (*set);
+	// Tempo, range, key lock and each stem's GAIN, MUTE and CUE.
+	view.restoreState (deck);
 	if (player.isLoaded())
 	{
 		host.restoreTransport (deck);
@@ -172,6 +201,7 @@ OneDeckSession OneDeckComponent::gatherSession() const
 	const auto& host = deckAudio.host();
 	session.deck.setId = library.storedId (host.loadedSetId());
 	host.gather (session.deck);
+	view.saveState (session.deck);
 	library.saveState (session.library);
 	creatorLink->gather (session.stemJobs);
 	return session;
@@ -229,22 +259,19 @@ void OneDeckComponent::showSettings()
 
 void OneDeckComponent::timerCallback()
 {
-	const auto& player = deckAudio.host().player();
-	playButton.setToggleState (player.isPlaying(), juce::dontSendNotification);
-	playButton.setEnabled (player.isLoaded());
-
+	view.refresh();
 	updatePhonesDecoder();
 	creatorLink->showStatus();
 	rec.update (audio->usingJack() ? audio->jackClient().getClientName() : juce::String());
 
 	if (--sessionCountdown <= 0)
 	{
-		sessionCountdown = 60;   // two seconds at 30 Hz
+		sessionCountdown = 2 * refreshHz;   // two seconds
 		saveSession();
 	}
 	if (--statusCountdown <= 0)
 	{
-		statusCountdown = 30;
+		statusCountdown = refreshHz;
 		updateDeviceStatus();
 	}
 }
@@ -255,32 +282,36 @@ void OneDeckComponent::paint (juce::Graphics& g)
 	g.fillAll (Theme::background);
 }
 
+// The top bar, the deck (OneDeckView), the library: shares of the window,
+// as the two-deck screen's (SurfaceLayout).
 void OneDeckComponent::resized()
 {
-	auto area = getLocalBounds().reduced (8);
-	const auto rowHeight = juce::jmax (32, getHeight() / 24);
-	const auto gap = 8;
+	const auto gap = surface::metrics (getWidth()).gap;
+	auto area = getLocalBounds().reduced (gap);
+	const auto barHeight = juce::roundToInt ((float) getHeight() * topBarShare);
+	const auto key = [&area] (float share) { return juce::roundToInt ((float) area.getWidth() * share); };
 
-	auto top = area.removeFromTop (rowHeight);
-	settingsButton.setBounds (top.removeFromRight (top.getWidth() / 6));
+	auto top = area.removeFromTop (barHeight);
+	deckLabel.setFont (juce::FontOptions ((float) barHeight * 0.6f, juce::Font::bold));
+	deckLabel.setBounds (top.removeFromLeft (key (0.13f)));
+	top.removeFromLeft (gap);
+	rec.button.setBounds (top.removeFromLeft (key (0.09f)));
+	top.removeFromLeft (gap / 2);
+	const auto meterWidth = juce::jmax (2, gap);
+	rec.left.setBounds (top.removeFromLeft (meterWidth).reduced (0, barHeight / 10));
+	top.removeFromLeft (gap / 2);
+	rec.right.setBounds (top.removeFromLeft (meterWidth).reduced (0, barHeight / 10));
+	top.removeFromLeft (gap);
+	autoDjButton.setBounds (top.removeFromLeft (key (0.12f)));
+	top.removeFromLeft (gap);
+	syncSourceButton.setBounds (top.removeFromLeft (key (0.15f)));
+	settingsButton.setBounds (top.removeFromRight (key (0.13f)));
 	top.removeFromRight (gap);
-	rec.button.setBounds (top.removeFromRight (top.getWidth() / 5));
-	top.removeFromRight (gap / 2);
-	rec.right.setBounds (top.removeFromRight (8).reduced (0, rowHeight / 10));
-	top.removeFromRight (gap / 2);
-	rec.left.setBounds (top.removeFromRight (8).reduced (0, rowHeight / 10));
-	top.removeFromRight (gap);
-	deckLabel.setBounds (top.removeFromLeft (top.getWidth() / 3));
+	top.removeFromLeft (gap);
 	deviceStatus.setBounds (top);
 	area.removeFromTop (gap);
 
-	auto deckRow = area.removeFromTop (rowHeight * 2);
-	playButton.setBounds (deckRow.removeFromRight (deckRow.getWidth() / 4));
-	deckRow.removeFromRight (gap);
-	loadButton.setBounds (deckRow.removeFromRight (deckRow.getWidth() / 4));
-	deckRow.removeFromRight (gap);
-	setLabel.setBounds (deckRow);
-	area.removeFromTop (gap);
-
-	library.setBounds (area);
+	library.setBounds (area.removeFromBottom (juce::roundToInt ((float) getHeight() * libraryShare)));
+	area.removeFromBottom (gap);
+	view.setBounds (area);
 }

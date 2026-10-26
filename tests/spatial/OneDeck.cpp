@@ -3,9 +3,13 @@
 #include <gtest/gtest.h>
 
 #include "OneDeckAudio.h"
+#include "OneDeckView.h"
 #include "Outputs.h"
 #include "StemKnob.h"
+#include "Theme.h"
 #include "TwoDeckFixture.h"
+
+#include <vector>
 
 // A -bformat instance's audio (S4.4a): one DeckHost on the 22 one-deck
 // channels, through the AudioSource the JACK client pulls.
@@ -23,11 +27,12 @@ protected:
 	{
 		ASSERT_TRUE (folder.createDirectory().wasOk());
 		formats.registerBasicFormats();
-		StemSet set;
 		set.name = "noise";
+		const std::array<const char*, stems> names { "drums", "bass", "vocals", "synth" };
 		for (int s = 0; s < stems; ++s)
 		{
 			set.files[(size_t) s] = folder.getChildFile ("stem" + juce::String (s) + ".wav");
+			set.stemNames[(size_t) s] = names[(size_t) s];
 			twodeck::writeNoiseStem (set.files[(size_t) s], 31 + s);
 		}
 		ASSERT_EQ (audio.createSpatial(), juce::String());
@@ -100,6 +105,7 @@ protected:
 	juce::ScopedJuceInitialiser_GUI juceInitialiser;
 	juce::File folder = juce::File::getSpecialLocation (juce::File::tempDirectory).getNonexistentChildFile ("stemdeck-onedeck", "");
 	juce::AudioFormatManager formats;
+	StemSet set;
 	juce::ThreadPool pool;
 	AnalysisCache cache { folder.getChildFile ("analysis.xml") };
 	OneDeckAudio audio { formats, pool, cache };
@@ -189,4 +195,186 @@ TEST (OneDeckCore, HeardWithinFiveSeconds)
 	EXPECT_TRUE (spatial::coreHeard (100.0, 100.0));
 	EXPECT_TRUE (spatial::coreHeard (100.0, 104.9));
 	EXPECT_FALSE (spatial::coreHeard (100.0, 105.1));
+}
+
+//==============================================================================
+// The v4 screen (S4.4b): the deck part of a -bformat instance, on the
+// fixture's deck. Components need JUCE's GUI; the binary runs under xvfb.
+namespace
+{
+constexpr int screenWidth = 768, viewHeight = 760;   // the rig's width; the deck part of its 1024
+
+// How much a snapshot varies: a screen that painted only its ground is flat.
+double lumaVariance (const juce::Image& image)
+{
+	const juce::Image::BitmapData pixels (image, juce::Image::BitmapData::readOnly);
+	double sum = 0.0, squares = 0.0;
+	const auto count = (double) image.getWidth() * image.getHeight();
+	for (int y = 0; y < image.getHeight(); ++y)
+		for (int x = 0; x < image.getWidth(); ++x)
+		{
+			const auto colour = pixels.getPixelColour (x, y);
+			const double luma = (colour.getRed() + colour.getGreen() + colour.getBlue()) / 3.0;
+			sum += luma;
+			squares += luma * luma;
+		}
+	const auto mean = sum / count;
+	return squares / count - mean * mean;
+}
+
+int differingPixels (const juce::Image& a, const juce::Image& b)
+{
+	const juce::Image::BitmapData first (a, juce::Image::BitmapData::readOnly), second (b, juce::Image::BitmapData::readOnly);
+	int differing = 0;
+	for (int y = 0; y < a.getHeight(); ++y)
+		for (int x = 0; x < a.getWidth(); ++x)
+			differing += first.getPixelColour (x, y) != second.getPixelColour (x, y) ? 1 : 0;
+	return differing;
+}
+
+juce::Image snapshotOf (OneDeckView& view)
+{
+	view.refresh();
+	return view.createComponentSnapshot (view.getLocalBounds());
+}
+}
+
+// Every state the screen shows, under the app's look and feel: each snapshot
+// painted more than a ground, and each state changed the picture.
+TEST_F (OneDeck, PaintsEveryState)
+{
+	DJLookAndFeel look;
+	constexpr double minimumVariance = 50.0;
+	{
+		OneDeckAudio empty { formats, pool, cache };
+		OneDeckView view (empty, formats, 0);
+		view.setLookAndFeel (&look);
+		view.setSize (screenWidth, viewHeight);
+		const auto image = snapshotOf (view);
+		EXPECT_GT (lumaVariance (image), minimumVariance) << "empty";
+		view.setLookAndFeel (nullptr);
+	}
+
+	OneDeckView view (audio, formats, 0);
+	view.setLookAndFeel (&look);
+	view.setSize (screenWidth, viewHeight);
+	std::vector<std::pair<std::string, juce::Image>> shots;
+	const auto shoot = [&] (const char* state) { shots.emplace_back (state, snapshotOf (view)); };
+
+	view.setSet (set);
+	shoot ("loaded");
+
+	player().setBeatGrid ({ 120.0, 0.0 });   // bar lines every 2 s; the deck stands at 0.5
+	view.column (1).oneShots().pad (motionlite::Shape::ping).onClick();
+	renderBlock();
+	ASSERT_EQ (audio.host().spatialPorts().motion().stemState (1), motionlite::PadState::armed);
+	shoot ("stem armed");
+
+	view.shift().setToggleState (true, juce::dontSendNotification);
+	view.column (2).oneShots().pad (motionlite::Shape::orbit).onClick();
+	renderBlock();
+	ASSERT_EQ (audio.host().spatialPorts().motion().stemState (2), motionlite::PadState::running);
+	EXPECT_FALSE (view.shift().getToggleState()) << "SHIFT holds for one press";
+	shoot ("running");
+
+	view.column (2).cue().setToggleState (true, juce::sendNotificationSync);
+	ASSERT_TRUE (player().isStemCued (2));
+	shoot ("cued");
+
+	view.column (3).mute().setToggleState (true, juce::sendNotificationSync);
+	ASSERT_TRUE (player().isStemMuted (3));
+	shoot ("muted");
+
+	view.outputs().phonesMix().setValue (1.0, juce::sendNotificationSync);
+	ASSERT_EQ (settings().phonesMix.load(), 1.0f);
+	shoot ("phones mix");
+
+	for (size_t i = 0; i < shots.size(); ++i)
+	{
+		const auto& [state, image] = shots[i];
+		EXPECT_EQ (image.getWidth(), screenWidth) << state;
+		EXPECT_GT (lumaVariance (image), minimumVariance) << state;
+		if (i > 0)
+			EXPECT_GT (differingPixels (shots[i - 1].second, image), 0) << state << " looks like " << shots[i - 1].first;
+	}
+	view.setLookAndFeel (nullptr);
+}
+
+// GAIN is the player's stem gain (its bottom exact silence, R4), 3D, WIDTH
+// and the viewer's home the spatial settings -- never the played pose, which
+// is the audio thread's -- and CUE and MUTE the player's switches. Only the
+// column's own stem.
+TEST_F (OneDeck, StemColumnKnobsDriveTheControls)
+{
+	OneDeckView view (audio, formats, 0);
+	view.setSize (screenWidth, viewHeight);
+	auto& column = view.column (1);
+	const auto& played = audio.host().spatialPorts().deckSpatial()->controls();
+	const auto playedThreeD = played.threeD[1].load();
+
+	column.gain().setValue (-6.0, juce::sendNotificationSync);
+	EXPECT_FLOAT_EQ (player().getStemGain (1), juce::Decibels::decibelsToGain (-6.0f));
+	column.gain().setValue (column.gain().getMinimum(), juce::sendNotificationSync);
+	EXPECT_EQ (player().getStemGain (1), 0.0f);
+	EXPECT_EQ (column.gain().getMinimum(), (double) stemKnobMinimumDb);
+
+	column.threeD().setValue (0.8, juce::sendNotificationSync);
+	column.width().setValue (150.0, juce::sendNotificationSync);
+	EXPECT_FLOAT_EQ (settings().threeD[1].load(), 0.8f);
+	EXPECT_FLOAT_EQ (settings().width[1].load(), 150.0f);
+	EXPECT_EQ (played.threeD[1].load(), playedThreeD) << "the played pose is the audio thread's";
+
+	ASSERT_TRUE (column.viewer().onHomeChanged != nullptr);
+	column.viewer().onHomeChanged ({ 30.0f, 10.0f, 90.0f });
+	EXPECT_FLOAT_EQ (settings().azimuth[1].load(), 30.0f);
+	EXPECT_FLOAT_EQ (settings().elevation[1].load(), 10.0f);
+	EXPECT_FLOAT_EQ (settings().width[1].load(), 90.0f);
+	EXPECT_DOUBLE_EQ (column.width().getValue(), 90.0) << "the WIDTH knob follows the viewer";
+
+	column.cue().setToggleState (true, juce::sendNotificationSync);
+	column.mute().setToggleState (true, juce::sendNotificationSync);
+	EXPECT_TRUE (player().isStemCued (1));
+	EXPECT_TRUE (player().isStemMuted (1));
+
+	for (int other : { 0, 2, 3 })
+	{
+		EXPECT_FLOAT_EQ (settings().threeD[(size_t) other].load(), 0.5f);
+		EXPECT_FLOAT_EQ (settings().width[(size_t) other].load(), 60.0f);
+		EXPECT_FLOAT_EQ (player().getStemGain (other), 1.0f);
+		EXPECT_FALSE (player().isStemCued (other));
+		EXPECT_FALSE (player().isStemMuted (other));
+	}
+}
+
+// The deck panel's pitch fader is the player's speed, and a restored session
+// plays at its stored tempo (the S4.4a placeholder played at 1) with its
+// stems' GAIN, MUTE and CUE; a save gives them back.
+TEST_F (OneDeck, PitchDrivesTheSpeedAndTheSessionTempoIsRestored)
+{
+	OneDeckView view (audio, formats, 0);
+	view.setSize (screenWidth, viewHeight);
+	view.setSet (set);
+
+	view.deckPanel().moveTempo (16.0);   // an eighth of the travel: +2 % at +-8 %
+	EXPECT_NEAR (player().getSpeed(), 1.02, 1e-9);
+
+	DeckSession session;
+	session.tempo = 1.05;
+	session.tempoRange = 0.08;
+	session.stems[2].gainDb = -12.0;
+	session.stems[2].muted = true;
+	session.stems[3].cue = true;
+	view.restoreState (session);
+	EXPECT_NEAR (player().getSpeed(), 1.05, 1e-9);
+	EXPECT_FLOAT_EQ (player().getStemGain (2), juce::Decibels::decibelsToGain (-12.0f));
+	EXPECT_TRUE (player().isStemMuted (2));
+	EXPECT_TRUE (player().isStemCued (3));
+
+	DeckSession saved;
+	view.saveState (saved);
+	EXPECT_NEAR (saved.tempo, 1.05, 1e-9);
+	EXPECT_NEAR (saved.stems[2].gainDb, -12.0, 1e-9);
+	EXPECT_TRUE (saved.stems[2].muted);
+	EXPECT_TRUE (saved.stems[3].cue);
+	EXPECT_FALSE (saved.stems[0].cue);
 }

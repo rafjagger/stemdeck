@@ -3,11 +3,12 @@
 #pragma once
 
 #include "DeckSpatial.h"
+#include "OneShotKeys.h"
 #include "StemViewer.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
-#include <array>
+#include <memory>
 
 class DeckMotion;
 
@@ -30,11 +31,12 @@ public:
 	juce::Slider& elevation() { return elevationSlider; }
 	juce::Slider& width() { return widthSlider; }
 	StemViewer& viewer() { return stemViewer; }
-	juce::TextButton& pad (motionlite::Shape shape) { return pads[(size_t) shape]; }
-	juce::TextButton& lengthDown() { return shorter; }
-	juce::TextButton& lengthUp() { return longer; }
+	// With a DeckMotion only.
+	juce::TextButton& pad (motionlite::Shape shape) { return oneShots->pad (shape); }
+	juce::TextButton& lengthDown() { return oneShots->lengthDown(); }
+	juce::TextButton& lengthUp() { return oneShots->lengthUp(); }
 	juce::TextButton& shift() { return shiftKey; }
-	juce::String lengthText() const { return lengthLabel.getText(); }
+	juce::String lengthText() const { return oneShots->length().getText(); }
 
 	void setStemColour (juce::Colour);
 	// Reads what the audio thread last did into the pads, the length and the
@@ -49,10 +51,9 @@ public:
 
 private:
 	void timerCallback() override { refresh(); }
-	void pressPad (motionlite::Shape);
+	bool takeShift();
 	void homeDragged (spatial::Pose);
 	spatial::Pose homeNow() const;
-	void lookOfPad (motionlite::Shape);
 
 	DeckSpatial::Controls& controls;
 	const size_t stemIndex;
@@ -62,9 +63,8 @@ private:
 	juce::Slider threeDSlider, azimuthSlider, elevationSlider, widthSlider;
 	juce::Label threeDLabel, azimuthLabel, elevationLabel, widthLabel;
 	StemViewer stemViewer;
-	std::array<juce::TextButton, 4> pads;
-	juce::TextButton shorter, longer, shiftKey;
-	juce::Label lengthLabel;
+	std::unique_ptr<OneShotKeys> oneShots;   // with a DeckMotion
+	juce::TextButton shiftKey;
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (StemSpatialPopup)
 };

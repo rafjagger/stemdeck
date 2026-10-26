@@ -54,13 +54,24 @@ StemViewer::StemViewer()
 	setOpaque (true);
 }
 
+namespace
+{
+bool samePose (const spatial::Pose& a, const spatial::Pose& b)
+{
+	return juce::exactlyEqual (a.azimuth, b.azimuth) && juce::exactlyEqual (a.elevation, b.elevation) && juce::exactlyEqual (a.width, b.width);
+}
+}
+
+// Called by a timer: repaints only when something it shows has changed.
 void StemViewer::setShown (spatial::Pose newHome, spatial::Pose newNow, motionlite::PadState newState)
 {
+	if (newState == motionlite::PadState::running)
+		grab = Grab::none;
+	if (samePose (home, newHome) && samePose (now, newNow) && state == newState)
+		return;
 	home = newHome;
 	now = newNow;
 	state = newState;
-	if (state == motionlite::PadState::running)
-		grab = Grab::none;
 	repaint();
 }
 

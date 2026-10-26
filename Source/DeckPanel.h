@@ -56,6 +56,9 @@ public:
 	// MASTER, like a CDJ's: this deck's beat goes out to the Pioneer network.
 	std::function<void()> onMasterPressed;
 	void setMaster (bool isMaster) { masterButton.setToggleState (isMaster, juce::dontSendNotification); }
+	// SYNC and MASTER need another deck or the Pioneer network in this
+	// process; a -bformat instance has neither yet (S4.7): shown, not pressable.
+	void setSyncAvailable (bool available);
 
 	// The deck's own controls for the session (tempo, range, key lock, vinyl,
 	// repeat, SYNC); restoring SYNC is the caller's, through onSyncToggled.

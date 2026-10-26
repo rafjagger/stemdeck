@@ -132,6 +132,7 @@ add_executable(stemdeck-gui-tests
     StemSpatialPopup.cpp
     StemViewer.cpp
     ${CMAKE_SOURCE_DIR}/Source/StemSpatialPopup.cpp
+    ${CMAKE_SOURCE_DIR}/Source/OneShotKeys.cpp
     ${CMAKE_SOURCE_DIR}/Source/StemViewer.cpp
     ${CMAKE_SOURCE_DIR}/Source/DeckMotion.cpp
     ${CMAKE_SOURCE_DIR}/Source/MotionLite.cpp
@@ -194,6 +195,19 @@ add_executable(stemdeck-spatial-tests
     ${CMAKE_SOURCE_DIR}/Source/Remote.cpp
     ${CMAKE_SOURCE_DIR}/Source/GridEdit.cpp
     ${CMAKE_SOURCE_DIR}/Source/SpatialLaw.cpp
+    ${CMAKE_SOURCE_DIR}/Source/OneDeckView.cpp
+    ${CMAKE_SOURCE_DIR}/Source/StemColumn.cpp
+    ${CMAKE_SOURCE_DIR}/Source/OneShotKeys.cpp
+    ${CMAKE_SOURCE_DIR}/Source/StemViewer.cpp
+    ${CMAKE_SOURCE_DIR}/Source/LevelMeter.cpp
+    ${CMAKE_SOURCE_DIR}/Source/MeterBallistics.cpp
+    ${CMAKE_SOURCE_DIR}/Source/DeckPanel.cpp
+    ${CMAKE_SOURCE_DIR}/Source/Waveforms.cpp
+    ${CMAKE_SOURCE_DIR}/Source/JogWheel.cpp
+    ${CMAKE_SOURCE_DIR}/Source/CueLight.cpp
+    ${CMAKE_SOURCE_DIR}/Source/SyncLabels.cpp
+    ${CMAKE_SOURCE_DIR}/Source/SurfaceLayout.cpp
+    ${CMAKE_SOURCE_DIR}/Source/Theme.cpp
     ${CMAKE_SOURCE_DIR}/third_party/a3-engine/src/a3-engine/Laws.cpp
     ${CMAKE_SOURCE_DIR}/third_party/a3-engine/src/a3-engine/SpatialConfig.cpp)
 target_include_directories(stemdeck-spatial-tests PRIVATE ${CMAKE_SOURCE_DIR}/Source ${CMAKE_SOURCE_DIR}/third_party/a3-engine/src)
@@ -207,4 +221,9 @@ target_include_directories(stemdeck-spatial-tests PRIVATE ${stemdeck_juce_header
 add_dependencies(stemdeck-spatial-tests StemDeck)
 add_dependencies(stemdeck-spatial-tests stemdeck-gtest-stamp)
 target_compile_options(stemdeck-spatial-tests PRIVATE -include ${gtest_stamp_header})
+# The one-deck screen's tests (S4.4b) build components: under xvfb-run too,
+# never on the display the rig's screen is.
+if(XVFB_RUN)
+    set_target_properties(stemdeck-spatial-tests PROPERTIES CROSSCOMPILING_EMULATOR "${XVFB_RUN};-a")
+endif()
 gtest_discover_tests(stemdeck-spatial-tests)

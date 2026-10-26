@@ -4,17 +4,11 @@
 
 #include "DeckMotion.h"
 
-#include <cmath>
-
 namespace
 {
 	constexpr int refreshHz = 30;
 	// Shares of the popup's height: four slider rows, the pads, the length row.
 	constexpr float sliderRowShare = 0.065f, padRowShare = 0.11f, lengthRowShare = 0.08f, gapShare = 0.015f;
-	// A pad's face: armed blinks on the deck's beat between these two, running is the stem's colour.
-	constexpr float armedLit = 0.55f, armedDim = 0.2f, armedNoBeat = 0.35f;
-
-	const std::array<const char*, 4> padNames { "ORBIT", "PING", "RISE", "SCAT" };
 
 	void setUp (juce::Slider& slider, juce::Label& label, const juce::String& name, juce::Range<double> range, double step,
 				double value, const juce::String& suffix, std::atomic<float>& target, juce::Component& parent)
@@ -33,20 +27,6 @@ namespace
 		parent.addAndMakeVisible (slider);
 	}
 
-	juce::String lengthName (double bars)
-	{
-		if (bars < 1.0)
-			return juce::String::fromUTF8 ("\xc2\xbd BAR");
-		return juce::String ((int) bars) + (bars > 1.0 ? " BARS" : " BAR");
-	}
-
-	void setUpKey (juce::TextButton& key, const juce::String& text, juce::Component& parent)
-	{
-		key.setButtonText (text);
-		key.setMouseClickGrabsKeyboardFocus (false);
-		key.setWantsKeyboardFocus (false);
-		parent.addAndMakeVisible (key);
-	}
 }
 
 StemSpatialPopup::StemSpatialPopup (DeckSpatial::Controls& c, int stem, DeckMotion* deckMotion)
@@ -76,19 +56,13 @@ StemSpatialPopup::StemSpatialPopup (DeckSpatial::Controls& c, int stem, DeckMoti
 
 	if (motion != nullptr)
 	{
-		for (size_t p = 0; p < pads.size(); ++p)
-		{
-			setUpKey (pads[p], padNames[p], *this);
-			pads[p].onClick = [this, p] { pressPad ((motionlite::Shape) p); };
-		}
-		setUpKey (shorter, juce::String::fromUTF8 ("\xe2\x97\x82"), *this);
-		setUpKey (longer, juce::String::fromUTF8 ("\xe2\x96\xb8"), *this);
-		setUpKey (shiftKey, "SHIFT", *this);
+		oneShots = std::make_unique<OneShotKeys> (*motion, (int) stemIndex, [this] { return takeShift(); });
+		oneShots->addTo (*this);
+		shiftKey.setButtonText ("SHIFT");
+		shiftKey.setMouseClickGrabsKeyboardFocus (false);
+		shiftKey.setWantsKeyboardFocus (false);
 		shiftKey.setClickingTogglesState (true);
-		shorter.onClick = [this] { motion->lengthDown ((int) stemIndex); };
-		longer.onClick = [this] { motion->lengthUp ((int) stemIndex); };
-		lengthLabel.setJustificationType (juce::Justification::centred);
-		addAndMakeVisible (lengthLabel);
+		addAndMakeVisible (shiftKey);
 	}
 	setStemColour (stemColour);
 	refresh();
@@ -106,6 +80,8 @@ void StemSpatialPopup::setStemColour (juce::Colour colour)
 	stemColour = colour;
 	stemViewer.setColour (StemViewer::stemColourId, colour);
 	shiftKey.setColour (juce::TextButton::buttonOnColourId, colour);
+	if (oneShots != nullptr)
+		oneShots->setStemColour (colour);
 	refresh();
 }
 
@@ -124,13 +100,12 @@ void StemSpatialPopup::homeDragged (spatial::Pose pose)
 	widthSlider.setValue (pose.width, juce::dontSendNotification);
 }
 
-void StemSpatialPopup::pressPad (motionlite::Shape shape)
+// SHIFT holds for one press.
+bool StemSpatialPopup::takeShift()
 {
-	if (motion == nullptr)
-		return;
-	const auto seed = (std::uint64_t) juce::Random::getSystemRandom().nextInt64();
-	motion->press ((int) stemIndex, shape, shiftKey.getToggleState(), seed);
-	shiftKey.setToggleState (false, juce::dontSendNotification);   // SHIFT holds for one press
+	const auto now = shiftKey.getToggleState();
+	shiftKey.setToggleState (false, juce::dontSendNotification);
+	return now;
 }
 
 void StemSpatialPopup::refresh()
@@ -141,42 +116,8 @@ void StemSpatialPopup::refresh()
 		stemViewer.setShown (home, home, motionlite::PadState::idle);
 		return;
 	}
-	const auto stem = (int) stemIndex;
-	stemViewer.setShown (home, motion->posePlayed (stem), motion->stemState (stem));
-	lengthLabel.setText (lengthName (motion->lengthBars (stem)), juce::dontSendNotification);
-	for (size_t p = 0; p < pads.size(); ++p)
-		lookOfPad ((motionlite::Shape) p);
-}
-
-// Identity stays (name, place); the state is the face: idle plain, armed
-// blinking on the deck's beat, running in the stem's colour with its beat count.
-void StemSpatialPopup::lookOfPad (motionlite::Shape shape)
-{
-	auto& key = pads[(size_t) shape];
-	const auto stem = (int) stemIndex;
-	const auto state = motion->padState (stem, shape);
-	const auto plain = getLookAndFeel().findColour (juce::TextButton::buttonColourId);
-	const auto text = getLookAndFeel().findColour (juce::TextButton::textColourOffId);
-	juce::String name = padNames[(size_t) shape];
-
-	auto face = plain;
-	auto ink = text;
-	if (state == motionlite::PadState::armed)
-	{
-		const auto beat = motion->beat();
-		const auto alpha = ! beat ? armedNoBeat : (*beat - std::floor (*beat) < 0.5 ? armedLit : armedDim);
-		face = plain.interpolatedWith (stemColour, alpha);
-	}
-	else if (state == motionlite::PadState::running)
-	{
-		face = stemColour;
-		ink = stemColour.contrasting();
-		if (const auto progress = motion->progress (stem))
-			name << " " << progress->first << "/" << progress->second;
-	}
-	key.setColour (juce::TextButton::buttonColourId, face);
-	key.setColour (juce::TextButton::textColourOffId, ink);
-	key.setButtonText (name);
+	stemViewer.setShown (home, motion->posePlayed ((int) stemIndex), motion->stemState ((int) stemIndex));
+	oneShots->refresh();
 }
 
 void StemSpatialPopup::resized()
@@ -202,14 +143,15 @@ void StemSpatialPopup::resized()
 		auto padRow = area.removeFromBottom (juce::roundToInt (height * padRowShare));
 		area.removeFromBottom (gap);
 
-		const auto padWidth = padRow.getWidth() / (int) pads.size();
-		for (auto& key : pads)
-			key.setBounds (padRow.removeFromLeft (padWidth).reduced (gap / 2));
+		constexpr int shapes = 4;
+		const auto padWidth = padRow.getWidth() / shapes;
+		for (int p = 0; p < shapes; ++p)
+			oneShots->pad ((motionlite::Shape) p).setBounds (padRow.removeFromLeft (padWidth).reduced (gap / 2));
 		const auto keyWidth = lengthRow.getWidth() / 5;
 		shiftKey.setBounds (lengthRow.removeFromRight (keyWidth * 2).reduced (gap / 2));
-		shorter.setBounds (lengthRow.removeFromLeft (keyWidth).reduced (gap / 2));
-		longer.setBounds (lengthRow.removeFromRight (keyWidth).reduced (gap / 2));
-		lengthLabel.setBounds (lengthRow);
+		oneShots->lengthDown().setBounds (lengthRow.removeFromLeft (keyWidth).reduced (gap / 2));
+		oneShots->lengthUp().setBounds (lengthRow.removeFromRight (keyWidth).reduced (gap / 2));
+		oneShots->length().setBounds (lengthRow);
 	}
 	area.removeFromTop (gap);
 	const auto side = juce::jmin (area.getWidth(), area.getHeight());

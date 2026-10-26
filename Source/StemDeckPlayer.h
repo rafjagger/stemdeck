@@ -79,6 +79,7 @@ public:
 	void setBeatGrid (const BeatGrid& grid) { gridBpm = grid.bpm; gridFirstBeat = grid.firstBeat; }
 	BeatGrid getBeatGrid() const { return { gridBpm.load(), gridFirstBeat.load() }; }
 	void setStemGain (int stem, float gain);
+	float getStemGain (int stem) const { return stemGain[(size_t) stem].load(); }
 	void setStemMuted (int stem, bool muted);
 	bool isStemMuted (int stem) const { return stemMuted[(size_t) stem].load(); }
 

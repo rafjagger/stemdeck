@@ -113,6 +113,9 @@ protected:
 class DeckSpatialMotion : public TwoDeckSpatial
 {
 protected:
+	// The pads' queue has one producer, the message thread (DeckMotion::push).
+	juce::ScopedJuceInitialiser_GUI juceInitialiser;
+
 	// The cue's left-minus-right level in dB over the next `seconds`.
 	double cueBalanceDb (double seconds)
 	{

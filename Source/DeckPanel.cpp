@@ -188,6 +188,16 @@ void DeckPanel::setStepsAvailable (bool previous, bool next, const juce::String&
 	nextButton.setTooltip (nextTip);
 }
 
+void DeckPanel::setSyncAvailable (bool available)
+{
+	for (auto* key : { &syncButton, &masterButton })
+	{
+		key->setEnabled (available);
+		if (! available)
+			key->setTooltip ("Across StemDeck instances: not yet");
+	}
+}
+
 void DeckPanel::setGridMode (bool on)
 {
 	gridButton.setToggleState (on, juce::dontSendNotification);

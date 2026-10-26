@@ -8,6 +8,7 @@
 #include "CoreTruth.h"
 #include "DeckInstance.h"
 #include "OneDeckAudio.h"
+#include "OneDeckView.h"
 #include "RecorderControls.h"
 #include "Session.h"
 #include "StemCreatorLink.h"
@@ -20,8 +21,10 @@
 // the library, the stem creator and the recorder as the two-deck screen has
 // them. No buses, no Auto DJ (B15), no panel, no remote link yet.
 //
-// The screen is a placeholder until the v4 screen (S4.4b): the deck letter,
-// the loaded set, Load and PLAY above the library.
+// The screen is v4 (spec section 9): the top bar (deck letter, REC, AUTO DJ
+// shown off, SYNC's source, the device, Settings), the deck (OneDeckView:
+// waveform, deck panel, four stem columns, outputs) and the library with one
+// Load.
 class OneDeckComponent : public juce::Component,
 						 private juce::Timer
 {
@@ -36,7 +39,9 @@ public:
 
 private:
 	void loadSet (const StemSet&);
-	void togglePlay();
+	void loadById (const juce::String& setId);
+	void step (int direction);
+	void findSteps();
 	void updatePhonesDecoder();
 	void restoreSession();
 	void saveSession();
@@ -65,14 +70,15 @@ private:
 	RecorderControls rec { recorder };
 	std::unique_ptr<AudioOutput> audio;
 
-	// What the placeholder does not show (tempo, stem knobs, mutes, cues),
-	// kept from the restore so a save does not lose it.
+	// The restored session: what no part of the screen keeps (the deck's
+	// fader and buses, two-deck only) passes through to the next save.
 	OneDeckSession restored;
 	juce::String lastSessionText;
 	int sessionCountdown = 0, statusCountdown = 0;
 
-	juce::Label deckLabel, setLabel, deviceStatus;
-	juce::TextButton loadButton { "Load" }, playButton { "PLAY" }, settingsButton { "Settings" };
+	OneDeckView view { deckAudio, formatManager, instance.letter - 'A' };
+	juce::Label deckLabel, deviceStatus;
+	juce::TextButton autoDjButton { "AUTO DJ" }, syncSourceButton { "SYNC: DECK" }, settingsButton { "Settings" };
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (OneDeckComponent)
 };

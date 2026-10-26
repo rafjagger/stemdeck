@@ -27,6 +27,7 @@ juce::String DeckSpatialPorts::create()
 void DeckSpatialPorts::prepare (double newSampleRate, int blockSize)
 {
 	sampleRate = newSampleRate;
+	stemMotion.dropPendingPresses();   // a press from before the stop must not fire now
 	silence.setSize (StemDeckPlayer::numOutputChannels, juce::jmax (blockSize, maxSilenceBlock));
 	silence.clear();
 	if (spatial == nullptr)

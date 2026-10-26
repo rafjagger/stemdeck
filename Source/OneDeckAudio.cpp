@@ -31,6 +31,13 @@ void OneDeckAudio::setPhones (float level, float mix)
 	settings.phonesMix.store (mix);
 }
 
+float OneDeckAudio::popPeak (int channel)
+{
+	if (! juce::isPositiveAndBelow (channel, outputs::oneDeck::channelCount()))
+		return 0.0f;
+	return peaks[(size_t) channel].exchange (0.0f, std::memory_order_relaxed);
+}
+
 void OneDeckAudio::prepareToPlay (int samplesPerBlockExpected, double sampleRate)
 {
 	rendered.setSize (outputs::oneDeck::channelCount(), juce::jmax (samplesPerBlockExpected, maxBlock));
@@ -46,6 +53,13 @@ void OneDeckAudio::getNextAudioBlock (const juce::AudioSourceChannelInfo& buffer
 		rendered.setSize (outputs::oneDeck::channelCount(), numSamples, false, false, true);
 
 	deck.render (rendered, 0, numSamples);
+	for (int ch = 0; ch < outputs::oneDeck::channelCount(); ++ch)
+	{
+		auto& peak = peaks[(size_t) ch];
+		const auto now = rendered.getMagnitude (ch, 0, numSamples);
+		if (now > peak.load (std::memory_order_relaxed))
+			peak.store (now, std::memory_order_relaxed);   // one writer; a racing pop loses one block's peak at worst
+	}
 
 	auto& out = *bufferToFill.buffer;
 	bufferToFill.clearActiveBufferRegion();

@@ -3,7 +3,7 @@
 #pragma once
 
 #include <JuceHeader.h>
-#include "MixerPanel.h"
+#include "LevelMeter.h"
 #include "Recorder.h"
 
 // REC in the top bar, with the two JACK inputs' levels beside it: the

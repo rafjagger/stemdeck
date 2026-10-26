@@ -7,6 +7,9 @@
 #include "Outputs.h"
 #include "SpatialLaw.h"
 
+#include <array>
+#include <atomic>
+
 // The audio of a -bformat instance (spec sections 1, 8): one deck, its 22
 // outputs (outputs::oneDeck) and nothing else -- no buses, no mixer. Its
 // JACK client pulls it as it is; without JACK only what fits the device
@@ -27,6 +30,9 @@ public:
 	// LEVEL 0..1 and CUE<->MIX 0 (cue) .. 1 (mix).
 	void setPhones (float level, float mix);
 
+	// The screen's meters: a channel's peak since the last call (any of the 22).
+	float popPeak (int channel);
+
 	void prepareToPlay (int samplesPerBlockExpected, double sampleRate) override;
 	void getNextAudioBlock (const juce::AudioSourceChannelInfo&) override;
 	void releaseResources() override { deck.releaseResources(); }
@@ -34,4 +40,5 @@ public:
 private:
 	DeckHost deck;
 	juce::AudioBuffer<float> rendered;   // the 22 channels
+	std::array<std::atomic<float>, outputs::oneDeck::channels> peaks {};
 };

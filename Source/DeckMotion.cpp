@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "DeckMotion.h"
 
+#include <juce_events/juce_events.h>
+
 namespace
 {
 constexpr int shapeCount = 4;
@@ -53,6 +55,7 @@ bool DeckMotion::setLength (int stem, double bars)
 
 bool DeckMotion::push (const Command& command)
 {
+	JUCE_ASSERT_MESSAGE_THREAD   // the queue has one producer
 	if (! validStem (command.stem))
 		return false;
 	const auto scope = fifo.write (1);
@@ -62,10 +65,15 @@ bool DeckMotion::push (const Command& command)
 	return true;
 }
 
-void DeckMotion::drain()
+void DeckMotion::dropPendingPresses()
+{
+	drain (false);
+}
+
+void DeckMotion::drain (bool presses)
 {
 	const auto scope = fifo.read (fifo.getNumReady());
-	const auto run = [this] (int start, int count)
+	const auto run = [this, presses] (int start, int count)
 	{
 		for (int i = start; i < start + count; ++i)
 		{
@@ -73,7 +81,7 @@ void DeckMotion::drain()
 			auto& motion = motions[(size_t) command.stem];
 			switch (command.kind)
 			{
-				case Kind::press: motion.press (command.shape, command.shift, command.seed); break;
+				case Kind::press: if (presses) motion.press (command.shape, command.shift, command.seed); break;
 				case Kind::lengthDown: motion.lengthDown(); break;
 				case Kind::lengthUp: motion.lengthUp(); break;
 				case Kind::setLength: motion.setLengthBars (command.bars); break;

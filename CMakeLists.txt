@@ -174,6 +174,10 @@ target_sources(StemDeck PRIVATE
     Source/CoreTruth.cpp
     Source/OneDeckComponent.cpp
     Source/StemSpatialPopup.cpp
+    Source/OneShotKeys.cpp
+    Source/StemColumn.cpp
+    Source/OneDeckView.cpp
+    Source/LevelMeter.cpp
     Source/DeckMotion.cpp
     Source/StemViewer.cpp
     third_party/a3-engine/src/a3-engine/Laws.cpp)

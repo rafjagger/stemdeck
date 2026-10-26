@@ -67,6 +67,7 @@ TEST (StemSpatialPopup, PaintsEveryState)
 // queue; the audio thread's next block takes them.
 TEST (DeckMotion, SetLengthReachesTheStemAndReadsBackBeforeAnyBlock)
 {
+	juce::ScopedJuceInitialiser_GUI init;   // the queue's producer is the message thread
 	DeckSpatial::Controls controls, played;
 	DeckMotion motion;
 	const motionlite::Clock clock { 5.0, 120.0, 1.0, true };
@@ -90,6 +91,7 @@ TEST (DeckMotion, SetLengthReachesTheStemAndReadsBackBeforeAnyBlock)
 
 TEST (DeckMotion, ARestoredLengthIsTheOneTheNextShotUses)
 {
+	juce::ScopedJuceInitialiser_GUI init;   // the queue's producer is the message thread
 	DeckSpatial::Controls controls, played;
 	DeckMotion motion;
 	motion.setLength (0, 1.0);

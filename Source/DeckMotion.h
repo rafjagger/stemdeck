@@ -32,6 +32,11 @@ public:
 	bool lengthUp (int stem);
 	bool setLength (int stem, double bars);   // a restored session; anything outside the valid set is 4
 
+	// The consumer's side, before the first block (DeckSpatialPorts::prepare):
+	// presses queued while the audio stood are dropped, length changes kept.
+	// Never while advance() can run.
+	void dropPendingPresses();
+
 	// Audio thread, once per block: settings give each stem's home, 3D and
 	// width; played gets the pose, the width and the envelope. Allocation-free.
 	void advance (const motionlite::Clock&, double blockSeconds, const DeckSpatial::Controls& settings,
@@ -69,7 +74,7 @@ private:
 	static constexpr int queueSize = 64;
 
 	bool push (const Command&);
-	void drain();
+	void drain (bool presses = true);
 	void publish (int stem, const spatial::Pose& played);
 
 	juce::AbstractFifo fifo { queueSize };

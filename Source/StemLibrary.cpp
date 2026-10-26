@@ -431,6 +431,14 @@ void StemLibrary::sortOrderChanged (int columnId, bool forwards)
 	applyFilter();
 }
 
+void StemLibrary::setOneDeck (juce::Colour deckColour)
+{
+	loadAButton.setButtonText ("Load");
+	loadAButton.setColour (juce::TextButton::textColourOffId, deckColour);
+	loadBButton.setVisible (false);
+	resized();
+}
+
 void StemLibrary::loadSelected (int deckIndex)
 {
 	const auto row = table.getSelectedRow();
@@ -548,11 +556,13 @@ void StemLibrary::resized()
 	auto bar = area.removeFromTop (high (135));
 	auto folderBar = twoRows ? (area.removeFromTop (gap), area.removeFromTop (high (135))) : bar;
 
-	searchBox.setBounds (bar.removeFromLeft (twoRows ? bar.getWidth() - 2 * keyWidth - 2 * gap : wide (370)));
+	const auto loadKeys = loadBButton.isVisible() ? 2 : 1;
+	searchBox.setBounds (bar.removeFromLeft (twoRows ? bar.getWidth() - loadKeys * (keyWidth + gap) : wide (370)));
 	bar.removeFromLeft (gap);
 	loadAButton.setBounds (bar.removeFromLeft (keyWidth));
 	bar.removeFromLeft (gap);
-	loadBButton.setBounds (bar.removeFromLeft (keyWidth));
+	if (loadBButton.isVisible())
+		loadBButton.setBounds (bar.removeFromLeft (keyWidth));
 	bar.removeFromLeft (2 * gap);
 	if (! twoRows)
 		folderBar = bar;

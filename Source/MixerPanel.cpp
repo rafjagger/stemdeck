@@ -1,7 +1,7 @@
 #include "MixerPanel.h"
 #include "Theme.h"
 #include "SurfaceJuce.h"
-#include "StemKnob.h"
+#include "StemGainKnob.h"
 #include "StemSpatialPopup.h"
 #include "DeckSpatialPorts.h"
 
@@ -9,7 +9,6 @@ namespace
 {
 	constexpr float minDb = stemKnobMinimumDb;
 	constexpr int longPressMs = 600;   // a touch has no right button
-	const auto clipColour = juce::Colour (0xffe04848);
 
 	juce::String busName (int bus) { return juce::String (buses::name (bus)); }
 
@@ -19,92 +18,7 @@ namespace
 		return bus == buses::aux ? Theme::aux : Theme::stem (stem);
 	}
 
-	juce::String dbText (double db)
-	{
-		return db <= minDb ? juce::String ("-inf dB") : juce::String (db, 1) + " dB";
-	}
-}
-
-//==============================================================================
-float LevelMeter::secondsSinceLastFeed()
-{
-	// The meter's own clock: the main timer's 60 Hz is a wish, not a promise,
-	// and the fall is 20 dB a second, not per so many ticks.
-	const auto now = juce::Time::getMillisecondCounterHiRes();
-	const auto seconds = lastFeedMs > 0.0 ? (now - lastFeedMs) / 1000.0 : 0.0;
-	lastFeedMs = now;
-	return (float) seconds;
-}
-
-void LevelMeter::setLevel (float newPeak)
-{
-	const auto seconds = secondsSinceLastFeed();
-	ballistics.feed (newPeak, seconds);
-	const auto nextClipping = showsClip && clipHold.feed (newPeak, seconds);
-
-	const auto numSegments = meterSegments ((float) getHeight());
-	const auto barSegments = showsClip ? numSegments - 1 : numSegments;
-	const auto nextLit = segmentsLit (ballistics.levelDb(), barSegments);
-	const auto nextHeld = segmentsLit (ballistics.holdDb(), barSegments);
-
-	if (nextLit != litSegments || nextHeld != heldSegment || nextClipping != clipping)
-	{
-		litSegments = nextLit;
-		heldSegment = nextHeld;
-		clipping = nextClipping;
-		repaint();
-	}
-}
-
-void LevelMeter::paint (juce::Graphics& g)
-{
-	const auto bounds = getLocalBounds().toFloat();
-	g.setColour (juce::Colours::black);
-	g.fillRoundedRectangle (bounds, 2.0f);
-
-	// Segmented LED bar on the desk's LED scale and in its LEDs' colours; with
-	// a clip lamp, the top segment is the lamp and the bar ends at full scale
-	// one below it.
-	const int numSegments = meterSegments (bounds.getHeight());
-	const int barSegments = showsClip ? numSegments - 1 : numSegments;
-	const auto segmentHeight = bounds.getHeight() / (float) numSegments;
-
-	const auto segmentAt = [&] (int i)
-	{
-		return juce::Rectangle<float> (bounds.getX() + 1.0f, bounds.getBottom() - segmentHeight * (float) (i + 1),
-									   bounds.getWidth() - 2.0f, segmentHeight - 1.0f);
-	};
-	const auto colourOf = [this, barSegments] (int i)
-	{
-		switch (zoneOfSegment (i, barSegments))
-		{
-			case MeterZone::red:    return clipColour;
-			case MeterZone::yellow: return juce::Colour (0xffe8c33d);
-			case MeterZone::green:  return barColour.value_or (juce::Colour (0xff3ec46d));
-		}
-		return juce::Colour (0xff3ec46d);
-	};
-
-	for (int i = 0; i < barSegments; ++i)
-	{
-		g.setColour (i < litSegments ? colourOf (i) : colourOf (i).withAlpha (0.12f));
-		g.fillRect (segmentAt (i));
-	}
-
-	// The held peak: a thin line, the top of its segment, above the bar.
-	if (heldSegment > litSegments)
-	{
-		const auto held = heldSegment - 1;
-		auto light = segmentAt (held);
-		g.setColour (colourOf (held));
-		g.fillRect (light.removeFromTop (juce::jmax (1.0f, light.getHeight() * 0.4f)));
-	}
-
-	if (! showsClip)
-		return;
-
-	g.setColour (clipping ? clipColour.brighter (0.4f) : clipColour.withAlpha (0.12f));
-	g.fillRect (segmentAt (numSegments - 1));
+	using stemgain::dbText;
 }
 
 //==============================================================================
@@ -167,18 +81,12 @@ ChannelStrip::ChannelStrip (StemDeckPlayer& p, int index) : player (p), deckInde
 	for (int s = 0; s < StemSet::numStems; ++s)
 	{
 		auto* knob = knobs.add (new juce::Slider (juce::Slider::RotaryHorizontalVerticalDrag, juce::Slider::NoTextBox));
-		knob->setRange (minDb, 6.0, 0.1);
-		knob->setSkewFactorFromMidPoint (-12.0);
-		knob->setValue (0.0, juce::dontSendNotification);
-		knob->setDoubleClickReturnValue (true, 0.0);
-		knob->setPopupDisplayEnabled (true, true, nullptr);
-		knob->textFromValueFunction = dbText;
+		stemgain::setUp (*knob);
 		knob->setColour (juce::Slider::rotarySliderFillColourId, Theme::stem (s));
-		knob->setMouseClickGrabsKeyboardFocus (false);
 		knob->addMouseListener (this, false);   // right-click and long press, beside the knob's own drag
 		knob->onValueChange = [this, s, knob]
 		{
-			player.setStemGain (s, juce::Decibels::decibelsToGain ((float) knob->getValue(), minDb));
+			player.setStemGain (s, stemgain::gainOf (knob->getValue()));
 		};
 		addAndMakeVisible (knob);
 

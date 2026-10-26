@@ -65,3 +65,24 @@ TEST_F (DeckSpatialMotion, AShotLeavesTheHomeAlone)
 	EXPECT_EQ (ports.settings().elevation[1].load(), 20.0f);
 	EXPECT_EQ (ports.motion().posePlayed (1).elevation, played.elevation[1].load());
 }
+
+// A press queued while the audio stood (a device change, a restart) is not
+// fired by the next start: prepare drops the pending presses. A length asked
+// for before it (a restored session) is kept.
+TEST_F (DeckSpatialMotion, PrepareDropsPendingPressesKeepsLengths)
+{
+	player.setBeatGrid ({ 120.0, 0.0 });
+	auto& motion = ports.motion();
+	ASSERT_TRUE (motion.lengthDown (2));   // 4 -> 2 bars
+	ASSERT_TRUE (motion.press (2, motionlite::Shape::orbit, true, 1));
+	ports.prepare (rate, block);
+	player.play();
+	renderBlock();
+	EXPECT_EQ (motion.stemState (2), motionlite::PadState::idle) << "the press before prepare is gone";
+
+	ASSERT_TRUE (motion.press (2, motionlite::Shape::orbit, true, 1));
+	renderBlock();
+	ASSERT_EQ (motion.padState (2, motionlite::Shape::orbit), motionlite::PadState::running);
+	ASSERT_TRUE (motion.progress (2).has_value());
+	EXPECT_EQ (motion.progress (2)->second, 8) << "2 bars, set before prepare";
+}

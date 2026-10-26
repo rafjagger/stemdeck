@@ -2,6 +2,7 @@
 
 #include <juce_core/juce_core.h>
 #include "Buses.h"
+#include "DeckInstance.h"
 
 #include <array>
 #include <vector>
@@ -75,3 +76,28 @@ struct Session
 	static juce::File file (const juce::File& settingsFile) { return settingsFile.getSiblingFile ("session.xml"); }
 	static std::optional<Session> load (const juce::File& file);
 };
+
+// The session of one `-bformat` instance: one deck, no routing (the deck's
+// stems all go to the spatial engine), in ~/.config/StemDeck/<letter>/session.xml.
+struct OneDeckSession
+{
+	DeckSession deck;
+	LibrarySession library;
+	std::vector<QueuedStemJob> stemJobs;
+	bool imported = false;      // taken from the two-deck session this start; not stored
+
+	std::unique_ptr<juce::XmlElement> toXml() const;
+	static OneDeckSession fromXml (const juce::XmlElement& xml);
+	static std::optional<OneDeckSession> load (const juce::File& file);
+};
+
+// A -> decks[0], B -> decks[1]. Buses and the channel fader are dropped; the
+// stems' spatial state, the library view and the stem queue are kept.
+OneDeckSession importFromTwoDeck (const Session& session, char letter);
+
+juce::File oneDeckSessionFile (const juce::File& settingsFile, const DeckInstance& instance);
+
+// The one-deck file wins when it exists; otherwise the two-deck file is read
+// (never changed: two-deck mode still owns it) and the result is marked
+// `imported`, so that the first save makes the one-deck file the truth.
+OneDeckSession loadOrImport (const juce::File& oneDeckFile, const juce::File& twoDeckFile, const DeckInstance& instance);

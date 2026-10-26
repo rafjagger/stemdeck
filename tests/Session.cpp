@@ -198,3 +198,157 @@ TEST (Session, AStoredLengthOutsideTheValidSetReadsAsFour)
 	EXPECT_DOUBLE_EQ (back.stems[2].lengthBars, 4.0);
 	EXPECT_DOUBLE_EQ (back.stems[3].lengthBars, 2.0);
 }
+
+// ---- One deck per instance ----
+
+namespace
+{
+	Session twoDeckSession()
+	{
+		Session s;
+		s.decks[0].setId = "setA";
+		s.decks[0].position = 12.5;
+		s.decks[0].playing = true;
+		s.decks[0].faderDb = -6.0;
+		s.decks[0].stems[1].buses = 5u;
+		s.decks[0].stems[1].threeD = 0.7;
+		s.decks[0].stems[1].azimuth = 45.0;
+		s.decks[0].stems[1].lengthBars = 8.0;
+		s.decks[0].stems[2].cue = true;
+		s.decks[1].setId = "setB";
+		s.decks[1].tempo = 1.04;
+		s.decks[1].faderDb = -3.0;
+		s.decks[1].stems[0].gainDb = -9.0;
+		s.library.search = "dub";
+		s.stemJobs.push_back ({ "in", "folder", "track" });
+		return s;
+	}
+
+	juce::File freshDir (const char* name)
+	{
+		auto dir = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("sd-s42-" + juce::String (name));
+		dir.deleteRecursively();
+		dir.createDirectory();
+		return dir;
+	}
+}
+
+TEST (OneDeckSession, RoundTrips)
+{
+	OneDeckSession in;
+	in.deck.setId = "x";
+	in.deck.position = 3.25;
+	in.deck.playing = true;
+	in.deck.keyLock = true;
+	in.deck.stems[3].gainDb = -4.5;
+	in.deck.stems[3].muted = true;
+	in.deck.stems[3].cue = true;
+	in.deck.stems[3].threeD = 0.5;
+	in.deck.stems[3].azimuth = -90.0;
+	in.deck.stems[3].elevation = 20.0;
+	in.deck.stems[3].width = 120.0;
+	in.deck.stems[3].lengthBars = 2.0;
+	in.library.folder = "House";
+	in.stemJobs.push_back ({ "a", "b", "c" });
+
+	const auto out = OneDeckSession::fromXml (*in.toXml());
+	EXPECT_EQ (out.deck.setId, "x");
+	EXPECT_EQ (out.deck.position, 3.25);
+	EXPECT_TRUE (out.deck.playing);
+	EXPECT_TRUE (out.deck.keyLock);
+	const auto& st = out.deck.stems[3];
+	EXPECT_EQ (st.gainDb, -4.5);
+	EXPECT_TRUE (st.muted);
+	EXPECT_TRUE (st.cue);
+	EXPECT_EQ (st.threeD, 0.5);
+	EXPECT_EQ (st.azimuth, -90.0);
+	EXPECT_EQ (st.elevation, 20.0);
+	EXPECT_EQ (st.width, 120.0);
+	EXPECT_EQ (st.lengthBars, 2.0);
+	EXPECT_EQ (out.library.folder, "House");
+	ASSERT_EQ (out.stemJobs.size(), 1u);
+	EXPECT_EQ (out.stemJobs[0].track, "c");
+	EXPECT_FALSE (out.imported);
+}
+
+TEST (OneDeckSession, ImportTakesDeckAForAAndBForB)
+{
+	const auto old = twoDeckSession();
+	const auto a = importFromTwoDeck (old, 'A');
+	const auto b = importFromTwoDeck (old, 'B');
+
+	EXPECT_EQ (a.deck.setId, "setA");
+	EXPECT_EQ (a.deck.position, 12.5);
+	EXPECT_TRUE (a.deck.playing);
+	EXPECT_EQ (a.deck.stems[1].threeD, 0.7);
+	EXPECT_EQ (a.deck.stems[1].azimuth, 45.0);
+	EXPECT_EQ (a.deck.stems[1].lengthBars, 8.0);
+	EXPECT_TRUE (a.deck.stems[2].cue);
+	EXPECT_EQ (b.deck.setId, "setB");
+	EXPECT_EQ (b.deck.tempo, 1.04);
+	EXPECT_EQ (b.deck.stems[0].gainDb, -9.0);
+	EXPECT_EQ (a.library.search, "dub");
+	EXPECT_EQ (a.stemJobs.size(), 1u);
+	EXPECT_TRUE (a.imported);
+	EXPECT_TRUE (b.imported);
+}
+
+TEST (OneDeckSession, ImportDropsRouting)
+{
+	const auto a = importFromTwoDeck (twoDeckSession(), 'A');
+	EXPECT_EQ (a.deck.faderDb, 0.0);
+	for (const auto& stem : a.deck.stems)
+		EXPECT_EQ (stem.buses, 0u);
+
+	const auto xml = a.toXml();
+	for (auto* stem : xml->getChildByName ("Deck")->getChildWithTagNameIterator ("Stem"))
+		EXPECT_FALSE (stem->hasAttribute ("buses"));
+	EXPECT_FALSE (xml->getChildByName ("Deck")->hasAttribute ("fader"));
+}
+
+// Review focus 4: an old file is imported once; afterwards the one-deck file is the truth.
+TEST (OneDeckSession, ImportHappensOnceOnly)
+{
+	const auto dir = freshDir ("once");
+	const DeckInstance instance { 'A' };
+	const auto twoDeckFile = dir.getChildFile ("session.xml");
+	const auto oneDeckFile = oneDeckSessionFile (dir.getChildFile ("settings.xml"), instance);
+	ASSERT_TRUE (twoDeckFile.replaceWithText (twoDeckSession().toXml()->toString()));
+	const auto before = twoDeckFile.loadFileAsString();
+
+	auto first = loadOrImport (oneDeckFile, twoDeckFile, instance);
+	EXPECT_TRUE (first.imported);
+	EXPECT_EQ (first.deck.setId, "setA");
+
+	first.deck.setId = "changedInOneDeckMode";
+	ASSERT_TRUE (oneDeckFile.getParentDirectory().createDirectory());
+	ASSERT_TRUE (oneDeckFile.replaceWithText (first.toXml()->toString()));
+
+	const auto second = loadOrImport (oneDeckFile, twoDeckFile, instance);
+	EXPECT_FALSE (second.imported);
+	EXPECT_EQ (second.deck.setId, "changedInOneDeckMode");
+	EXPECT_EQ (twoDeckFile.loadFileAsString(), before);   // two-deck mode still owns it
+
+	dir.deleteRecursively();
+}
+
+TEST (OneDeckSession, NothingToImportGivesDefaults)
+{
+	const auto dir = freshDir ("none");
+	const auto s = loadOrImport (dir.getChildFile ("A/session.xml"), dir.getChildFile ("session.xml"), DeckInstance { 'A' });
+	EXPECT_FALSE (s.imported);
+	EXPECT_TRUE (s.deck.setId.isEmpty());
+	dir.deleteRecursively();
+}
+
+// Review focus 3: two instances on one machine never share a file.
+TEST (OneDeckSession, TwoInstancesHaveTwoFiles)
+{
+	const juce::File settings ("/tmp/StemDeck/settings.xml");
+	const auto a = oneDeckSessionFile (settings, DeckInstance { 'A' });
+	const auto b = oneDeckSessionFile (settings, DeckInstance { 'B' });
+	EXPECT_NE (a, b);
+	EXPECT_EQ (a, juce::File ("/tmp/StemDeck/A/session.xml"));
+	EXPECT_EQ (b, juce::File ("/tmp/StemDeck/B/session.xml"));
+	EXPECT_NE (a, Session::file (settings));
+}

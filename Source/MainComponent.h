@@ -6,8 +6,7 @@
 #include "StemLibrary.h"
 #include "SettingsPanel.h"
 #include "Outputs.h"
-#include "Workspaces.h"
-#include "WorkspacePanel.h"
+#include "WorkspaceSwitch.h"
 #include "DeckPanel.h"
 #include "SurfaceLayout.h"
 #include "MixerPanel.h"
@@ -104,11 +103,6 @@ private:
 	void updateDeviceStatus();
 	void showSettings();
 
-	// Over to A3 Motion in one tap, or to any of the rig's i3 workspaces from
-	// the list beside it -- named in a3-core's i3 config, read from i3.
-	void goToWorkspace (int number);
-	void showWorkspaces();
-
 	DJLookAndFeel lookAndFeel;
 	// The tips (tooltips), switchable in Settings (Tips.h): with them off
 	// there is no TooltipWindow at all, so no tip shows anywhere.
@@ -169,9 +163,9 @@ private:
 	juce::TextButton settingsButton { "Settings" };
 	juce::TextButton keysButton { "KEYS" };
 	OnScreenKeyboard keyboard;
-	juce::TextButton motionButton { "MOTION" };
-	juce::TextButton workspacesButton { juce::String::fromUTF8 ("\xe2\x96\xbe") };
-	WorkspacePanel workspacePanel;
+	// Over to A3 Motion in one tap, or to any of the rig's i3 workspaces from
+	// the list beside it -- named in a3-core's i3 config, read from i3.
+	WorkspaceSwitch workspaceSwitch;
 	juce::Label deviceStatus;
 	// "PRO-DJ LIVE" while the pro-DJ app may move the room (RemoteLink::onLiveChanged).
 	juce::Label liveBadge { {}, "PRO-DJ LIVE" };

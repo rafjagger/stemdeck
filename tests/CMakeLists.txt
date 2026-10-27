@@ -138,6 +138,10 @@ gtest_discover_tests(stemdeck-tests)
 add_executable(stemdeck-gui-tests
     PointerInjector.cpp
     StemSpatialPopup.cpp
+    WorkspaceSwitch.cpp
+    ${CMAKE_SOURCE_DIR}/Source/WorkspaceSwitch.cpp
+    ${CMAKE_SOURCE_DIR}/Source/WorkspacePanel.cpp
+    ${CMAKE_SOURCE_DIR}/Source/Workspaces.cpp
     StemViewer.cpp
     ${CMAKE_SOURCE_DIR}/Source/StemSpatialPopup.cpp
     ${CMAKE_SOURCE_DIR}/Source/OneShotKeys.cpp

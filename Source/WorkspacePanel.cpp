@@ -7,7 +7,7 @@ void WorkspacePanel::show (const std::vector<Entry>& entries)
 	keys.clear();
 	for (const auto& entry : entries)
 	{
-		auto* key = keys.add (new juce::TextButton (entry.label));
+		auto* key = keys.add (new juce::TextButton (juce::String (entry.label)));
 		key->setClickingTogglesState (false);
 		key->setToggleState (entry.current, juce::dontSendNotification);
 		key->setColour (juce::TextButton::buttonOnColourId, Theme::panelRaised.brighter (0.3f));

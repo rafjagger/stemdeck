@@ -1,6 +1,8 @@
 #pragma once
 
-#include <JuceHeader.h>
+#include "Workspaces.h"
+
+#include <juce_gui_basics/juce_gui_basics.h>
 
 // The rig's i3 workspaces as a column of keys inside StemDeck's own window.
 // Not a juce::PopupMenu: that is a window of its own, and on the rig -- i3,
@@ -9,7 +11,7 @@
 class WorkspacePanel : public juce::Component
 {
 public:
-	struct Entry { int number; juce::String label; bool current; };
+	using Entry = WorkspaceEntry;
 
 	// Laid over the whole window; the column stands where A3 Motion's does
 	// (switcherGeometry in Workspaces.h).

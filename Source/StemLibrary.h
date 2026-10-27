@@ -58,6 +58,8 @@ public:
 	void resized() override;
 
 	std::function<void (const StemSet&, int deckIndex)> onLoadSet; // deckIndex -1: first free deck
+	// A -bformat instance has one deck: one Load key, in that deck's colour (deck index 0).
+	void setOneDeck (juce::Colour deckColour);
 	std::function<void (const juce::File&)> onFolderChanged;
 	std::function<std::optional<BeatGrid> (const StemSet&)> lookUpBeatGrid; // for the BPM column
 	std::function<void (const juce::Array<juce::File>&)> onCreateStems;       // stereo files, dropped or chosen

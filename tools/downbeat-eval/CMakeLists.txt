@@ -9,6 +9,7 @@ set_target_properties(stemdeck-downbeat-eval PROPERTIES EXCLUDE_FROM_ALL ON)
 target_sources(stemdeck-downbeat-eval PRIVATE
     Main.cpp
     ${CMAKE_SOURCE_DIR}/Source/TempoAnalysis.cpp
+    ${CMAKE_SOURCE_DIR}/Source/FileLock.cpp
     ${CMAKE_SOURCE_DIR}/Source/BarPhase.cpp
     ${CMAKE_SOURCE_DIR}/Source/CachedGrid.cpp
     ${CMAKE_SOURCE_DIR}/Source/StemSet.cpp

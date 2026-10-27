@@ -56,3 +56,12 @@ bool PioneerClock::hasMaster (double seconds) const
 {
 	return hasMasterInfo (seconds) && master != 0;
 }
+
+FollowInput leaderInputAt (const PioneerClock& clock, double seconds)
+{
+	FollowInput in;
+	in.leaderBpm = clock.bpm();
+	in.leaderBeatPhase = clock.beatPhaseAt (seconds);
+	in.leaderPlaying = clock.isLive (seconds);
+	return in;
+}

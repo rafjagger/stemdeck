@@ -2,6 +2,7 @@
 
 #include <juce_core/juce_core.h>
 #include "Buses.h"
+#include "DeckInstance.h"
 
 #include <array>
 #include <vector>
@@ -18,6 +19,12 @@ struct StemMixState
 	bool muted = false;
 	unsigned buses = 0;     // bit per bus (Buses.h)
 	bool cue = false;       // the stem's cue send, apart from the buses
+
+	// The stem's place in the deck's spatial engine (DeckSpatial::Controls).
+	double threeD = 0.0;                          // 0..1
+	double azimuth = 0.0, elevation = 0.0;        // home direction, degrees; azimuth -180..180, elevation -90..90
+	double width = 60.0;                          // degrees, 0..360 (IEM StereoEncoder)
+	double lengthBars = 4.0;                      // one-shot length: 0.5, 1, 2, 4 or 8 bars
 };
 
 struct DeckSession
@@ -69,3 +76,30 @@ struct Session
 	static juce::File file (const juce::File& settingsFile) { return settingsFile.getSiblingFile ("session.xml"); }
 	static std::optional<Session> load (const juce::File& file);
 };
+
+// The session of one `-bformat` instance: one deck, no routing (the deck's
+// stems all go to the spatial engine), in ~/.config/StemDeck/<letter>/session.xml.
+struct OneDeckSession
+{
+	DeckSession deck;
+	LibrarySession library;
+	std::vector<QueuedStemJob> stemJobs;
+	bool imported = false;      // taken from the two-deck session this start; not stored
+
+	std::unique_ptr<juce::XmlElement> toXml() const;
+	static OneDeckSession fromXml (const juce::XmlElement& xml);
+	static std::optional<OneDeckSession> load (const juce::File& file);
+};
+
+// A -> decks[0], B -> decks[1]. Buses and the channel fader are dropped; the
+// stems' spatial state, the library view and the stem queue are kept.
+OneDeckSession importFromTwoDeck (const Session& session, char letter);
+
+juce::File oneDeckSessionFile (const juce::File& settingsFile, const DeckInstance& instance);
+
+// The one-deck file wins when it exists; otherwise the two-deck file is read
+// (never changed: two-deck mode still owns it) and the result is marked
+// `imported`, so that the first save makes the one-deck file the truth. A
+// one-deck file that is corrupt or has the wrong root counts as absent and
+// falls through to the import (the start must not fail on it).
+OneDeckSession loadOrImport (const juce::File& oneDeckFile, const juce::File& twoDeckFile, const DeckInstance& instance);

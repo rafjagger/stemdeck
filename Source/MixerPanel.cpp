@@ -1,11 +1,16 @@
 #include "MixerPanel.h"
+
+#include "KnobSetup.h"
 #include "Theme.h"
 #include "SurfaceJuce.h"
+#include "StemGainKnob.h"
+#include "StemSpatialPopup.h"
+#include "DeckSpatialPorts.h"
 
 namespace
 {
-	constexpr float minDb = -60.0f; // bottom of knobs and fader = silence
-	const auto clipColour = juce::Colour (0xffe04848);
+	constexpr float minDb = stemKnobMinimumDb;
+	constexpr int longPressMs = 600;   // a touch has no right button
 
 	juce::String busName (int bus) { return juce::String (buses::name (bus)); }
 
@@ -15,92 +20,7 @@ namespace
 		return bus == buses::aux ? Theme::aux : Theme::stem (stem);
 	}
 
-	juce::String dbText (double db)
-	{
-		return db <= minDb ? juce::String ("-inf dB") : juce::String (db, 1) + " dB";
-	}
-}
-
-//==============================================================================
-float LevelMeter::secondsSinceLastFeed()
-{
-	// The meter's own clock: the main timer's 60 Hz is a wish, not a promise,
-	// and the fall is 20 dB a second, not per so many ticks.
-	const auto now = juce::Time::getMillisecondCounterHiRes();
-	const auto seconds = lastFeedMs > 0.0 ? (now - lastFeedMs) / 1000.0 : 0.0;
-	lastFeedMs = now;
-	return (float) seconds;
-}
-
-void LevelMeter::setLevel (float newPeak)
-{
-	const auto seconds = secondsSinceLastFeed();
-	ballistics.feed (newPeak, seconds);
-	const auto nextClipping = showsClip && clipHold.feed (newPeak, seconds);
-
-	const auto numSegments = meterSegments ((float) getHeight());
-	const auto barSegments = showsClip ? numSegments - 1 : numSegments;
-	const auto nextLit = segmentsLit (ballistics.levelDb(), barSegments);
-	const auto nextHeld = segmentsLit (ballistics.holdDb(), barSegments);
-
-	if (nextLit != litSegments || nextHeld != heldSegment || nextClipping != clipping)
-	{
-		litSegments = nextLit;
-		heldSegment = nextHeld;
-		clipping = nextClipping;
-		repaint();
-	}
-}
-
-void LevelMeter::paint (juce::Graphics& g)
-{
-	const auto bounds = getLocalBounds().toFloat();
-	g.setColour (juce::Colours::black);
-	g.fillRoundedRectangle (bounds, 2.0f);
-
-	// Segmented LED bar on the desk's LED scale and in its LEDs' colours; with
-	// a clip lamp, the top segment is the lamp and the bar ends at full scale
-	// one below it.
-	const int numSegments = meterSegments (bounds.getHeight());
-	const int barSegments = showsClip ? numSegments - 1 : numSegments;
-	const auto segmentHeight = bounds.getHeight() / (float) numSegments;
-
-	const auto segmentAt = [&] (int i)
-	{
-		return juce::Rectangle<float> (bounds.getX() + 1.0f, bounds.getBottom() - segmentHeight * (float) (i + 1),
-									   bounds.getWidth() - 2.0f, segmentHeight - 1.0f);
-	};
-	const auto colourOf = [this, barSegments] (int i)
-	{
-		switch (zoneOfSegment (i, barSegments))
-		{
-			case MeterZone::red:    return clipColour;
-			case MeterZone::yellow: return juce::Colour (0xffe8c33d);
-			case MeterZone::green:  return barColour.value_or (juce::Colour (0xff3ec46d));
-		}
-		return juce::Colour (0xff3ec46d);
-	};
-
-	for (int i = 0; i < barSegments; ++i)
-	{
-		g.setColour (i < litSegments ? colourOf (i) : colourOf (i).withAlpha (0.12f));
-		g.fillRect (segmentAt (i));
-	}
-
-	// The held peak: a thin line, the top of its segment, above the bar.
-	if (heldSegment > litSegments)
-	{
-		const auto held = heldSegment - 1;
-		auto light = segmentAt (held);
-		g.setColour (colourOf (held));
-		g.fillRect (light.removeFromTop (juce::jmax (1.0f, light.getHeight() * 0.4f)));
-	}
-
-	if (! showsClip)
-		return;
-
-	g.setColour (clipping ? clipColour.brighter (0.4f) : clipColour.withAlpha (0.12f));
-	g.fillRect (segmentAt (numSegments - 1));
+	using stemgain::dbText;
 }
 
 //==============================================================================
@@ -154,20 +74,21 @@ void OutputMeters::resized()
 //==============================================================================
 ChannelStrip::ChannelStrip (StemDeckPlayer& p, int index) : player (p), deckIndex (index)
 {
+	longPress.onFire = [this]
+	{
+		if (pressedStem >= 0)
+			openSpatial (std::exchange (pressedStem, -1));
+	};
+
 	for (int s = 0; s < StemSet::numStems; ++s)
 	{
 		auto* knob = knobs.add (new juce::Slider (juce::Slider::RotaryHorizontalVerticalDrag, juce::Slider::NoTextBox));
-		knob->setRange (minDb, 6.0, 0.1);
-		knob->setSkewFactorFromMidPoint (-12.0);
-		knob->setValue (0.0, juce::dontSendNotification);
-		knob->setDoubleClickReturnValue (true, 0.0);
-		knob->setPopupDisplayEnabled (true, true, nullptr);
-		knob->textFromValueFunction = dbText;
+		stemgain::setUp (*knob);
 		knob->setColour (juce::Slider::rotarySliderFillColourId, Theme::stem (s));
-		knob->setMouseClickGrabsKeyboardFocus (false);
+		knob->addMouseListener (this, false);   // right-click and long press, beside the knob's own drag
 		knob->onValueChange = [this, s, knob]
 		{
-			player.setStemGain (s, juce::Decibels::decibelsToGain ((float) knob->getValue(), minDb));
+			player.setStemGain (s, stemgain::gainOf (knob->getValue()));
 		};
 		addAndMakeVisible (knob);
 
@@ -227,6 +148,45 @@ ChannelStrip::ChannelStrip (StemDeckPlayer& p, int index) : player (p), deckInde
 	fader.getProperties().set (DJLookAndFeel::meterInSlot, true);
 }
 
+int ChannelStrip::knobIndexOf (const juce::Component* component) const
+{
+	for (int s = 0; s < knobs.size(); ++s)
+		if (knobs[s] == component)
+			return s;
+	return -1;
+}
+
+void ChannelStrip::openSpatial (int stem)
+{
+	if (spatial == nullptr || stem < 0 || stem >= knobs.size())
+		return;
+	StemSpatialPopup::show (*knobs[stem], spatial->settings(), &spatial->motion(), stem);
+}
+
+void ChannelStrip::mouseDown (const juce::MouseEvent& e)
+{
+	const auto stem = knobIndexOf (e.eventComponent);
+	if (stem < 0 || spatial == nullptr)
+		return;
+	if (e.mods.isPopupMenu())
+		return openSpatial (stem);
+
+	pressedStem = stem;
+	longPress.startTimer (longPressMs);
+}
+
+void ChannelStrip::mouseDrag (const juce::MouseEvent& e)
+{
+	if (e.mouseWasDraggedSinceMouseDown())
+		longPress.stopTimer();
+}
+
+void ChannelStrip::mouseUp (const juce::MouseEvent&)
+{
+	longPress.stopTimer();
+	pressedStem = -1;
+}
+
 void ChannelStrip::saveState (DeckSession& state) const
 {
 	for (int s = 0; s < StemSet::numStems; ++s)
@@ -271,13 +231,8 @@ void ChannelStrip::showBuses (int stem)
 
 void ChannelStrip::nudgeStemGain (int stem, double detents)
 {
-	// Some two turns of an encoder from silence to the top.
-	constexpr double detentShare = 1.0 / 48.0;
 	if (auto* knob = knobs[stem])
-	{
-		const auto travel = knob->valueToProportionOfLength (knob->getValue()) + detents * detentShare;
-		knob->setValue (knob->proportionOfLengthToValue (juce::jlimit (0.0, 1.0, travel)), juce::sendNotificationSync);
-	}
+		knobsetup::nudge (*knob, detents);
 }
 
 void ChannelStrip::toggleMute (int stem)

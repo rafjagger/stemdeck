@@ -1,5 +1,7 @@
 #include "MainComponent.h"
-#include "AudioPanel.h"
+#include "AppSettings.h"
+#include "CoreTruth.h"
+#include "AudioCpu.h"
 #include "StemJob.h"
 #include "GridEdit.h"
 #include "OscTruthFile.h"
@@ -9,8 +11,6 @@
 
 #include <cstdlib>
 #include <iostream>
-#include <pthread.h>
-#include <sched.h>
 
 //==============================================================================
 MainComponent::MainComponent()
@@ -20,8 +20,11 @@ MainComponent::MainComponent()
 	// The one truth, chosen once and hashed at once (spec truth-from-core):
 	// the keeper's own fingerprint must be of this truth, not of a cache
 	// Motion may write a moment later.
-	truthPath = osctruth::liveTruthPath();
-	truthHash = juce::SHA256 (juce::File (truthPath)).toHexString();
+	{
+		const auto truth = coretruth::choose();
+		truthPath = truth.path;
+		truthHash = truth.hash;
+	}
 
 	// Where Pro DJ Link listens: the one truth. Without it the PIO clock
 	// does not start and its status line says why.
@@ -38,23 +41,18 @@ MainComponent::MainComponent()
 		std::string truthError;
 		const auto meterParameters = osctruth::readMeterParameters (truthPath, truthError);
 		mixer.setMeterParameters (meterParameters);
-		recMeterL.setParameters (meterParameters);
-		recMeterR.setParameters (meterParameters);
+		rec.setMeterParameters (meterParameters);
 	}
 
-	juce::PropertiesFile::Options options;
-	options.applicationName = "StemDeck";
-   #if JUCE_LINUX
-	options.folderName = "~/.config/StemDeck";
-   #else
-	options.folderName = "StemDeck";
-   #endif
-	options.filenameSuffix = ".settings";
-	options.osxLibrarySubFolder = "Application Support";
-	appProperties.setStorageParameters (options);
-	analysisCache = std::make_unique<AnalysisCache> (appProperties.getUserSettings()->getFile().getSiblingFile ("analysis.xml"));
+	appProperties.setStorageParameters (appsettings::options());
 
 	formatManager.registerBasicFormats();
+	for (int d = 0; d < numDecks; ++d)
+	{
+		auto& host = hosts[(size_t) d];
+		host.onAnalysing = [this, d] (bool analysing) { decks[(size_t) d]->setAnalysing (analysing); };
+		host.onAnalysisStored = [this] { library.analysisChanged(); };
+	}
 	showTips (tips::shown (settings().getValue (tips::settingKey).toStdString()));
 
 	for (int d = 0; d < numDecks; ++d)
@@ -75,34 +73,9 @@ MainComponent::MainComponent()
 	addAndMakeVisible (library);
 
 	library.onLoadSet = [this] (const StemSet& set, int deckIndex) { loadSet (set, deckIndex); };
-	library.lookUpBeatGrid = [this] (const StemSet& set) { return analysisCache->find (set); };
-	library.onFolderChanged = [this] (const juce::File& folder)
-	{
-		appProperties.getUserSettings()->setValue ("stemFolder", folder.getFullPathName());
-		stemCreator.setLibraryFolder (folder);
-	};
-	library.onCreateStems = [this] (const juce::Array<juce::File>& files) { createStems (files); };
-	library.onCancelCreation = [this] { stemCreator.cancelRunning(); };
+	library.lookUpBeatGrid = [this] (const StemSet& set) { return analysisCache.find (set); };
 	library.onOrderChanged = [this] { findSteps(); };
-	stemCreator.onSetCreated = [this] (const juce::File& firstStem)
-	{
-		library.setFolder (library.getFolder());
-		library.selectSetWithFile (firstStem);
-	};
-	if (const auto venv = appProperties.getUserSettings()->getValue ("separatorVenv"); juce::File::isAbsolutePath (venv))
-		stemCreator.setVenv (venv);
-	// All cores but the audio CPU, unless the settings say fewer.
-	if (const auto cores = appProperties.getUserSettings()->getIntValue ("separatorCores"); cores > 0)
-		stemCreator.setMaxCores (cores);
-
-	// Last used folder, otherwise ./stems next to where the app was started.
-	// A saved folder that is gone (the checkout moved) falls back too, or the
-	// library stays empty with nothing to say why.
-	const auto savedFolder = appProperties.getUserSettings()->getValue ("stemFolder");
-	const juce::File saved (savedFolder.isNotEmpty() && juce::File::isAbsolutePath (savedFolder) ? savedFolder : juce::String());
-	library.setFolder (saved.isDirectory() ? saved
-										   : juce::File::getCurrentWorkingDirectory().getChildFile ("stems"));
-	stemCreator.setLibraryFolder (library.getFolder());
+	creatorLink = std::make_unique<StemCreatorLink> (library, stemCreator, settings(), *this);
 
 	settingsButton.onClick = [this] { showSettings(); };
 	settingsButton.setMouseClickGrabsKeyboardFocus (false);
@@ -146,12 +119,8 @@ MainComponent::MainComponent()
 		resized();
 	};
 
-	recButton.setMouseClickGrabsKeyboardFocus (false);
-	recButton.setColour (juce::TextButton::buttonOnColourId, Theme::mute);
-	recButton.onClick = [this] { toggleRecording(); };
-	addAndMakeVisible (recButton);
-	addAndMakeVisible (recMeterL);
-	addAndMakeVisible (recMeterR);
+	rec.button.onClick = [this] { rec.toggle (audio->jackClient().getSampleRate()); };
+	rec.addTo (*this);
 
 	autoDjButton.setClickingTogglesState (true);
 	autoDjButton.setMouseClickGrabsKeyboardFocus (false);
@@ -193,6 +162,12 @@ MainComponent::MainComponent()
 		bind ("7890"[s], [this, s] (bool down) { if (down) mixer.strip (1).toggleMute (s); });
 	}
 
+	createSpatialPorts();
+	for (int d = 0; d < numDecks; ++d)
+	{
+		auto& ports = hosts[(size_t) d].spatialPorts();
+		mixer.setSpatial (d, ports.deckSpatial() != nullptr ? &ports : nullptr);
+	}
 	initialiseAudio();
 
 	if (appProperties.getUserSettings()->getValue ("syncSource") == "pio")
@@ -219,38 +194,7 @@ MainComponent::MainComponent()
 	motionPanel = std::make_unique<PanelDevice>();
 	motionPanel->onEvent = [this] (const panel::Event& e) { handlePanel (e); };
 
-	// Following Core's truth: with $A3_OSC_TRUTH set, that file wins at every
-	// start, and following would restart StemDeck into it forever.
-	if (truthkeeper::followsCore (std::getenv ("A3_OSC_TRUTH")))
-	{
-		const auto home = juce::File::getSpecialLocation (juce::File::userHomeDirectory).getFullPathName().toStdString();
-		truthKeeper = std::make_unique<TruthKeeperLink> (
-			truthHash.toStdString(),
-			juce::File (truthkeeper::cachePath (home)),
-			[] (const juce::String& body) { return juce::String (osctruth::unusableTruth (body.toStdString())); },
-			[] {
-				juce::JUCEApplication::getInstance()->setApplicationReturnValue (1);
-				juce::JUCEApplication::quit();
-			});
-		// radla's subnet never hears the broadcast: there a file names Core.
-		const auto core = juce::File (truthkeeper::corePath (home));
-		const auto url = core.existsAsFile() ? truthkeeper::pollUrl (core.loadFileAsString().toStdString()) : std::string();
-		if (url.empty())
-		{
-			if (core.existsAsFile() && core.loadFileAsString().trim().isNotEmpty())
-				std::cerr << "StemDeck: " << core.getFullPathName() << " does not name an http:// address;"
-						  << " listening for Core's broadcast instead" << std::endl;
-			truthKeeper->start();
-		}
-		else
-		{
-			std::cerr << "StemDeck: following Core's truth at " << url << " every "
-					  << truthkeeper::pollSeconds << " s" << std::endl;
-			truthKeeper->startPolling (juce::String (url));
-		}
-	}
-	else
-		std::cerr << "StemDeck: A3_OSC_TRUTH is set: not following Core's truth" << std::endl;
+	truthKeeper = coretruth::follow ({ truthPath, truthHash });
 }
 
 MainComponent::~MainComponent()
@@ -258,17 +202,13 @@ MainComponent::~MainComponent()
 	stopTimer();
 	motionPanel.reset();   // dark, and no more presses
 	saveSession();
-	jack.close();        // no more input blocks ...
+	audio->closeJack();  // no more input blocks ...
 	recorder.stop();     // ... then the file is closed complete
 	pioSender.setMaster (nullptr);
 	pioSender.stop();   // before the players it reads go away
 	proLink.stop();
 	analysisPool.removeAllJobs (true, 5000);
-	jack.close();
-	deviceManager.removeChangeListener (this);
-	deviceManager.removeAudioCallback (&audioSourcePlayer);
-	audioSourcePlayer.setSource (nullptr);
-	deviceManager.closeAudioDevice();
+	audio->close();
 	setLookAndFeel (nullptr);
 }
 
@@ -287,159 +227,16 @@ void MainComponent::loadSet (const StemSet& set, int deckIndex)
 	}
 
 	const auto d = (size_t) deckIndex;
-	const auto error = players[d]->load (set);
-
-	if (error.isNotEmpty())
+	if (const auto error = hosts[d].load (set); error.isNotEmpty())
 	{
 		juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Cannot load the set", error);
 		return;
 	}
 
-	loadedSetIds[d] = set.files[0].getFullPathName();
-	loadedSets[d] = set;
 	thumbs[d]->setSet (set);
 	decks[d]->setSet (set);
 	waves[d]->setTitle (set.name);
 	findSteps();
-
-	++loadGeneration[d];
-	sectionFeatures[d].reset();
-	sectionBars[d].clear();
-
-	if (const auto cached = analysisCache->find (set))
-	{
-		players[d]->setBeatGrid (*cached);
-		decks[d]->setAnalysing (false);
-
-		// A set analysed before the sections existed gets them now.
-		sectionFeatures[d] = analysisCache->findFeatures (set);
-		if (sectionFeatures[d])
-			rebuildSections (deckIndex);
-		else
-			startSectionAnalysis (set, deckIndex, *cached);
-		if (analysisCache->needsNewDownbeat (set))
-			startDownbeatAnalysis (set, deckIndex);
-	}
-	else
-	{
-		startAnalysis (set, deckIndex);
-	}
-}
-
-void MainComponent::startAnalysis (const StemSet& set, int deckIndex)
-{
-	decks[(size_t) deckIndex]->setAnalysing (true);
-	const auto generation = loadGeneration[(size_t) deckIndex];
-	juce::Component::SafePointer<MainComponent> safeThis (this);
-
-	analysisPool.addJob ([this, safeThis, set, deckIndex, generation]
-	{
-		auto* job = juce::ThreadPoolJob::getCurrentThreadPoolJob();
-		const auto grid = TempoAnalysis::analyse (set, formatManager, [job] { return job != nullptr && job->shouldExit(); });
-
-		juce::MessageManager::callAsync ([safeThis, set, deckIndex, generation, grid]
-		{
-			if (safeThis == nullptr)
-				return;
-
-			if (grid.isValid())
-			{
-				safeThis->analysisCache->store (set, grid);
-				safeThis->library.analysisChanged();
-			}
-
-			// Only apply it if the deck still has that set.
-			if (safeThis->loadGeneration[(size_t) deckIndex] == generation)
-			{
-				safeThis->players[(size_t) deckIndex]->setBeatGrid (grid);
-				safeThis->decks[(size_t) deckIndex]->setAnalysing (false);
-
-				if (grid.isValid())
-					safeThis->startSectionAnalysis (set, deckIndex, grid);
-			}
-		});
-	});
-}
-
-void MainComponent::startSectionAnalysis (const StemSet& set, int deckIndex, const BeatGrid& grid)
-{
-	const auto generation = loadGeneration[(size_t) deckIndex];
-	juce::Component::SafePointer<MainComponent> safeThis (this);
-
-	analysisPool.addJob ([this, safeThis, set, deckIndex, generation, grid]
-	{
-		auto* job = juce::ThreadPoolJob::getCurrentThreadPoolJob();
-		const auto features = SectionAnalysis::analyse (set, formatManager, grid,
-														[job] { return job != nullptr && job->shouldExit(); });
-
-		juce::MessageManager::callAsync ([safeThis, set, deckIndex, generation, features]
-		{
-			if (safeThis == nullptr || ! features)
-				return;
-
-			safeThis->analysisCache->storeFeatures (set, *features);
-
-			// Only apply them if the deck still has that set.
-			if (safeThis->loadGeneration[(size_t) deckIndex] != generation)
-				return;
-
-			safeThis->sectionFeatures[(size_t) deckIndex] = features;
-			safeThis->rebuildSections (deckIndex);
-		});
-	});
-}
-
-// A grid from before the one was found from the stems is played with at
-// once; its first beat, onto the kick and the one, follows a few seconds later.
-void MainComponent::startDownbeatAnalysis (const StemSet& set, int deckIndex)
-{
-	const auto analysed = analysisCache->findAnalysed (set);
-	if (! analysed)
-		return;
-
-	const auto generation = loadGeneration[(size_t) deckIndex];
-	juce::Component::SafePointer<MainComponent> safeThis (this);
-
-	analysisPool.addJob ([this, safeThis, set, deckIndex, generation, grid = *analysed]
-	{
-		auto* job = juce::ThreadPoolJob::getCurrentThreadPoolJob();
-		const auto found = TempoAnalysis::redetectDownbeat (set, formatManager, grid, [job] { return job != nullptr && job->shouldExit(); });
-
-		juce::MessageManager::callAsync ([safeThis, set, deckIndex, generation, found]
-		{
-			if (safeThis == nullptr || ! found.isValid())
-				return;
-
-			safeThis->analysisCache->storeNewDownbeat (set, found.firstBeat);
-			safeThis->library.analysisChanged();
-
-			// A correction made meanwhile is what find() returns, and stays.
-			if (safeThis->loadGeneration[(size_t) deckIndex] == generation)
-				if (const auto current = safeThis->analysisCache->find (set))
-				{
-					safeThis->players[(size_t) deckIndex]->setBeatGrid (*current);
-					// The sections are counted in bars from the one.
-					safeThis->rebuildSections (deckIndex);
-				}
-		});
-	});
-}
-
-void MainComponent::rebuildSections (int deckIndex)
-{
-	const auto d = (size_t) deckIndex;
-	const auto grid = players[d]->getBeatGrid();
-
-	if (! sectionFeatures[d] || ! loadedSets[d] || ! grid.isValid())
-	{
-		sectionBars[d].clear();
-		return;
-	}
-
-	const auto& names = loadedSets[d]->stemNames;
-	const auto roles = sections::rolesFor ({ names[0].toStdString(), names[1].toStdString(),
-											 names[2].toStdString(), names[3].toStdString() });
-	sectionBars[d] = sections::classify (sections::barLevels (*sectionFeatures[d], grid.bpm, grid.firstBeat, roles));
 }
 
 void MainComponent::sendPreview()
@@ -452,14 +249,14 @@ void MainComponent::sendPreview()
 		const auto grid = player.getBeatGrid();
 		auto& state = states[(size_t) d];
 		state.view = { player.isPlaying(), player.getDeckGain() };
-		state.generation = loadGeneration[(size_t) d];
+		state.generation = hosts[(size_t) d].loadGeneration();
 		state.speed = player.getSpeed();
 		state.bpm = grid.bpm;
 		state.firstBeat = grid.firstBeat;
 		state.position = player.getPosition();
 		if (player.hasLoop())
 			state.loopSeconds = std::make_pair (player.getLoop().getStart(), player.getLoop().getEnd());
-		state.bars = sectionBars[(size_t) d];
+		state.bars = hosts[(size_t) d].sectionBars();
 	}
 
 	const auto moment = preview::momentOf (states, masterDeck);
@@ -470,10 +267,7 @@ void MainComponent::sendPreview()
 //==============================================================================
 void MainComponent::setSyncBent (int deckIndex, bool bent)
 {
-	syncBent[(size_t) deckIndex] = bent;
-	decks[(size_t) deckIndex]->setSyncBpmOnly (bent);
-	if (bent)
-		players[(size_t) deckIndex]->setSyncNudge (1.0);
+	deckfollow::setBent (*decks[(size_t) deckIndex], *players[(size_t) deckIndex], syncBent[(size_t) deckIndex], bent);
 }
 
 void MainComponent::setSync (int deckIndex, bool enabled)
@@ -579,10 +373,7 @@ void MainComponent::followPioneer()
 		if (! pioSynced[(size_t) d] || ! players[(size_t) d]->getBeatGrid().isValid())
 			continue;
 
-		FollowInput in;
-		in.leaderBpm = pioClock.bpm();
-		in.leaderBeatPhase = pioClock.beatPhaseAt (now);
-		in.leaderPlaying = pioClock.isLive (now); // silent master: tempo held, phase left alone
+		auto in = leaderInputAt (pioClock, now); // silent master: tempo held, phase left alone
 		in.anyScratching = players[(size_t) d]->isScratching();
 		in.multiple = pioMultiple[(size_t) d];
 
@@ -643,86 +434,15 @@ void MainComponent::updatePioneerStatus()
 }
 
 //==============================================================================
-// One question for the whole batch: the folder it goes to, below the library.
-// Every track lands there, named after its file.
-void MainComponent::createStems (const juce::Array<juce::File>& files)
-{
-	if (! stemCreator.isInstalled())
-	{
-		juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Create stems",
-			"The stem separator (Demucs) is not installed:\n" + stemCreator.venv().getChildFile ("bin/demucs").getFullPathName()
-			+ juce::String (" is missing.\n\nSet it up once (about 1 GB):\n"
-							"  sudo apt install ffmpeg python3-venv\n"
-							"  tools/setup-separator.sh"));
-		return;
-	}
-
-	std::vector<std::string> paths;
-	for (const auto& f : files)
-		paths.push_back (f.getFullPathName().toStdString());
-	askTargetFolder (files, juce::String (suggestTargetFolder (paths)));
-}
-
-void MainComponent::askTargetFolder (const juce::Array<juce::File>& files, const juce::String& preset)
-{
-	const auto count = files.size() == 1 ? files.getFirst().getFileNameWithoutExtension()
-										 : juce::String (files.size()) + " tracks";
-	const auto libraryFolder = library.getFolder();
-
-	stemDialog = std::make_unique<juce::AlertWindow> ("Create stems",
-		count + juce::String ("\n\nTarget folder in ") + libraryFolder.getFullPathName()
-			  + juce::String::fromUTF8 (":\n(Artist/Album \xe2\x80\x93 empty: straight into the library folder)"),
-		juce::MessageBoxIconType::NoIcon, this);
-	stemDialog->addTextEditor ("folder", preset, "Target folder");
-	stemDialog->addButton ("Create", 1, juce::KeyPress (juce::KeyPress::returnKey));
-	stemDialog->addButton (juce::String::fromUTF8 ("Browse\xe2\x80\xa6"), 2);
-	stemDialog->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
-	stemDialog->enterModalState (true, juce::ModalCallbackFunction::create ([this, files, libraryFolder] (int result)
-	{
-		const auto typed = stemDialog->getTextEditorContents ("folder").trim();
-		stemDialog.reset();
-
-		if (result == 1)
-		{
-			const auto folder = juce::String (sanitiseFolder (typed.toStdString()));
-			for (const auto& f : files)
-				stemCreator.add (f, folder, f.getFileNameWithoutExtension());
-		}
-		else if (result == 2)
-		{
-			const auto start = libraryFolder.getChildFile (juce::String (sanitiseFolder (typed.toStdString())));
-			folderChooser = std::make_unique<juce::FileChooser> ("Target folder", start.isDirectory() ? start : libraryFolder);
-			folderChooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories,
-				[this, files, libraryFolder, typed] (const juce::FileChooser& fc)
-				{
-					const auto chosen = fc.getResult();
-					if (chosen == juce::File())
-						return askTargetFolder (files, typed);   // closed: back to the question
-					if (chosen != libraryFolder && ! chosen.isAChildOf (libraryFolder))
-					{
-						juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Create stems",
-							juce::String ("The target folder has to be inside the library folder:\n") + libraryFolder.getFullPathName());
-						return askTargetFolder (files, typed);
-					}
-					askTargetFolder (files, chosen == libraryFolder ? juce::String() : chosen.getRelativePathFrom (libraryFolder));
-				});
-		}
-	}));
-}
-
-//==============================================================================
 Session MainComponent::gatherSession() const
 {
 	Session session;
 	for (int d = 0; d < numDecks; ++d)
 	{
 		auto& deck = session.decks[(size_t) d];
-		const auto& player = *players[(size_t) d];
-		deck.setId = library.storedId (loadedSetIds[(size_t) d]);
-		deck.position = player.getPosition();
-		deck.playing = player.isPlaying();
-		deck.cuePoint = player.getCuePoint();
-		deck.loop = player.hasLoop() ? player.getLoop() : juce::Range<double>();
+		const auto& host = hosts[(size_t) d];
+		deck.setId = library.storedId (host.loadedSetId());
+		host.gather (deck);
 		decks[(size_t) d]->saveState (deck);
 		mixer.strip (d).saveState (deck);
 	}
@@ -730,87 +450,38 @@ Session MainComponent::gatherSession() const
 	session.masterTurnedOff = masterTurnedOff;
 	session.autoDj = autoDj.isEnabled();
 	library.saveState (session.library);
-	for (const auto& job : stemCreator.pendingJobs())
-		session.stemJobs.push_back ({ juce::String (job.input), juce::String (job.folder), juce::String (job.track) });
+	creatorLink->gather (session.stemJobs);
 	return session;
 }
 
 void MainComponent::editGrid (int deckIndex, DeckPanel::GridAction action, double seconds)
 {
-	auto& player = *players[(size_t) deckIndex];
-	const auto& set = loadedSets[(size_t) deckIndex];
-	const auto current = player.getBeatGrid();
-	if (! set || ! current.isValid())
-		return;
-
-	using Action = DeckPanel::GridAction;
-	if (action == Action::reset)
+	std::optional<double> leaderBeatPhase;
+	if (action == DeckPanel::GridAction::shiftToLeader)
 	{
-		analysisCache->clearCorrected (*set);
-		if (const auto analysed = analysisCache->findAnalysed (*set))
+		// The leader: the Pioneer master under SYNC: PIO, else the other deck.
+		const auto now = juce::Time::getMillisecondCounterHiRes() / 1000.0;
+		if (pioSource)
 		{
-			player.setBeatGrid (*analysed);
-			rebuildSections (deckIndex);
+			if (pioClock.bpm() > 0.0)
+				leaderBeatPhase = pioClock.beatPhaseAt (now);
 		}
-		return;
-	}
-
-	GridEdit::Grid grid { current.bpm, current.firstBeat };
-	switch (action)
-	{
-		case Action::shift:       grid = GridEdit::shift (grid, seconds); break;
-		case Action::halfBack:    grid = GridEdit::shiftHalfBeat (grid, false); break;
-		case Action::halfForward: grid = GridEdit::shiftHalfBeat (grid, true); break;
-		case Action::oneBack:     grid = GridEdit::moveOne (grid, false); break;
-		case Action::oneForward:  grid = GridEdit::moveOne (grid, true); break;
-		case Action::doubleTempo: grid = GridEdit::doubleTempo (grid); break;
-		case Action::halveTempo:  grid = GridEdit::halveTempo (grid); break;
-		case Action::snapToCue:   grid = GridEdit::snapToCue (grid, player.getCuePoint()); break;
-		case Action::downbeatAtPlayhead:
+		else
 		{
-			// Where the playhead is now, carried from the last audio block.
-			const auto now = juce::Time::getMillisecondCounterHiRes() / 1000.0;
-			grid = GridEdit::snapToCue (grid, positionAt (player.getPosition(), player.getPositionStamp(), now,
-														  player.getEffectiveRate(), player.isPlaying() && ! player.isScratching()));
-			break;
-		}
-		case Action::shiftToLeader:
-		{
-			// The leader: the Pioneer master under SYNC: PIO, else the other deck.
-			const auto now = juce::Time::getMillisecondCounterHiRes() / 1000.0;
-			const auto position = positionAt (player.getPosition(), player.getPositionStamp(), now,
-											  player.getEffectiveRate(), player.isPlaying() && ! player.isScratching());
-			if (pioSource)
+			const auto& leader = *players[(size_t) (1 - deckIndex)];
+			const auto leaderGrid = leader.getBeatGrid();
+			if (leaderGrid.isValid() && leader.isPlaying())
 			{
-				if (pioClock.bpm() <= 0.0)
-					return;
-				grid = GridEdit::shiftToPhase (grid, position, pioClock.beatPhaseAt (now));
-			}
-			else
-			{
-				const auto& leader = *players[(size_t) (1 - deckIndex)];
-				const auto leaderGrid = leader.getBeatGrid();
-				if (! leaderGrid.isValid() || ! leader.isPlaying())
-					return;
 				const auto leaderPosition = positionAt (leader.getPosition(), leader.getPositionStamp(), now,
 														leader.getEffectiveRate(), ! leader.isScratching());
 				const auto multiple = syncMultiple > 0.0 ? syncMultiple : 1.0;
-				grid = GridEdit::shiftToPhase (grid, position, leaderGrid.beatsAt (leaderPosition) * multiple);
+				leaderBeatPhase = leaderGrid.beatsAt (leaderPosition) * multiple;
 			}
-			break;
 		}
-		case Action::reset: break;
 	}
 
-	const BeatGrid edited { grid.bpm, grid.firstBeat };
-	player.setBeatGrid (edited);
-	analysisCache->storeCorrected (*set, edited);
-
-	// The bars follow the downbeat at once: the next preview says so (Preview.h).
-	rebuildSections (deckIndex);
-
 	// SHIFT GRID ends a bend: the grid now says what the ear did, the beat follows again.
-	if (action == Action::shiftToLeader)
+	if (hosts[(size_t) deckIndex].editGrid (action, seconds, leaderBeatPhase) && action == DeckPanel::GridAction::shiftToLeader)
 		setSyncBent (deckIndex, false);
 }
 
@@ -948,11 +619,6 @@ void MainComponent::showControllers()
 	}
 }
 
-namespace
-{
-	panel::Rgb toRgb (juce::Colour c) { return { c.getRed(), c.getGreen(), c.getBlue() }; }
-}
-
 void MainComponent::handlePanel (const panel::Event& e)
 {
 	if (e.deck < 0 || e.deck >= numDecks)
@@ -995,55 +661,15 @@ void MainComponent::showPanel()
 								  && std::abs (player.getPosition() - player.getCuePoint()) < 0.01;
 	}
 	for (int s = 0; s < StemSet::numStems; ++s)
-		state.stemColours[(size_t) s] = toRgb (Theme::stem (s));
-	state.playColour = toRgb (Theme::play);
-	state.cueColour = toRgb (Theme::cue);
-	state.muteColour = toRgb (Theme::mute);
-	state.auxColour = toRgb (Theme::aux);
-	state.offColour = toRgb (Theme::panelRaised);
+		state.stemColours[(size_t) s] = panel::rgbOf (Theme::stem (s));
+	state.playColour = panel::rgbOf (Theme::play);
+	state.cueColour = panel::rgbOf (Theme::cue);
+	state.muteColour = panel::rgbOf (Theme::mute);
+	state.auxColour = panel::rgbOf (Theme::aux);
+	state.offColour = panel::rgbOf (Theme::panelRaised);
 	for (int d = 0; d < numDecks; ++d)
-		state.deckColours[(size_t) d] = toRgb (Theme::deck (d));
+		state.deckColours[(size_t) d] = panel::rgbOf (Theme::deck (d));
 	motionPanel->show (state);
-}
-
-void MainComponent::toggleRecording()
-{
-	if (recorder.isRecording())
-	{
-		recorder.stop();
-		recButton.setTooltip ("Aufgenommen: " + recorder.getFile().getFullPathName());
-	}
-	else if (const auto error = recorder.start (Recorder::defaultFolder(), jack.getSampleRate()); error.isNotEmpty())
-	{
-		juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Recording", error);
-	}
-	updateRecorder();
-}
-
-void MainComponent::updateRecorder()
-{
-	recMeterL.setLevel (recorder.popPeak (0));
-	recMeterR.setLevel (recorder.popPeak (1));
-
-	const auto on = recorder.isRecording();
-	recButton.setToggleState (on, juce::dontSendNotification);
-	if (on)
-	{
-		const auto seconds = (int) recorder.getSeconds();
-		recButton.setButtonText (juce::String::fromUTF8 ("\xe2\x97\x8f ") + juce::String (seconds / 60) + ":" + juce::String (seconds % 60).paddedLeft ('0', 2)
-								 + (recorder.hasDropped() ? " !" : ""));
-		recButton.setTooltip (recorder.getFile().getFullPathName()
-							  + (recorder.hasDropped() ? juce::String ("\n! The disk fell behind: gaps in the recording") : juce::String()));
-	}
-	else
-	{
-		recButton.setButtonText ("REC");
-		if (! usingJack)
-			recButton.setTooltip (juce::String ("Recording needs JACK (inputs rec_L / rec_R)"));
-		else if (recButton.getTooltip().isEmpty())
-			recButton.setTooltip (juce::String ("Records the JACK inputs StemDeck:rec_L / rec_R as FLAC into ")
-								  + Recorder::defaultFolder().getFullPathName());
-	}
 }
 
 void MainComponent::setAutoDj (bool on)
@@ -1062,7 +688,7 @@ void MainComponent::setAutoDj (bool on)
 const StemSet* MainComponent::autoDjPick (AutoDj::Pick pick, int loadDeck)
 {
 	if (pick != AutoDj::Pick::random)
-		if (const auto* set = library.neighbourInFolder (loadedSetIds[(size_t) (1 - loadDeck)], pick == AutoDj::Pick::next ? 1 : -1))
+		if (const auto* set = library.neighbourInFolder (hosts[(size_t) (1 - loadDeck)].loadedSetId(), pick == AutoDj::Pick::next ? 1 : -1))
 			return set;
 	return library.randomVisibleSet (autoDjPlayed);
 }
@@ -1086,22 +712,22 @@ void MainComponent::setAutoDjFade (AutoDj::MixLength length)
 void MainComponent::readLevels (int deckIndex)
 {
 	const auto d = (size_t) deckIndex;
-	const auto generation = loadGeneration[d];
-	if (levelsGeneration[d] == generation || ! loadedSets[d])
+	const auto generation = hosts[d].loadGeneration();
+	if (levelsGeneration[d] == generation || ! hosts[d].loadedSet())
 		return;
 	levelsGeneration[d] = generation;
 	deckLevels[d].reset();
 	deckSpans[d].reset();
 
 	juce::Component::SafePointer<MainComponent> safeThis (this);
-	analysisPool.addJob ([this, safeThis, set = *loadedSets[d], deckIndex, generation]
+	analysisPool.addJob ([this, safeThis, set = *hosts[d].loadedSet(), deckIndex, generation]
 	{
 		auto* job = juce::ThreadPoolJob::getCurrentThreadPoolJob();
 		auto levels = StemLevels::read (set, formatManager, [job] { return job != nullptr && job->shouldExit(); });
 		const auto span = levels != nullptr ? StemHandover::audibleSpan (*levels) : std::nullopt;
 		juce::MessageManager::callAsync ([safeThis, deckIndex, generation, levels, span]
 		{
-			if (safeThis == nullptr || safeThis->loadGeneration[(size_t) deckIndex] != generation)
+			if (safeThis == nullptr || safeThis->hosts[(size_t) deckIndex].loadGeneration() != generation)
 				return;
 			safeThis->deckLevels[(size_t) deckIndex] = levels;
 			safeThis->deckSpans[(size_t) deckIndex] = span;
@@ -1120,7 +746,7 @@ void MainComponent::stepDeck (int deckIndex, int direction)
 		return;
 	}
 
-	if (const auto* set = library.neighbourInFolder (loadedSetIds[(size_t) deckIndex], direction))
+	if (const auto* set = library.neighbourInFolder (hosts[(size_t) deckIndex].loadedSetId(), direction))
 		loadSet (*set, deckIndex);
 }
 
@@ -1128,7 +754,7 @@ void MainComponent::findSteps()
 {
 	for (int d = 0; d < numDecks; ++d)
 	{
-		const auto& id = loadedSetIds[(size_t) d];
+		const auto& id = hosts[(size_t) d].loadedSetId();
 		steps[(size_t) d] = { library.neighbourInFolder (id, -1) != nullptr, library.neighbourInFolder (id, 1) != nullptr };
 	}
 	showSteps();
@@ -1187,8 +813,8 @@ void MainComponent::runAutoDj()
 								 : (mask & (1u << buses::aux)) != 0 ? AutoDj::auxBus
 								 : (int) juce::findHighestSetBit (mask);
 		}
-		view.levelsPending = levelsGeneration[(size_t) d] == loadGeneration[(size_t) d]
-						  && levelsRead[(size_t) d] != loadGeneration[(size_t) d];
+		view.levelsPending = levelsGeneration[(size_t) d] == hosts[(size_t) d].loadGeneration()
+						  && levelsRead[(size_t) d] != hosts[(size_t) d].loadGeneration();
 	}
 
 	const auto c = autoDj.update (views);
@@ -1251,7 +877,7 @@ void MainComponent::runAutoDj()
 
 void MainComponent::saveSession()
 {
-	analysisCache->flush();   // grid corrections, written with the session
+	analysisCache.flush();   // grid corrections, written with the session
 	// Nothing playing and nothing touched: no write.
 	const auto text = gatherSession().toXml()->toString();
 	if (text == lastSessionText)
@@ -1274,6 +900,7 @@ void MainComponent::restoreSession()
 		auto& player = *players[(size_t) d];
 
 		mixer.strip (d).restoreState (deck);
+		hosts[(size_t) d].restoreSpatial (deck);
 
 		if (deck.setId.isEmpty())
 			continue;
@@ -1283,10 +910,7 @@ void MainComponent::restoreSession()
 			continue;
 
 		decks[(size_t) d]->restoreState (deck);
-		player.setCuePoint (deck.cuePoint);
-		if (! deck.loop.isEmpty())
-			player.setLoop (deck.loop.getStart(), deck.loop.getEnd());
-		player.setPosition (deck.position);
+		hosts[(size_t) d].restoreTransport (deck);
 	}
 	// Both decks' switches at once: an older session may break the
 	// one-stem-per-bus rule, which spans the two decks.
@@ -1312,28 +936,9 @@ void MainComponent::restoreSession()
 	if (session->autoDj)
 		setAutoDj (true);   // takes the playing deck as it is
 
-	for (const auto& job : session->stemJobs)
-		if (juce::File (job.input).existsAsFile())
-			stemCreator.add (juce::File (job.input), job.folder, job.track);
+	creatorLink->restore (session->stemJobs);
 
 	lastSessionText = session->toXml()->toString();
-}
-
-void MainComponent::updateCreatorStatus()
-{
-	// No pause while a deck plays: the separator keeps off the audio CPU.
-	const auto status = stemCreator.status();
-	juce::String text;
-	if (status.running)
-	{
-		text = "Stems: " + status.track + "  " + juce::String (juce::roundToInt (status.progress * 100.0)) + " %";
-		if (status.waiting > 0)
-			text << "  +" << status.waiting << " waiting";
-	}
-	else if (status.lastError.isNotEmpty())
-		text = "Stems: failed: " + status.lastError;
-
-	library.setCreatorStatus (text, status.running, ! status.running && status.lastError.isNotEmpty());
 }
 
 std::array<bool, 2> MainComponent::decksPlaying() const
@@ -1351,7 +956,7 @@ void MainComponent::setMasterDeck (int deckIndex)
 }
 
 // On the Pioneer network while following (PIO) or sending (a master deck):
-// the receiver announces the virtual CDJ and listens, the sender sends the
+// the receiver announces our player on the link and listens, the sender sends the
 // master deck's beat. Off the network when neither.
 void MainComponent::updateNetwork()
 {
@@ -1377,30 +982,7 @@ void MainComponent::updateNetwork()
 // result put on the deck.
 double MainComponent::applyFollow (int deckIndex, FollowInput in, double followerPosition)
 {
-	auto& follower = *players[(size_t) deckIndex];
-	const auto grid = follower.getBeatGrid();
-
-	if (std::abs (follower.getPitchBend() - 1.0) > 1e-4 && ! syncBent[(size_t) deckIndex])
-		setSyncBent (deckIndex, true);
-	if (syncBent[(size_t) deckIndex])
-		in.leaderPlaying = false;   // the tempo only: the beat is the hand's
-
-	in.followerGridBpm = grid.bpm;
-	in.followerBeatPhase = grid.beatsAt (followerPosition);
-	in.followerSpeed = follower.getSpeed();
-	in.followerEffectiveRate = follower.getEffectiveRate();
-	in.followerPlaying = follower.isPlaying();
-
-	const auto out = followLeader (in);
-
-	if (out.tempo)
-		decks[(size_t) deckIndex]->setTempoFromSync (*out.tempo);
-
-	if (out.jumpBeats)
-		follower.setPosition (follower.getPosition() + *out.jumpBeats * grid.beatLength());
-
-	follower.setSyncNudge (out.nudge);
-	return out.multiple;
+	return deckfollow::apply (*decks[(size_t) deckIndex], *players[(size_t) deckIndex], syncBent[(size_t) deckIndex], in, followerPosition);
 }
 
 void MainComponent::loadDroppedSet (const juce::String& setId, int deckIndex)
@@ -1410,6 +992,13 @@ void MainComponent::loadDroppedSet (const juce::String& setId, int deckIndex)
 }
 
 //==============================================================================
+void MainComponent::createSpatialPorts()
+{
+	for (auto& host : hosts)
+		if (const auto error = host.createSpatial(); error.isNotEmpty() && spatialError.isEmpty())
+			spatialError = error;
+}
+
 void MainComponent::initialiseAudio()
 {
 	juce::StringArray portNames;
@@ -1417,101 +1006,20 @@ void MainComponent::initialiseAudio()
 	for (int ch = 0; ch < outputs::channelCount(); ++ch)
 		portNames.add (juce::String (outputs::portName (ch)));
 
-	usingJack = jack.open ("StemDeck", portNames, *this, { "rec_L", "rec_R" }, &recorder).isEmpty();
-	recButton.setEnabled (usingJack);
-
-	if (! usingJack)
-		initialiseDeviceManager();
-
-	updateDeviceStatus();
-}
-
-void MainComponent::initialiseDeviceManager()
-{
-	const auto numOutputs = outputs::channelCount();
-	const auto savedState = appProperties.getUserSettings()->getXmlValue ("audioDeviceState");
-
-	// Also the way back in when the output mode changed: nothing doubled up.
-	deviceManager.removeChangeListener (this);
-	deviceManager.removeAudioCallback (&audioSourcePlayer);
-	deviceManager.closeAudioDevice();
-
-	deviceManager.initialise (0, numOutputs, savedState.get(), true);
-
-	// First start: enable as many of the outputs as the device has.
-	if (savedState == nullptr)
-	{
-		auto setup = deviceManager.getAudioDeviceSetup();
-		setup.useDefaultOutputChannels = false;
-		setup.outputChannels.clear();
-		setup.outputChannels.setRange (0, numOutputs, true);
-		deviceManager.setAudioDeviceSetup (setup, true);
-	}
-
-	deviceManager.addChangeListener (this);
-	audioSourcePlayer.setSource (this);
-	deviceManager.addAudioCallback (&audioSourcePlayer);
-}
-
-void MainComponent::changeListenerCallback (juce::ChangeBroadcaster*)
-{
-	if (auto state = deviceManager.createStateXml())
-		appProperties.getUserSettings()->setValue ("audioDeviceState", state.get());
+	audio = std::make_unique<AudioOutput> (settings());
+	audio->onDeviceChanged = [this] { updateDeviceStatus(); };
+	audio->open ("StemDeck", portNames, *this, { "rec_L", "rec_R" }, &recorder);
+	rec.button.setEnabled (audio->usingJack());
 
 	updateDeviceStatus();
 }
 
 void MainComponent::updateDeviceStatus()
 {
-	if (usingJack)
-	{
-		const bool running = jack.isRunning();
-		juce::String text;
-
-		if (running)
-			text << "JACK: " << jack.getClientName() << "  |  " << juce::String (jack.getSampleRate(), 0) << " Hz, "
-				 << jack.getBufferSize() << " Samples  |  " << jack.getNumPorts() << " Ports, "
-				 << jack.getNumConnectedPorts() << " connected  |  Xruns: " << jack.getXrunCount();
-		else
-			text = "The JACK server has stopped - please restart StemDeck";
-
-		deviceStatus.setText (text, juce::dontSendNotification);
-		deviceStatus.setColour (juce::Label::textColourId, running ? Theme::textDim : Theme::mute);
-		return;
-	}
-
-	auto* device = deviceManager.getCurrentAudioDevice();
-
-	if (device == nullptr)
-	{
-		deviceStatus.setText (juce::String ("No audio device open"), juce::dontSendNotification);
-		deviceStatus.setColour (juce::Label::textColourId, Theme::mute);
-		return;
-	}
-
-	const auto activeOutputs = device->getActiveOutputChannels().countNumberOfSetBits();
-	const auto wanted = outputs::channelCount();
-	auto text = deviceManager.getCurrentAudioDeviceType() + ": " + device->getName()
-			  + "  |  " + juce::String (device->getCurrentSampleRate(), 0) + " Hz, "
-			  + juce::String (device->getCurrentBufferSizeSamples()) + " Samples  |  "
-			  + juce::String (activeOutputs) + juce::String (" outputs");
-
-	if (activeOutputs < wanted)
-		text << "  (summed down)";
-
-	deviceStatus.setText (text, juce::dontSendNotification);
-	deviceStatus.setColour (juce::Label::textColourId, activeOutputs < wanted ? Theme::cue : Theme::textDim);
-}
-
-void MainComponent::showAudioSettings()
-{
-	juce::DialogWindow::LaunchOptions dialog;
-	dialog.content.setOwned (new AudioPanel (deviceManager, outputs::channelCount()));
-	dialog.dialogTitle = "Audio";
-	dialog.dialogBackgroundColour = Theme::panel;
-	dialog.useNativeTitleBar = true;
-	dialog.resizable = true;
-	dialog.launchAsync();
+	// Summed down means the buses; the cue and spatial ports are only ever left out.
+	const auto status = audio->status (outputs::stereo::channelCount());
+	deviceStatus.setText (AudioOutput::withSpatialError (status.text, spatialError), juce::dontSendNotification);
+	deviceStatus.setColour (juce::Label::textColourId, AudioOutput::colourOf (status.health));
 }
 
 void MainComponent::goToWorkspace (int number)
@@ -1562,14 +1070,14 @@ void MainComponent::showSettings()
 	SettingsPanel::Values values;
 	values.libraryFolder = library.getFolder();
 	values.autoDjFade = autoDj.mixLength();
-	values.audioDeviceChoosable = ! usingJack;
-	values.audioDeviceNote = usingJack ? "Under JACK: route with qjackctl or a patchbay" : juce::String();
+	values.audioDeviceChoosable = ! audio->usingJack();
+	values.audioDeviceNote = audio->usingJack() ? "Under JACK: route with qjackctl or a patchbay" : juce::String();
 	values.tipsShown = tooltips != nullptr;
 
 	SettingsPanel::Actions actions;
 	actions.onLibraryFolder = [this] (const juce::File& folder) { library.setFolder (folder); };
 	actions.onAutoDjFade = [this] (AutoDj::MixLength length) { setAutoDjFade (length); };
-	actions.onAudioDevice = [this] { showAudioSettings(); };
+	actions.onAudioDevice = [this] { audio->showDeviceSettings(); };
 	actions.onTips = [this] (bool shown)
 	{
 		settings().setValue (tips::settingKey, juce::String (tips::stored (shown)));
@@ -1601,11 +1109,11 @@ void MainComponent::timerCallback()
 		setMasterDeck (chosen);
 
 	updatePioneerStatus();
-	updateCreatorStatus();
+	creatorLink->showStatus();
 
 	runAutoDj();
 	showSteps();
-	updateRecorder();
+	rec.update (audio->usingJack() ? audio->jackClient().getClientName() : juce::String());
 
 	if (--controllerScanCountdown <= 0)
 	{
@@ -1639,8 +1147,7 @@ void MainComponent::prepareToPlay (int samplesPerBlockExpected, double sampleRat
 
 	for (int d = 0; d < numDecks; ++d)
 	{
-		deckBuffers[(size_t) d].setSize (StemDeckPlayer::numOutputChannels, maxBlock);
-		players[(size_t) d]->prepareToPlay (samplesPerBlockExpected, sampleRate);
+		hosts[(size_t) d].prepare (sampleRate, samplesPerBlockExpected);
 
 		const auto& player = *players[(size_t) d];
 		for (int s = 0; s < StemSet::numStems; ++s)
@@ -1655,16 +1162,7 @@ void MainComponent::prepareToPlay (int samplesPerBlockExpected, double sampleRat
 
 void MainComponent::getNextAudioBlock (const juce::AudioSourceChannelInfo& bufferToFill)
 {
-	// The audio thread gets the CPU the stem separator stays off (StemJob.h),
-	// so a deck plays on while a track is separated. Once per thread: JACK
-	// and the ALSA fallback each have their own.
-	static thread_local const bool pinned = [] {
-		cpu_set_t cpus;
-		CPU_ZERO (&cpus);
-		CPU_SET (audioCpu, &cpus);
-		return pthread_setaffinity_np (pthread_self(), sizeof (cpus), &cpus) == 0;
-	}();
-	juce::ignoreUnused (pinned);
+	pinAudioThreadToItsCpu();
 
 	auto& out = *bufferToFill.buffer;
 	const auto numSamples = bufferToFill.numSamples;
@@ -1679,13 +1177,8 @@ void MainComponent::getNextAudioBlock (const juce::AudioSourceChannelInfo& buffe
 
 	for (int d = 0; d < numDecks; ++d)
 	{
-		auto& deckBuffer = deckBuffers[(size_t) d];
 		auto& player = *players[(size_t) d];
-
-		if (numSamples > deckBuffer.getNumSamples())
-			deckBuffer.setSize (StemDeckPlayer::numOutputChannels, numSamples, false, false, true);
-
-		player.getNextAudioBlock (juce::AudioSourceChannelInfo (&deckBuffer, 0, numSamples));
+		const auto& deckBuffer = hosts[(size_t) d].render (busBuffer, outputs::spatialFirstChannel (d), numSamples);
 
 		// Each stem onto every bus it is switched to, post fader; ramped over
 		// 10 ms on any change.
@@ -1714,8 +1207,9 @@ void MainComponent::getNextAudioBlock (const juce::AudioSourceChannelInfo& buffe
 	}
 
 	// The fixed 6 dB trim on every bus and on the cue pair, before the
-	// meters, so they show what leaves StemDeck.
-	for (int ch = 0; ch < numBusChannels; ++ch)
+	// meters, so they show what leaves StemDeck. The spatial ports carry it
+	// already (DeckSpatial).
+	for (int ch = 0; ch < outputs::stereo::channelCount(); ++ch)
 		busBuffer.applyGain (ch, 0, numSamples, buses::trim);
 
 	// The desk's SA meter: the AUX bus as it goes to the return, side by side.
@@ -1732,20 +1226,20 @@ void MainComponent::getNextAudioBlock (const juce::AudioSourceChannelInfo& buffe
 	}
 
 	// One output per bus channel; with fewer outputs (e.g. plain stereo for
-	// monitoring) the buses are summed down. The cue pair only goes to
-	// outputs of its own: summed down it would land on bus 1.
+	// monitoring) the buses are summed down. The cue pair and the spatial
+	// ports only go to outputs of their own: summed down they would land on
+	// a bus (outputs::foldsInto).
 	bufferToFill.clearActiveBufferRegion();
 
-	if (numOut > 0)
-		for (int ch = 0; ch < numBusChannels; ++ch)
-			if (ch < outputs::cueChannel() || ch < numOut)
-				out.addFrom (ch % numOut, bufferToFill.startSample, busBuffer, ch, 0, numSamples);
+	for (int ch = 0; ch < numBusChannels; ++ch)
+		if (const auto target = outputs::foldsInto (ch, numOut); target >= 0)
+			out.addFrom (target, bufferToFill.startSample, busBuffer, ch, 0, numSamples);
 }
 
 void MainComponent::releaseResources()
 {
-	for (auto* player : players)
-		player->releaseResources();
+	for (auto& host : hosts)
+		host.releaseResources();
 }
 
 //==============================================================================
@@ -1797,12 +1291,12 @@ void MainComponent::resized()
 	autoDjButton.setBounds (topBar.removeFromRight (share (130)));
 	topBar.removeFromRight (gap);
 	// The input meters left of REC, where the eye comes from.
-	recButton.setBounds (topBar.removeFromRight (share (130)));
+	rec.button.setBounds (topBar.removeFromRight (share (130)));
 	topBar.removeFromRight (gap * 2 / 3);
 	const auto recMeterInset = topBar.getHeight() / 10;
-	recMeterR.setBounds (topBar.removeFromRight (share (8)).reduced (0, recMeterInset));
+	rec.right.setBounds (topBar.removeFromRight (share (8)).reduced (0, recMeterInset));
 	topBar.removeFromRight (gap / 3);
-	recMeterL.setBounds (topBar.removeFromRight (share (8)).reduced (0, recMeterInset));
+	rec.left.setBounds (topBar.removeFromRight (share (8)).reduced (0, recMeterInset));
 	topBar.removeFromRight (gap);
 	pioPlayer.setBounds (topBar.removeFromRight (share (117)));
 	pioStatus.setBounds (topBar.removeFromRight (share (286)));

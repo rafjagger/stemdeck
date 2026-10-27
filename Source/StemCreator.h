@@ -3,6 +3,9 @@
 #include <JuceHeader.h>
 #include "StemJob.h"
 #include "ProcessGroup.h"
+#include "StemCreatorLock.h"
+
+#include <map>
 
 #include <atomic>
 #include <mutex>
@@ -13,6 +16,10 @@
 // <library>/<Artist>/<Album>/ with the original copied to originals/ (the
 // rules are in StemJob.h). Nothing lands in the library before a job is
 // complete: the work happens in ~/.cache/StemDeck/jobs/<id>/.
+//
+// Instances sharing the library separate one at a time (StemCreatorLock.h):
+// a job waits while another StemDeck holds the lock, and one that StemDeck
+// finished meanwhile is taken off the queue without running again.
 //
 // The commands run through ProcessGroup, so cancelling and quitting reach
 // everything they started. They run beside the decks, never on the audio CPU.
@@ -46,6 +53,7 @@ public:
 		double progress = 0.0;  // of the separation
 		int waiting = 0;
 		juce::String lastError;
+		bool waitingForOtherInstance = false;   // another StemDeck is separating
 	};
 	Status status() const;
 
@@ -59,7 +67,11 @@ private:
 				  const std::function<void (const std::string&)>& onLine, juce::String& error);
 	bool stopRequested() const { return cancelRequested || threadShouldExit(); }
 
+	bool anyJobToStart() const;   // under `lock`
+
 	mutable std::mutex lock;
+	std::map<int, juce::int64> addedAt;   // job id -> when it was queued here
+	bool waitingForOther = false;
 	StemJobQueue queue;
 	juce::File libraryFolder, venvFolder;
 	juce::String runningTrack, lastError;

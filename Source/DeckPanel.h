@@ -1,6 +1,7 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include "GridAction.h"
 #include "StemDeckPlayer.h"
 #include "StemThumbnails.h"
 #include "Waveforms.h"
@@ -55,13 +56,16 @@ public:
 	// MASTER, like a CDJ's: this deck's beat goes out to the Pioneer network.
 	std::function<void()> onMasterPressed;
 	void setMaster (bool isMaster) { masterButton.setToggleState (isMaster, juce::dontSendNotification); }
+	bool isMasterLit() const { return masterButton.getToggleState(); }
+	// SYNC and MASTER need another deck or the link. A -bformat instance
+	// meets the others on the link (S4.7); without its ports in the truth the
+	// keys are shown, not pressable, and a restored SYNC stays dark.
+	void setSyncAvailable (bool available);
+	void setSyncTooltip (const juce::String&);
 
 	// The deck's own controls for the session (tempo, range, key lock, vinyl,
 	// repeat, SYNC); restoring SYNC is the caller's, through onSyncToggled.
-	// Grid Adjust, as on a CDJ-3000: GRID turns it on; the jog wheel then moves
-	// the grid, and <1/2 1/2> <1 1> (the one a beat) SNAP (the downbeat onto the cue) SHIFT (take the
-	// phase aligned by ear against the sync leader) RESET (as analysed) edit it.
-	enum class GridAction { shift, halfBack, halfForward, oneBack, oneForward, doubleTempo, halveTempo, snapToCue, downbeatAtPlayhead, shiftToLeader, reset };
+	using GridAction = ::GridAction;   // GridAction.h
 
 	// The parts in the band: made children of `parent`, placed by it.
 	void addBandPartsTo (juce::Component& parent);
@@ -86,6 +90,7 @@ private:
 	bool analysing = false;
 	bool settingTempoFromSync = false;
 	double tempoRange = 0.08;
+	juce::String syncTooltip { "Lock tempo and beats to the other deck" };
 
 	juce::Label titleLabel, stemsLabel, elapsedLabel, remainingLabel;
 	juce::Label bpmLabel, bpmInfoLabel;

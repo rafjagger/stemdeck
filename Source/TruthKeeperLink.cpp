@@ -50,6 +50,7 @@ void TruthKeeperLink::oscMessageReceived (const juce::OSCMessage& message)
 	if (message.getAddressPattern().toString() != truthkeeper::announceAddress || ! truthkeeper::announcementSize (message.size())
 		|| ! message[0].isString() || ! message[1].isString())
 		return;
+	lastAnnouncement = juce::Time::getMillisecondCounterHiRes() / 1000.0;
 	const auto url = message[0].getString();
 	const auto announced = message[1].getString();
 	if (! truthkeeper::needsFetch (announced.toStdString(), own) || busy.exchange (true))

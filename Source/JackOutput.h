@@ -34,6 +34,8 @@ public:
 	int getBufferSize() const { return (int) bufferSize.load(); }
 	int getNumPorts() const { return (int) ports.size(); }
 	int getNumConnectedPorts() const;
+	// Output port `index` (in open()'s order) has a connection. Not on the audio thread.
+	bool isPortConnected (int index) const;
 	int getXrunCount() const { return xruns.load(); }
 
 private:
@@ -46,6 +48,9 @@ private:
 	jack_client_t* client = nullptr;
 	std::vector<jack_port_t*> ports;
 	std::vector<float*> channelPointers; // sized once, filled in the process callback
+	// What the source renders into, copied to the ports: wrapping more than
+	// JUCE's 32 preallocated channel pointers would allocate in every callback.
+	juce::AudioBuffer<float> renderBuffer;
 	std::vector<jack_port_t*> inputs;
 	std::vector<const float*> inputPointers;
 	InputSink* sink = nullptr;

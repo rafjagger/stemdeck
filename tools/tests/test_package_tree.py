@@ -14,6 +14,7 @@ REPO = Path(__file__).resolve().parents[2]
 DEBIAN = REPO / "packaging/DEBIAN"
 STAGE = REPO / "packaging/stage"
 UNIT = REPO / ".config/systemd/user/stemdeck.service"
+TEMPLATE = REPO / ".config/systemd/user/stemdeck@.service"
 EXTRA_DEPENDS = ("jack-example-tools", "xdotool", "x11-xserver-utils", "x11-utils",
                  "python3", "onboard", "librubberband3", "pipewire-jack")
 TOOLS = ("a3-wait-for-the-screen", "rig-keep-the-screen.sh", "setup-separator.sh",
@@ -123,6 +124,7 @@ class TheStagedTree(unittest.TestCase):
         *(f"usr/lib/stemdeck/{tool}" for tool in TOOLS),
         "usr/share/stemdeck/stemdeck-without-core.xml",
         "usr/lib/systemd/user/stemdeck.service",
+        "usr/lib/systemd/user/stemdeck@.service",
         "usr/share/doc/stemdeck/copyright",
     }
 
@@ -156,6 +158,15 @@ class TheStagedTree(unittest.TestCase):
         stage = self.stage()
         self.assertEqual(UNIT.read_bytes(),
                          (stage / "usr/lib/systemd/user/stemdeck.service").read_bytes())
+
+    def test_template_is_shipped_not_enabled(self):
+        stage = self.stage()
+        self.assertEqual(TEMPLATE.read_bytes(),
+                         (stage / "usr/lib/systemd/user/stemdeck@.service").read_bytes())
+        for name in ("postinst", "prerm", "postrm"):
+            with self.subTest(script=name):
+                for line in code_lines(DEBIAN / name):
+                    self.assertNotIn("stemdeck@", line)
 
     def test_every_program_the_unit_starts_is_in_the_tree(self):
         stage = self.stage()

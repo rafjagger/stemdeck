@@ -5,6 +5,7 @@ rebuild left it with nothing to run: 203/EXEC, eight times (2026-10-07). The
 package puts the binary in /usr/bin and the tools in /usr/lib/stemdeck; no
 unit names a checkout any more."""
 
+import subprocess
 import unittest
 from pathlib import Path
 
@@ -75,6 +76,53 @@ class TheStemDeckUnit(unittest.TestCase):
 
     def test_it_comes_back_after_a_crash(self):
         self.assertIn("Restart=on-failure", self.lines())
+
+
+class TheTemplateUnit(unittest.TestCase):
+    """stemdeck@.service: one one-deck instance per letter (S4.8)."""
+    TEMPLATE = UNITS / "stemdeck@.service"
+    TWO_DECK = UNITS / "stemdeck.service"
+
+    def lines(self, unit):
+        return unit.read_text().splitlines()
+
+    def pre(self, unit):
+        return [l for l in self.lines(unit) if l.startswith("ExecStartPre=")]
+
+    def test_template_unit_starts_one_deck(self):
+        self.assertIn("ExecStart=/usr/bin/stemdeck -bformat --deck %i --fullscreen",
+                      self.lines(self.TEMPLATE))
+        self.assertEqual(self.pre(self.TWO_DECK), self.pre(self.TEMPLATE))
+
+    def test_template_does_not_conflict_with_the_two_deck_unit(self):
+        # 2026-10-27 rig: a3-main pulled stemdeck@A in REAPER mode; the conflict
+        # dropped stemdeck.service's start job at boot, then @A was skipped by its
+        # condition, and no StemDeck ran. Exclusivity is a3-core's ExecCondition
+        # drop-ins (a3-engine-runs / --reaper), as for REAPER.
+        self.assertFalse([l for l in self.lines(self.TEMPLATE) if l.startswith("Conflicts=")])
+
+    def test_template_is_never_enabled_by_itself(self):
+        self.assertNotIn("[Install]", self.TEMPLATE.read_text())
+
+    def test_template_keeps_the_two_deck_unit_s_environment(self):
+        for line in ("Environment=DISPLAY=:0", "WorkingDirectory=-%h/.local/share/stemdeck",
+                     "Restart=on-failure", "RestartSec=5",
+                     "ExecStartPost=/usr/lib/stemdeck/rig-keep-the-screen.sh restore"):
+            with self.subTest(line=line):
+                self.assertIn(line, self.lines(self.TEMPLATE))
+
+    def test_a_refused_letter_does_not_restart_forever(self):
+        """Exit 2 is a usage error (refused flags), not a transient failure."""
+        self.assertIn("RestartPreventExitStatus=2", self.lines(self.TEMPLATE))
+
+    def test_two_deck_unit_unchanged(self):
+        done = subprocess.run(
+            ["git", "show", "main:.config/systemd/user/stemdeck.service"],
+            cwd=REPO, capture_output=True)
+        if done.returncode != 0:
+            self.skipTest("no local main ref to compare with (tarball or detached checkout)")
+        committed = done.stdout
+        self.assertEqual(committed, self.TWO_DECK.read_bytes())
 
 
 if __name__ == "__main__":

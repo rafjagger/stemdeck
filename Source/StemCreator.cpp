@@ -42,6 +42,7 @@ int StemCreator::add (const juce::File& input, const juce::String& folder, const
 		std::lock_guard<std::mutex> guard (lock);
 		lastError.clear();
 		id = queue.add (input.getFullPathName().toStdString(), folder.toStdString(), track.toStdString());
+		addedAt[id] = juce::Time::currentTimeMillis();
 	}
 	wake.signal();
 	return id;
@@ -88,36 +89,86 @@ StemCreator::Status StemCreator::status() const
 	s.track = runningTrack;
 	s.progress = progress;
 	s.lastError = lastError;
+	s.waitingForOtherInstance = waitingForOther;
 	for (const auto& e : queue.jobs())
 		if (e.state == JobState::queued)
 			++s.waiting;
 	return s;
 }
 
+bool StemCreator::anyJobToStart() const
+{
+	if (queue.running())
+		return false;
+	for (const auto& e : queue.jobs())
+		if (e.state == JobState::queued)
+			return true;
+	return false;
+}
+
 void StemCreator::run()
 {
 	while (! threadShouldExit())
 	{
+		juce::File library;
+		{
+			std::lock_guard<std::mutex> guard (lock);
+			if (! anyJobToStart())
+				waitingForOther = false;
+			else
+				library = libraryFolder;
+		}
+		if (library == juce::File())
+		{
+			wake.wait (500);
+			continue;
+		}
+
+		// Held for the one job, let go after it: the other instance may be
+		// waiting with its own queue.
+		StemCreatorLock creatorLock (library);
+		const auto held = creatorLock.tryAcquire();
+		{
+			std::lock_guard<std::mutex> guard (lock);
+			waitingForOther = held == StemCreatorLock::Result::heldElsewhere;
+		}
+		if (held == StemCreatorLock::Result::heldElsewhere)
+		{
+			wake.wait (1000);
+			continue;
+		}
+
 		std::optional<StemJobEntry> job;
+		juce::int64 queuedAt = 0;
 		{
 			std::lock_guard<std::mutex> guard (lock);
 			if (const auto id = queue.startNext())
 			{
 				cancelRequested = false;
 				job = *queue.find (*id);
+				queuedAt = addedAt[*id];
+				addedAt.erase (*id);
 				runningTrack = juce::String (job->track);
 				progress = 0.0;
 			}
 		}
-
 		if (! job)
+			continue;
+
+		const juce::File input (job->input);
+		const juce::String folder (job->folder), track (job->track);
+		if (creatorLock.doneSince (input, folder, track, queuedAt))
 		{
-			wake.wait (500);
+			std::lock_guard<std::mutex> guard (lock);
+			queue.finished (job->id, true, "done by another StemDeck");
+			runningTrack.clear();
 			continue;
 		}
 
 		juce::String error;
 		const auto ok = runJob (*job, error);
+		if (ok)
+			creatorLock.recordDone (input, folder, track);
 
 		std::lock_guard<std::mutex> guard (lock);
 		if (! cancelRequested)

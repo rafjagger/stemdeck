@@ -1,0 +1,40 @@
+[Unit]
+Description=StemDeck, one deck (%i) of the B-format engine
+# The screen first (the same wait A3 Motion uses), and the audio graph:
+# StemDeck never starts a server itself, it takes PipeWire's JACK API and
+# waits for the graph (jack_wait). Nothing here names a unit of the Core:
+# StemDeck may run on a machine of its own, and a unit bound to a missing
+# unit never starts (2026-10-05). On a Core the a3-core package adds
+# the binding to pipewire.service as a drop-in (after a late sound card,
+# 2026-10-02: StemDeck goes and comes with the server).
+After=graphical.target pipewire.service wireplumber.service
+PartOf=a3-main.service
+# Either the two-deck player or one-deck instances, never both: they would
+# fight over the same JACK names and the panel. That is a3-core's to decide
+# (ExecCondition drop-ins on both units, by the engine rule), not a Conflicts=:
+# a3-main pulls both in at boot, and a conflict drops one start job before
+# either condition runs, so in REAPER mode nothing ran (2026-10-27). Shipped,
+# not enabled. Instances share one screen; the screen steps below are the
+# two-deck unit's, copied as they are.
+
+[Service]
+Environment=DISPLAY=:0
+# Its data folder: the fallback library (stems/, when no stemFolder is set)
+# is found here. Recordings are decided in code (Source/DataPaths.cpp). '-':
+# on the very first start the seed below makes the folder.
+WorkingDirectory=-%h/.local/share/stemdeck
+# As the user, while StemDeck is stopped: the data folder, and the old
+# recordings copied once out of the checkout. '-': a copy that fails must not
+# keep StemDeck off a set.
+ExecStartPre=-/usr/lib/stemdeck/stemdeck-seed
+ExecStartPre=/usr/lib/stemdeck/a3-wait-for-the-screen
+ExecStartPre=/usr/bin/jack_wait -w
+# Its start takes the screen for a moment; put back what was showing.
+ExecStartPre=/usr/lib/stemdeck/rig-keep-the-screen.sh remember
+ExecStart=/usr/bin/stemdeck -bformat --deck %i --fullscreen
+ExecStartPost=/usr/lib/stemdeck/rig-keep-the-screen.sh restore
+Restart=on-failure
+# Exit 2 is a usage error (a refused flag or deck letter), not a transient
+# failure: restarting would loop every 5 s and rerun the screen steps.
+RestartPreventExitStatus=2
+RestartSec=5

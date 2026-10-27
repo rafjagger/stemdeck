@@ -62,7 +62,7 @@ DeckPanel::DeckPanel (StemDeckPlayer& p, StemThumbnails& thumbnails, int index)
 
 	syncButton.setClickingTogglesState (true);
 	syncButton.setColour (juce::TextButton::buttonOnColourId, Theme::deck (deckIndex));
-	syncButton.setTooltip ("Lock tempo and beats to the other deck");
+	syncButton.setTooltip (syncTooltip);
 	syncButton.onClick = [this] { if (onSyncToggled) onSyncToggled (syncButton.getToggleState()); };
 	masterButton.setColour (juce::TextButton::buttonOnColourId, Theme::deck (deckIndex));
 	masterButton.setTooltip (syncLabels::masterTooltip());
@@ -188,6 +188,21 @@ void DeckPanel::setStepsAvailable (bool previous, bool next, const juce::String&
 	nextButton.setTooltip (nextTip);
 }
 
+void DeckPanel::setSyncAvailable (bool available)
+{
+	for (auto* key : { &syncButton, &masterButton })
+		key->setEnabled (available);
+	syncButton.setTooltip (available ? syncTooltip : juce::String (syncLabels::linkUnavailable()));
+	masterButton.setTooltip (available ? juce::String (syncLabels::masterTooltip()) : juce::String (syncLabels::linkUnavailable()));
+}
+
+void DeckPanel::setSyncTooltip (const juce::String& text)
+{
+	syncTooltip = text;
+	if (syncButton.isEnabled())
+		syncButton.setTooltip (text);
+}
+
 void DeckPanel::setGridMode (bool on)
 {
 	gridButton.setToggleState (on, juce::dontSendNotification);
@@ -219,7 +234,8 @@ void DeckPanel::restoreState (const DeckSession& state)
 	keyLockButton.setToggleState (state.keyLock, juce::sendNotificationSync);
 	vinylButton.setToggleState (state.vinyl, juce::sendNotificationSync);
 	repeatButton.setToggleState (state.repeat, juce::sendNotificationSync);
-	syncButton.setToggleState (state.sync, juce::dontSendNotification);
+	// Lit only where SYNC can work: a one-deck instance without the link keeps it dark.
+	syncButton.setToggleState (state.sync && syncButton.isEnabled(), juce::dontSendNotification);
 }
 
 void DeckPanel::setSet (const StemSet& set)

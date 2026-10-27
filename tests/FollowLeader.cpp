@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "FollowLeader.h"
+#include "PioneerClock.h"
 
 namespace
 {
@@ -249,4 +250,38 @@ TEST (FollowLeader, TheBeatPassedCountsFromTheFirstDownbeat)
 
 	EXPECT_FALSE (beatPassed (1.5, 120.0, -0.1).has_value()) << "before the track's first beat";
 	EXPECT_FALSE (beatPassed (1.5, 0.0, 2.0).has_value());
+}
+
+// S4.7: a deck in one instance follows the MASTER deck of another through the
+// link's clock -- the leader's half of the input comes from PioneerClock.
+TEST (FollowLeader, FollowsAnotherInstancesBeat)
+{
+	constexpr int otherInstance = 8;
+	PioneerClock clock;
+	prolink::StatusPacket status;
+	status.device = otherInstance;
+	status.isMaster = true;
+	status.isPlaying = true;
+	clock.onStatus (status, 9.9);
+	prolink::BeatPacket beat;
+	beat.device = otherInstance;
+	beat.trackBpm = beat.effectiveBpm = 124.0;
+	clock.onBeat (beat, 10.0);
+
+	const auto quarterBeat = 60.0 / 124.0 / 4.0;
+	auto in = leaderInputAt (clock, 10.0 + quarterBeat);
+	EXPECT_DOUBLE_EQ (in.leaderBpm, 124.0);
+	EXPECT_NEAR (in.leaderBeatPhase, 0.25, 1e-9);
+	EXPECT_TRUE (in.leaderPlaying);
+
+	in.followerGridBpm = 120.0;
+	in.followerBeatPhase = 0.25;
+	in.followerPlaying = true;
+	const auto out = followLeader (in);
+	ASSERT_TRUE (out.tempo.has_value());
+	EXPECT_NEAR (*out.tempo, 124.0 / 120.0, 1e-9);
+	EXPECT_FALSE (out.jumpBeats.has_value()) << "in phase";
+
+	EXPECT_FALSE (leaderInputAt (clock, 10.0 + PioneerClock::silence + 0.1).leaderPlaying)
+		<< "a silent master: its tempo held, the phase left alone";
 }

@@ -4,6 +4,9 @@
 
 #include "AutoDj.h"
 #include "FolderChoice.h"
+#include "SpatialLaw.h"
+
+#include <optional>
 
 // StemDeck's settings: where the stem library lives, how long the Auto DJ
 // fades, whether tips show, and the way to the audio device. The folder is chosen, never typed
@@ -21,6 +24,10 @@ public:
 		bool audioDeviceChoosable = true;
 		juce::String audioDeviceNote;   // its tooltip, why not
 		bool tipsShown = true;
+		// A -bformat instance: its phones decoder (R12) in place of Auto DJ, which it has not.
+		std::optional<spatial::PhonesMode> phonesMode;
+		// A -bformat instance: whether this deck holds the A³ Motion panel (one instance does).
+		std::optional<bool> panelHere;
 	};
 
 	struct Actions
@@ -29,6 +36,8 @@ public:
 		std::function<void (AutoDj::MixLength)> onAutoDjFade;
 		std::function<void()> onAudioDevice;
 		std::function<void (bool shown)> onTips;
+		std::function<void (spatial::PhonesMode)> onPhonesMode;
+		std::function<void (bool here)> onPanelHere;
 	};
 
 	SettingsPanel (const Values& values, Actions actions);
@@ -50,6 +59,13 @@ private:
 	juce::ComboBox fadeBars, fadeSeconds;
 	juce::Label fadeBarsUnit { {}, "bars" }, fadeSecondsUnit { {}, "s without beat grid" };
 	AutoDj::MixLength fadeShown;
+
+	juce::Label phonesLabel { {}, "Phones decoder" };
+	juce::ComboBox phonesMode;
+	std::optional<spatial::PhonesMode> phonesModeShown;
+
+	juce::ToggleButton panelButton { "Panel: this deck" };
+	std::optional<bool> panelShown;
 
 	juce::ToggleButton tipsButton { "Show tips (help text on the keys)" };
 	bool tipsWereShown = true;

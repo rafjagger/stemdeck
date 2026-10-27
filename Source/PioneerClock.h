@@ -1,5 +1,6 @@
 #pragma once
 
+#include "FollowLeader.h"
 #include "ProLinkPackets.h"
 
 // The Pioneer tempo master as a running clock: its tempo, and how far it is
@@ -36,3 +37,8 @@ private:
 	int master = 0, chosen = 0;
 	double lastStatus = -1.0, lastBeat = -1.0, tempo = 0.0;
 };
+
+// The leader's half of a follower's input: the clock's tempo and its phase at
+// `seconds`, playing while its beats are heard -- a silent master holds its
+// tempo and leaves the phase alone.
+FollowInput leaderInputAt (const PioneerClock&, double seconds);

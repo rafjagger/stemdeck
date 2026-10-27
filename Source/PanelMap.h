@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Buses.h"
+#include "PanelEdges.h"
 #include "PanelProtocol.h"
 
 #include <array>
@@ -70,8 +71,7 @@ namespace panel
 		static constexpr int potDeadband = 8;
 
 	private:
-		std::array<bool, buttonCount> keyDown {};
-		std::array<bool, encoderCount> pushDown {};
+		EdgeTracker tracker;
 		std::array<std::optional<int>, potCount> potAt {};
 	};
 
@@ -93,6 +93,9 @@ namespace panel
 		Rgb offColour;   // a stem pad that is off: the screen key's own, shown as it is
 		std::array<Rgb, buses::decks> deckColours {};   // every key's resting colour, by half
 	};
+
+	// `c` at numerator/denominator of its brightness.
+	Rgb scaled (Rgb c, int numerator, int denominator);
 
 	// A key's resting light in `colour` (its deck's): vivid, the brightest
 	// channel at Motion's idle level (214).

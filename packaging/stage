@@ -41,6 +41,8 @@ files() {
         "$stage/usr/share/stemdeck/stemdeck-without-core.xml"
     install -D -m 644 "$src/.config/systemd/user/stemdeck.service" \
         "$stage/usr/lib/systemd/user/stemdeck.service"
+    install -D -m 644 "$src/.config/systemd/user/stemdeck@.service" \
+        "$stage/usr/lib/systemd/user/stemdeck@.service"
     # .reuse/dep5 is already in Debian's machine-readable copyright format.
     install -D -m 644 "$src/.reuse/dep5" "$stage/usr/share/doc/stemdeck/copyright"
 }

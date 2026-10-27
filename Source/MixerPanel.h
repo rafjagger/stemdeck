@@ -4,32 +4,10 @@
 #include "StemDeckPlayer.h"
 #include "Buses.h"
 #include "Session.h"
+#include "LevelMeter.h"
 #include "MeterBallistics.h"
 
-// Vertical peak meter fed from a player's stem peaks, with the system's
-// ballistics (PeakMeter) and a line where the held peak stands.
-// With a clip lamp, its top segment lights only above full scale and holds.
-class LevelMeter : public juce::Component
-{
-public:
-	void setLevel (float newPeak);
-	void setParameters (MeterParameters parameters) { ballistics.setParameters (parameters); }
-	void setShowsClip (bool shows) { showsClip = shows; repaint(); }
-	// The bar's normal range in this colour (a stem's) instead of the LEDs' green.
-	void setBarColour (juce::Colour colour) { barColour = colour; repaint(); }
-	void paint (juce::Graphics& g) override;
-
-private:
-	float secondsSinceLastFeed();
-
-	PeakMeter ballistics;
-	double lastFeedMs = 0.0;
-	int litSegments = 0, heldSegment = 0;
-	bool showsClip = false;
-	std::optional<juce::Colour> barColour;
-	ClipHold clipHold;
-	bool clipping = false;
-};
+class DeckSpatialPorts;
 
 //==============================================================================
 // Meters for all output channels: buses 1-4 and AUX, each L/R.
@@ -110,12 +88,33 @@ public:
 	void addFaderTo (juce::Component& parent);
 	void setFaderBounds (juce::Rectangle<int> area);
 
+	// The deck's spatial engine, if it has one: a right-click or a long press
+	// on a stem's knob then opens that stem's 3D, direction, width and
+	// one-shots (StemSpatialPopup). Without one (IEM refused) nothing opens.
+	void setSpatial (DeckSpatialPorts* engine) { spatial = engine; }
+	void openSpatial (int stem);
+
+	void mouseDown (const juce::MouseEvent&) override;
+	void mouseDrag (const juce::MouseEvent&) override;
+	void mouseUp (const juce::MouseEvent&) override;
 	void paint (juce::Graphics& g) override;
 	void resized() override;
 
 private:
+	int knobIndexOf (const juce::Component*) const;
+
 	StemDeckPlayer& player;
 	const int deckIndex;
+	DeckSpatialPorts* spatial = nullptr;
+
+	// A press held on a knob without moving it.
+	struct LongPress : juce::Timer
+	{
+		std::function<void()> onFire;
+		void timerCallback() override { stopTimer(); onFire(); }
+	};
+	LongPress longPress;
+	int pressedStem = -1;
 
 	// A stem's two bus switches: its own channel, then AUX -- the only buses
 	// it may use (Buses.h mayUse).
@@ -141,6 +140,8 @@ public:
 	ChannelStrip& strip (int deckIndex) { return deckIndex == 0 ? stripA : stripB; }
 	const ChannelStrip& strip (int deckIndex) const { return deckIndex == 0 ? stripA : stripB; }
 	void refresh();
+
+	void setSpatial (int deckIndex, DeckSpatialPorts* engine) { strip (deckIndex).setSpatial (engine); }
 
 	// One bus switch under the one-stem-per-bus rule (Buses.h), across both
 	// decks: the players and the screen follow, and onBusesChanged answers

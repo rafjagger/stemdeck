@@ -1,0 +1,378 @@
+// SPDX-FileCopyrightText: 2026 Raphael Eismann
+// SPDX-License-Identifier: GPL-3.0-or-later
+#include <gtest/gtest.h>
+
+#include "MotionLite.h"
+
+#include <cmath>
+
+using namespace motionlite;
+
+namespace
+{
+	const spatial::Pose home { 30.0f, 10.0f, 60.0f };
+
+	// A block of one beat at 120 BPM lasts 0.5 s.
+	constexpr double beatSeconds = 0.5;
+
+	Clock at (double beat, bool playing = true) { return { beat, 120.0, 1.0, playing }; }
+	Clock noGrid() { return { std::nullopt, 120.0, 1.0, true }; }
+
+	StemMotion makeMotion()
+	{
+		StemMotion motion;
+		motion.setHome (home);
+		return motion;
+	}
+
+	// Presses at 5.0, runs to the bar line at 8.0 and returns the running motion.
+	StemMotion started (Shape shape = Shape::orbit)
+	{
+		auto motion = makeMotion();
+		motion.advance (at (5.0), 0.0);
+		motion.press (shape, false, 1);
+		motion.advance (at (7.9), 0.0);
+		motion.advance (at (8.0), 0.0);
+		return motion;
+	}
+
+	float wrapDiff (float a, float b)
+	{
+		return std::remainder (a - b, 360.0f);
+	}
+}
+
+TEST (MotionLite, OrbitTurnsOnceAndEndsHome)
+{
+	const double L = 16.0;
+	EXPECT_NEAR (wrapDiff (shapePose (Shape::orbit, home, L / 4, L, 0).azimuth, home.azimuth + 90.0f), 0.0f, 1e-3f);
+	EXPECT_NEAR (wrapDiff (shapePose (Shape::orbit, home, L / 2, L, 0).azimuth, home.azimuth + 180.0f), 0.0f, 1e-3f);
+	EXPECT_NEAR (wrapDiff (shapePose (Shape::orbit, home, L, L, 0).azimuth, home.azimuth), 0.0f, 1e-3f);
+	EXPECT_FLOAT_EQ (shapePose (Shape::orbit, home, 3.0, L, 0).elevation, home.elevation);
+	EXPECT_FLOAT_EQ (shapePose (Shape::orbit, home, 3.0, L, 0).width, home.width);
+}
+
+TEST (MotionLite, PingAlternatesAndEndsHome)
+{
+	const double L = 8.0;
+	EXPECT_NEAR (wrapDiff (shapePose (Shape::ping, home, 0.2, L, 0).azimuth, home.azimuth - 60.0f), 0.0f, 1e-4f);
+	EXPECT_NEAR (wrapDiff (shapePose (Shape::ping, home, 1.7, L, 0).azimuth, home.azimuth + 60.0f), 0.0f, 1e-4f);
+	EXPECT_NEAR (wrapDiff (shapePose (Shape::ping, home, 2.0, L, 0).azimuth, home.azimuth - 60.0f), 0.0f, 1e-4f);
+	EXPECT_NEAR (wrapDiff (shapePose (Shape::ping, home, 6.5, L, 0).azimuth, home.azimuth - 60.0f), 0.0f, 1e-4f);
+	EXPECT_NEAR (wrapDiff (shapePose (Shape::ping, home, L - 1.0, L, 0).azimuth, home.azimuth), 0.0f, 1e-4f);
+	EXPECT_FLOAT_EQ (shapePose (Shape::ping, home, 1.0, L, 0).elevation, home.elevation);
+}
+
+TEST (MotionLite, RiseReachesSixtyAndComesBack)
+{
+	const double L = 16.0;   // F = 4, rise over [0, 12]
+	EXPECT_NEAR (shapePose (Shape::rise, home, 0.0, L, 0).elevation, home.elevation, 1e-4f);
+	EXPECT_NEAR (shapePose (Shape::rise, home, 6.0, L, 0).elevation, home.elevation + 0.5f * (60.0f - home.elevation), 1e-3f);
+	EXPECT_NEAR (shapePose (Shape::rise, home, 12.0, L, 0).elevation, 60.0f, 1e-4f);
+	EXPECT_NEAR (shapePose (Shape::rise, home, 14.0, L, 0).elevation, home.elevation + 0.5f * (60.0f - home.elevation), 1e-3f);
+	EXPECT_NEAR (shapePose (Shape::rise, home, L, L, 0).elevation, home.elevation, 1e-4f);
+
+	const double half = 2.0;   // F = 1, rise over [0, 1]
+	EXPECT_NEAR (shapePose (Shape::rise, home, 1.0, half, 0).elevation, 60.0f, 1e-4f);
+	EXPECT_NEAR (shapePose (Shape::rise, home, half, half, 0).elevation, home.elevation, 1e-4f);
+	EXPECT_FLOAT_EQ (shapePose (Shape::rise, home, 5.0, L, 0).azimuth, home.azimuth);
+}
+
+TEST (MotionLite, ScatIsRepeatableBySeed)
+{
+	const double L = 16.0;
+	for (double t = 0.0; t < L - 1.0; t += 1.0)
+	{
+		const auto a = shapePose (Shape::scat, home, t + 0.3, L, 77);
+		const auto b = shapePose (Shape::scat, home, t + 0.9, L, 77);
+		EXPECT_FLOAT_EQ (a.azimuth, b.azimuth);   // one value per beat
+		EXPECT_FLOAT_EQ (a.elevation, b.elevation);
+		EXPECT_GE (a.azimuth, -180.0f);
+		EXPECT_LT (a.azimuth, 180.0f);
+		EXPECT_GE (a.elevation, 0.0f);
+		EXPECT_LE (a.elevation, 45.0f);
+	}
+	bool differs = false;
+	for (double t = 0.0; t < L - 1.0; t += 1.0)
+		differs = differs || shapePose (Shape::scat, home, t, L, 77).azimuth != shapePose (Shape::scat, home, t, L, 78).azimuth;
+	EXPECT_TRUE (differs);
+	EXPECT_NE (shapePose (Shape::scat, home, 0.0, L, 77).azimuth, shapePose (Shape::scat, home, 1.0, L, 77).azimuth);
+
+	const auto last = shapePose (Shape::scat, home, L - 0.5, L, 77);
+	EXPECT_FLOAT_EQ (last.azimuth, home.azimuth);
+	EXPECT_FLOAT_EQ (last.elevation, home.elevation);
+}
+
+TEST (MotionLite, EnvelopeRisesAndFallsInOneBeat)
+{
+	EXPECT_FLOAT_EQ (envelope (0.0, 2.0), 0.0f);
+	EXPECT_FLOAT_EQ (envelope (0.5, 2.0), 0.5f);
+	EXPECT_FLOAT_EQ (envelope (1.0, 2.0), 1.0f);
+	EXPECT_FLOAT_EQ (envelope (1.5, 2.0), 0.5f);
+	EXPECT_FLOAT_EQ (envelope (2.0, 2.0), 0.0f);
+	EXPECT_FLOAT_EQ (envelope (8.0, 16.0), 1.0f);
+	EXPECT_FLOAT_EQ (envelope (-1.0, 16.0), 0.0f);
+	EXPECT_FLOAT_EQ (envelope (20.0, 16.0), 0.0f);
+}
+
+TEST (MotionLite, ArmedStartsOnTheNextBarOnly)
+{
+	auto motion = makeMotion();
+	motion.advance (at (5.0), 0.0);
+	motion.press (Shape::orbit, false, 1);
+	EXPECT_EQ (motion.state (Shape::orbit), PadState::armed);
+	motion.advance (at (6.0), 0.0);
+	motion.advance (at (7.9), 0.0);
+	EXPECT_EQ (motion.state (Shape::orbit), PadState::armed);
+	EXPECT_FALSE (motion.progress().has_value());
+	motion.advance (at (8.0), 0.0);
+	EXPECT_EQ (motion.state (Shape::orbit), PadState::running);
+	EXPECT_EQ (motion.progress(), (std::pair<int, int> { 1, 16 }));
+}
+
+TEST (MotionLite, ABackwardJumpStartsNothing)
+{
+	auto motion = makeMotion();
+	motion.advance (at (9.0), 0.0);
+	motion.press (Shape::orbit, false, 1);
+	motion.advance (at (3.9), 0.0);   // jump back over the bar line at 8
+	EXPECT_EQ (motion.state (Shape::orbit), PadState::armed);
+	motion.advance (at (4.0), 0.0);
+	EXPECT_EQ (motion.state (Shape::orbit), PadState::running);
+}
+
+TEST (MotionLite, ShiftStartsNow)
+{
+	auto motion = makeMotion();
+	motion.advance (at (5.0), 0.0);
+	motion.press (Shape::rise, true, 1);
+	EXPECT_EQ (motion.state (Shape::rise), PadState::running);
+	const auto frame = motion.advance (at (5.0), 0.0);
+	EXPECT_NEAR (frame.pose.elevation, home.elevation, 1e-4f);
+	motion.advance (at (5.5), 3.0 * beatSeconds);   // 3 beats pass after this block
+	const auto later = motion.advance (at (7.0), 0.0);
+	EXPECT_GT (later.pose.elevation, home.elevation);
+}
+
+TEST (MotionLite, NoGridStartsAtOnceAt120Bpm)
+{
+	auto motion = makeMotion();
+	motion.press (Shape::orbit, false, 1);
+	motion.advance (noGrid(), 0.0);
+	EXPECT_EQ (motion.state (Shape::orbit), PadState::running);
+	// 16 beats at 120 BPM = 8 s; after 2 s the orbit is a quarter round.
+	for (int i = 0; i < 4; ++i)
+		motion.advance (noGrid(), 0.5);
+	const auto frame = motion.advance (noGrid(), 0.0);
+	EXPECT_NEAR (wrapDiff (frame.pose.azimuth, home.azimuth + 90.0f), 0.0f, 1e-2f);
+}
+
+TEST (MotionLite, PausedFreezesARunningShot)
+{
+	auto motion = started();
+	motion.advance (at (8.0, false), 10.0);
+	motion.advance (at (8.0, false), 10.0);
+	EXPECT_EQ (motion.progress(), (std::pair<int, int> { 1, 16 }));
+	EXPECT_EQ (motion.state (Shape::orbit), PadState::running);
+	motion.advance (at (8.0), 2.0);   // 4 beats
+	EXPECT_EQ (motion.progress(), (std::pair<int, int> { 5, 16 }));
+}
+
+TEST (MotionLite, TheRateScalesTheShotsClock)
+{
+	auto motion = started();
+	motion.advance ({ 8.0, 120.0, 0.5, true }, 4.0);   // 4 s * 2 beats/s * 0.5 = 4 beats
+	EXPECT_EQ (motion.progress(), (std::pair<int, int> { 5, 16 }));
+}
+
+TEST (MotionLite, TheShotEndsAndGoesBackToIdle)
+{
+	auto motion = started();
+	motion.advance (at (8.0), 8.0);   // exactly 16 beats
+	const auto frame = motion.advance (at (24.0), 0.0);
+	EXPECT_EQ (motion.state (Shape::orbit), PadState::idle);
+	EXPECT_FLOAT_EQ (frame.pose.azimuth, home.azimuth);
+	EXPECT_FLOAT_EQ (frame.envelope, 0.0f);
+}
+
+TEST (MotionLite, PressingTheRunningPadReturnsHomeInOneBeat)
+{
+	auto motion = started (Shape::orbit);
+	motion.advance (at (8.0), 2.0);   // 4 beats in: az = home + 90
+	motion.press (Shape::orbit, false, 2);
+	EXPECT_EQ (motion.state (Shape::orbit), PadState::running);
+	const auto first = motion.advance (at (12.0), 0.25);   // half a beat
+	EXPECT_NEAR (wrapDiff (first.pose.azimuth, home.azimuth + 90.0f), 0.0f, 1e-2f);
+	const auto mid = motion.advance (at (12.5), 0.25);
+	EXPECT_NEAR (wrapDiff (mid.pose.azimuth, home.azimuth + 45.0f), 0.0f, 1e-2f);
+	EXPECT_NEAR (mid.envelope, 0.5f, 1e-4f);
+	const auto done = motion.advance (at (13.0), 0.0);
+	EXPECT_EQ (motion.state (Shape::orbit), PadState::idle);
+	EXPECT_NEAR (wrapDiff (done.pose.azimuth, home.azimuth), 0.0f, 1e-3f);
+	EXPECT_FLOAT_EQ (done.envelope, 0.0f);
+}
+
+TEST (MotionLite, AnotherPadReplacesAtTheNextBar)
+{
+	auto motion = started (Shape::orbit);
+	motion.advance (at (8.0), 1.0);   // beat 2 of the orbit
+	motion.press (Shape::ping, false, 3);
+	EXPECT_EQ (motion.state (Shape::orbit), PadState::running);
+	EXPECT_EQ (motion.state (Shape::ping), PadState::armed);
+	motion.advance (at (9.0), 0.0);
+	motion.advance (at (11.9), 0.0);
+	EXPECT_EQ (motion.state (Shape::ping), PadState::armed);
+	motion.advance (at (12.0), 0.0);
+	EXPECT_EQ (motion.state (Shape::orbit), PadState::idle);
+	EXPECT_EQ (motion.state (Shape::ping), PadState::running);
+}
+
+TEST (MotionLite, ShiftWithAnotherPadReplacesNow)
+{
+	auto motion = started (Shape::orbit);
+	motion.advance (at (8.0), 1.0);
+	motion.press (Shape::ping, true, 3);
+	EXPECT_EQ (motion.state (Shape::orbit), PadState::idle);
+	EXPECT_EQ (motion.state (Shape::ping), PadState::running);
+	EXPECT_EQ (motion.progress(), (std::pair<int, int> { 1, 16 }));
+}
+
+TEST (MotionLite, PressingAnArmedPadDisarms)
+{
+	auto motion = makeMotion();
+	motion.advance (at (5.0), 0.0);
+	motion.press (Shape::scat, false, 1);
+	motion.press (Shape::scat, false, 1);
+	EXPECT_EQ (motion.state (Shape::scat), PadState::idle);
+	motion.advance (at (8.0), 0.0);
+	EXPECT_EQ (motion.state (Shape::scat), PadState::idle);
+}
+
+TEST (MotionLite, LengthClampsAndAppliesToTheNextTrigger)
+{
+	StemMotion motion;
+	EXPECT_DOUBLE_EQ (motion.lengthBars(), 4.0);
+	motion.lengthUp();
+	EXPECT_DOUBLE_EQ (motion.lengthBars(), 8.0);
+	motion.lengthUp();
+	EXPECT_DOUBLE_EQ (motion.lengthBars(), 8.0);
+	for (int i = 0; i < 6; ++i)
+		motion.lengthDown();
+	EXPECT_DOUBLE_EQ (motion.lengthBars(), 0.5);
+
+	auto running = started();
+	running.lengthDown();
+	EXPECT_EQ (running.progress(), (std::pair<int, int> { 1, 16 }));   // a running shot keeps its length
+	running.press (Shape::orbit, false, 1);                            // stop
+	running.advance (at (9.0), 2.0);
+	running.press (Shape::rise, true, 1);
+	EXPECT_EQ (running.progress(), (std::pair<int, int> { 1, 8 }));   // 2 bars next time
+}
+
+TEST (MotionLite, ThreeDGoesBackToThePot)
+{
+	auto motion = started (Shape::rise);
+	motion.advance (at (8.0), 4.0);   // 8 beats in after this block
+	const auto mid = motion.advance (at (16.0), 4.0);
+	EXPECT_FLOAT_EQ (mid.envelope, 1.0f);
+	EXPECT_FLOAT_EQ (spatial::effectiveThreeD (1.0f, 0.3f, mid.envelope), 1.0f);
+	const auto after = motion.advance (at (24.0), 0.0);
+	EXPECT_FLOAT_EQ (after.envelope, 0.0f);
+	EXPECT_FLOAT_EQ (spatial::effectiveThreeD (1.0f, 0.3f, after.envelope), 0.3f);
+}
+
+TEST (MotionLite, SetHomeMovesAnIdleStemAtOnceAndARunningShotFollows)
+{
+	auto motion = makeMotion();
+	motion.setHome ({ -90.0f, 0.0f, 40.0f });
+	EXPECT_FLOAT_EQ (motion.advance (at (1.0), 0.0).pose.azimuth, -90.0f);
+	motion.press (Shape::rise, true, 1);
+	motion.setHome ({ 10.0f, 20.0f, 40.0f });
+	EXPECT_FLOAT_EQ (motion.advance (at (1.0), 0.0).pose.elevation, 20.0f);
+}
+
+TEST (MotionLite, AShotStartedByASeekWhilePausedStaysFrozen)
+{
+	auto motion = makeMotion();
+	motion.advance (at (5.0, false), 0.0);
+	motion.press (Shape::orbit, false, 1);
+	motion.advance (at (9.5, false), 0.0);   // a forward seek over the bar line at 8
+	EXPECT_EQ (motion.state (Shape::orbit), PadState::running);
+	motion.advance (at (9.5, false), 10.0);
+	motion.advance (at (9.5, false), 10.0);
+	EXPECT_EQ (motion.progress(), (std::pair<int, int> { 1, 16 }));
+	EXPECT_EQ (motion.state (Shape::orbit), PadState::running);
+}
+
+TEST (MotionLite, SetLengthTakesOnlyTheValidSet)
+{
+	StemMotion motion;
+	for (const double bars : { 0.5, 1.0, 2.0, 4.0, 8.0 })
+	{
+		motion.setLengthBars (bars);
+		EXPECT_DOUBLE_EQ (motion.lengthBars(), bars);
+	}
+	motion.setLengthBars (2.0);
+	motion.setLengthBars (3.0);
+	EXPECT_DOUBLE_EQ (motion.lengthBars(), 4.0);
+	motion.setLengthBars (1.0);
+	motion.setLengthBars (std::nan (""));
+	EXPECT_DOUBLE_EQ (motion.lengthBars(), 4.0);
+}
+
+TEST (MotionLite, ALengthChangeAfterThePressLeavesTheArmedShotAlone)
+{
+	auto motion = makeMotion();
+	motion.advance (at (5.0), 0.0);
+	motion.press (Shape::orbit, false, 1);
+	motion.lengthDown();
+	motion.advance (at (8.0), 0.0);
+	EXPECT_EQ (motion.progress(), (std::pair<int, int> { 1, 16 }));
+	EXPECT_DOUBLE_EQ (motion.lengthBars(), 2.0);
+}
+
+TEST (MotionLite, ARepeatPressOnTheReturningPadIsIgnored)
+{
+	auto motion = started (Shape::orbit);
+	motion.advance (at (8.0), 2.0);
+	motion.press (Shape::orbit, false, 2);   // stop: return
+	motion.advance (at (12.0), 0.25);
+	motion.press (Shape::orbit, false, 3);   // again, no SHIFT
+	EXPECT_EQ (motion.state (Shape::orbit), PadState::running);
+	EXPECT_EQ (motion.progress(), (std::pair<int, int> { 16, 16 }));
+	motion.advance (at (12.5), 0.25);
+	motion.advance (at (13.0), 0.0);
+	EXPECT_EQ (motion.state (Shape::orbit), PadState::idle) << "the return still ends one beat after the stop";
+}
+
+TEST (MotionLite, ShiftOnTheReturningPadStartsAFreshShotNow)
+{
+	auto motion = started (Shape::orbit);
+	motion.advance (at (8.0), 2.0);
+	motion.press (Shape::orbit, false, 2);   // stop: return
+	motion.advance (at (12.0), 0.25);
+	motion.press (Shape::orbit, true, 3);
+	EXPECT_EQ (motion.state (Shape::orbit), PadState::running);
+	EXPECT_EQ (motion.progress(), (std::pair<int, int> { 1, 16 }));
+	motion.advance (at (12.5), 1.0);   // two beats: a return would have ended
+	motion.advance (at (14.5), 0.0);
+	EXPECT_EQ (motion.state (Shape::orbit), PadState::running);
+	EXPECT_EQ (motion.progress(), (std::pair<int, int> { 3, 16 }));
+}
+
+// Float rounding next to the seam must land on -180, never on 180.
+TEST (MotionLite, AnAzimuthIsNeverPlus180)
+{
+	const double L = 16.0;
+	const spatial::Pose edge { std::nextafter (180.0f, 0.0f), 0.0f, 60.0f };
+	const auto pose = shapePose (Shape::orbit, edge, 1.0e-5 * L / 360.0, L, 0);
+	EXPECT_LT (pose.azimuth, 180.0f);
+	EXPECT_GE (pose.azimuth, -180.0f);
+
+	for (std::uint64_t seed = 0; seed < 20000; ++seed)
+	{
+		const auto scat = shapePose (Shape::scat, home, 0.5, L, seed).azimuth;
+		ASSERT_LT (scat, 180.0f) << seed;
+		ASSERT_GE (scat, -180.0f) << seed;
+	}
+}

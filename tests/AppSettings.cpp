@@ -1,0 +1,47 @@
+// SPDX-FileCopyrightText: 2026 Raphael Eismann
+// SPDX-License-Identifier: GPL-3.0-or-later
+#include <gtest/gtest.h>
+
+#include "AppSettings.h"
+
+namespace
+{
+	juce::File freshConfigDir (const char* name)
+	{
+		auto dir = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("sd-appsettings-" + juce::String (name));
+		dir.deleteRecursively();
+		return dir;
+	}
+}
+
+TEST (AppSettings, AnInstanceSettingsFileFollowsItsLetterBesideItsSession)
+{
+	const auto config = freshConfigDir ("path");
+	EXPECT_EQ (appsettings::instanceSettingsFile (config, 'A'), config.getChildFile ("A").getChildFile ("StemDeck.settings"));
+	EXPECT_EQ (appsettings::instanceSettingsFile (config, 'B'), config.getChildFile ("B").getChildFile ("StemDeck.settings"));
+
+	juce::PropertiesFile file (appsettings::instanceOptions (config, 'B'));
+	EXPECT_EQ (file.getFile(), appsettings::instanceSettingsFile (config, 'B'));
+}
+
+TEST (AppSettings, TwoInstancesWritingInterleavedKeepTheirOwnKeys)
+{
+	const auto config = freshConfigDir ("interleaved");
+	{
+		juce::PropertiesFile a (appsettings::instanceOptions (config, 'A'));
+		juce::PropertiesFile b (appsettings::instanceOptions (config, 'B'));   // both open before either saves
+		a.setValue ("panelHere", true);
+		b.setValue ("panelHere", false);
+		b.setValue ("phonesMode", "on");
+		a.setValue ("windowState", "wsA");
+		ASSERT_TRUE (b.saveIfNeeded());
+		ASSERT_TRUE (a.saveIfNeeded());
+	}
+	juce::PropertiesFile a (appsettings::instanceOptions (config, 'A'));
+	juce::PropertiesFile b (appsettings::instanceOptions (config, 'B'));
+	EXPECT_TRUE (a.getBoolValue ("panelHere"));
+	EXPECT_EQ (a.getValue ("windowState"), "wsA");
+	EXPECT_FALSE (b.getBoolValue ("panelHere"));
+	EXPECT_EQ (b.getValue ("phonesMode"), "on");
+	config.deleteRecursively();
+}

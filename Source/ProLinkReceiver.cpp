@@ -108,7 +108,12 @@ bool ProLinkReceiver::start (int number, const osctruth::ProLinkPorts& truthPort
 	if (! ports.complete())
 		return fail ("no a3-osc.json");
 
-	if (! detectInterface())
+	if (forcedBroadcastIp != 0)
+	{
+		localIp = forcedLocalIp;
+		broadcastIp = forcedBroadcastIp;
+	}
+	else if (! detectInterface())
 		return fail ("no network");
 
 	if (! openSocket (sockAnnounce, ports.announce)
@@ -206,4 +211,10 @@ void ProLinkReceiver::run()
 				}
 		}
 	}
+}
+
+void ProLinkReceiver::useInterface (uint32_t localIpNetworkOrder, uint32_t broadcastIpNetworkOrder)
+{
+	forcedLocalIp = localIpNetworkOrder;
+	forcedBroadcastIp = broadcastIpNetworkOrder;
 }

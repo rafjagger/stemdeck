@@ -5,6 +5,8 @@
 #include "PanelMap.h"
 
 #include <atomic>
+#include <functional>
+#include <memory>
 #include <mutex>
 
 // The A³ Motion panel PCB on a USB serial port, driven by StemDeck where
@@ -21,23 +23,67 @@
 // exclusively (flock and TIOCEXCL): A³ Motion and StemDeck can never both
 // drive it -- whichever opened it first keeps it. With no panel, StemDeck
 // runs as without one and looks again every two seconds.
+namespace panel
+{
+	inline Rgb rgbOf (juce::Colour c) { return { c.getRed(), c.getGreen(), c.getBlue() }; }
+}
+
 class PanelDevice : private juce::Thread
 {
 public:
+	// What the keys mean is the map's, not the port's: a decoder turns each
+	// polled frame into whatever its map reports. It runs on the panel's
+	// thread and hands back the work to do on the message thread, if any.
+	struct Decoder
+	{
+		virtual ~Decoder() = default;
+		virtual std::function<void()> feed (const panel::Frame&) = 0;
+		virtual void reset() = 0;   // a panel (re)connected
+	};
+
+	// A map's InputDecoder and Event as a Decoder: the events go to onEvent,
+	// on the message thread, one call each.
+	template <class InputDecoder, class Event>
+	struct MappedDecoder : Decoder
+	{
+		std::function<void (const Event&)> onEvent;
+
+		std::function<void()> feed (const panel::Frame& frame) override
+		{
+			auto events = decoder.feed (frame);
+			if (events.empty())
+				return {};
+			return [this, events = std::move (events)]
+			{
+				if (onEvent)
+					for (const auto& e : events)
+						onEvent (e);
+			};
+		}
+		void reset() override { decoder.reset(); }
+
+		InputDecoder decoder;
+	};
+
+	// The two-deck panel (PanelMap): the events go to onEvent.
 	PanelDevice();
+	// Any other map.
+	explicit PanelDevice (std::unique_ptr<Decoder>);
 	~PanelDevice() override;
 
-	// On the message thread, one call per event.
+	// The two-deck panel's events, on the message thread, one call per event.
 	std::function<void (const panel::Event&)> onEvent;
 
 	// From the message thread: what the LEDs should show. Only what changed
 	// goes over the wire.
 	void show (const panel::LedState& state);
+	void show (const panel::Leds& leds);
 
 	bool isConnected() const { return connected.load(); }
 
 private:
 	void run() override;
+	void begin (std::unique_ptr<Decoder>);
 
 	bool open (const std::string& path);
 	bool pingAnswers();
@@ -47,14 +93,14 @@ private:
 	bool writeAll (const std::uint8_t* data, size_t size);
 	bool readExact (std::uint8_t* data, size_t size, int timeoutMs);
 	void writeLeds();
-	void post (std::vector<panel::Event> events);
+	void post (std::function<void()> work);
 	void note (const juce::String& line);
 
 	int fd = -1;
 	std::string openPath;
 	juce::String lastNote;
 	panel::Reconnect reconnect;
-	panel::InputDecoder decoder;
+	std::unique_ptr<Decoder> decoder;
 	int cycle = 0;
 
 	std::mutex ledLock;

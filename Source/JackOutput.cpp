@@ -1,4 +1,5 @@
 #include "JackOutput.h"
+#include "JackFormat.h"
 
 JackOutput::~JackOutput()
 {
@@ -60,6 +61,7 @@ juce::String JackOutput::open (const juce::String& name, const juce::StringArray
 
 	sampleRate = (double) jack_get_sample_rate (client);
 	bufferSize = jack_get_buffer_size (client);
+	renderBuffer.setSize ((int) ports.size(), (int) bufferSize.load());
 	source->prepareToPlay ((int) bufferSize.load(), sampleRate.load());
 
 	if (jack_activate (client) != 0)
@@ -91,6 +93,11 @@ void JackOutput::close()
 	source = nullptr;
 }
 
+bool JackOutput::isPortConnected (int index) const
+{
+	return isRunning() && juce::isPositiveAndBelow (index, (int) ports.size()) && jack_port_connected (ports[(size_t) index]) > 0;
+}
+
 int JackOutput::getNumConnectedPorts() const
 {
 	if (! isRunning())
@@ -113,9 +120,13 @@ int JackOutput::processCallback (jack_nframes_t numFrames, void* arg)
 	for (size_t i = 0; i < self.ports.size(); ++i)
 		self.channelPointers[i] = static_cast<float*> (jack_port_get_buffer (self.ports[i], numFrames));
 
-	// Wraps the port buffers directly; no allocation for up to 32 channels.
-	juce::AudioBuffer<float> buffer (self.channelPointers.data(), (int) self.channelPointers.size(), (int) numFrames);
+	// Sized on every buffer size change; growing here is a fallback that allocates.
+	auto& buffer = self.renderBuffer;
+	if ((int) numFrames > buffer.getNumSamples())
+		buffer.setSize ((int) self.ports.size(), (int) numFrames, false, false, true);
 	self.source->getNextAudioBlock (juce::AudioSourceChannelInfo (&buffer, 0, (int) numFrames));
+	for (size_t i = 0; i < self.ports.size(); ++i)
+		juce::FloatVectorOperations::copy (self.channelPointers[i], buffer.getReadPointer ((int) i), (int) numFrames);
 
 	if (self.sink != nullptr && ! self.inputs.empty())
 	{
@@ -133,7 +144,10 @@ int JackOutput::bufferSizeCallback (jack_nframes_t numFrames, void* arg)
 	if (numFrames != self.bufferSize.load())
 	{
 		self.bufferSize = numFrames;
-		self.source->prepareToPlay ((int) numFrames, self.sampleRate.load());
+		self.renderBuffer.setSize ((int) self.ports.size(), (int) numFrames);
+
+		if (jackformat::complete (numFrames, self.sampleRate.load()))
+			self.source->prepareToPlay ((int) numFrames, self.sampleRate.load());
 	}
 
 	return 0;
@@ -146,7 +160,9 @@ int JackOutput::sampleRateCallback (jack_nframes_t rate, void* arg)
 	if (! juce::approximatelyEqual ((double) rate, self.sampleRate.load()))
 	{
 		self.sampleRate = (double) rate;
-		self.source->prepareToPlay ((int) self.bufferSize.load(), (double) rate);
+
+		if (jackformat::complete (self.bufferSize.load(), (double) rate))
+			self.source->prepareToPlay ((int) self.bufferSize.load(), (double) rate);
 	}
 
 	return 0;

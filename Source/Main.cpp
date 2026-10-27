@@ -8,6 +8,11 @@
 
 #include <JuceHeader.h>
 #include "MainComponent.h"
+#include "OneDeckComponent.h"
+#include "DeckInstance.h"
+#include "LaunchOptions.h"
+
+#include <iostream>
 
 //==============================================================================
 class djApplication_LaurentKleinApplication  : public juce::JUCEApplication
@@ -23,14 +28,38 @@ public:
     //==============================================================================
     void initialise (const juce::String& commandLine) override
     {
-        // This method is where you should put your application's initialisation code..
+        const auto parsed = parseLaunch (toStdStrings (getCommandLineParameterArray()));
 
-        mainWindow.reset (new MainWindow (getApplicationName()));
+        if (const auto* why = std::get_if<std::string> (&parsed))
+        {
+            std::cerr << "StemDeck: " << *why << std::endl;
+            setApplicationReturnValue (2);
+            quit();
+            return;
+        }
+
+        const auto& options = std::get<LaunchOptions> (parsed);
+
+        // -bformat: one deck per instance (R10); without it the two-deck app
+        // as it always was. Each keeps its window's place in its own settings file.
+        if (options.oneDeck)
+        {
+            const DeckInstance instance { options.deck };
+            auto content = std::make_unique<OneDeckComponent> (instance);
+            auto& settings = content->instanceSettings();
+            mainWindow.reset (new MainWindow (juce::String (instance.title()), std::move (content), settings, "windowState"));
+        }
+        else
+        {
+            auto content = std::make_unique<MainComponent>();
+            auto& settings = content->settings();
+            mainWindow.reset (new MainWindow (getApplicationName(), std::move (content), settings, "windowState"));
+        }
 
         // The rig's service starts it with --fullscreen: the i3 rule alone
         // missed it, catching one of the windows JUCE builds and drops again
         // while StemDeck comes up (2026-09-30).
-        if (commandLine.contains ("--fullscreen"))
+        if (options.fullscreen)
             mainWindow->setFullScreen (true);
     }
 
@@ -64,15 +93,16 @@ public:
     class MainWindow    : public juce::DocumentWindow
     {
     public:
-        MainWindow (juce::String name)
+        MainWindow (juce::String name, std::unique_ptr<juce::Component> content, juce::PropertiesFile& contentSettings,
+                    juce::String windowStateKey)
             : DocumentWindow (name,
                               juce::Desktop::getInstance().getDefaultLookAndFeel()
                                                           .findColour (juce::ResizableWindow::backgroundColourId),
-                              DocumentWindow::allButtons)
+                              DocumentWindow::allButtons),
+              settings (contentSettings), stateKey (windowStateKey)
         {
             setUsingNativeTitleBar (true);
-            auto* content = new MainComponent();
-            setContentOwned (content, true);
+            setContentOwned (content.release(), true);
 
            #if JUCE_IOS || JUCE_ANDROID
             setFullScreen (true);
@@ -80,7 +110,7 @@ public:
             setResizable (true, true);
             centreWithSize (getWidth(), getHeight());
             // Where it was last time (StemDeck.settings).
-            if (const auto state = content->settings().getValue ("windowState"); state.isNotEmpty())
+            if (const auto state = settings.getValue (stateKey); state.isNotEmpty())
                 restoreWindowStateFromString (state);
            #endif
 
@@ -89,8 +119,8 @@ public:
 
         ~MainWindow() override
         {
-            if (auto* content = dynamic_cast<MainComponent*> (getContentComponent()))
-                content->settings().setValue ("windowState", getWindowStateAsString());
+            // The settings belong to the content, deleted after this body.
+            settings.setValue (stateKey, getWindowStateAsString());
         }
 
         void closeButtonPressed() override
@@ -109,10 +139,21 @@ public:
         */
 
     private:
+        juce::PropertiesFile& settings;
+        const juce::String stateKey;
+
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainWindow)
     };
 
 private:
+    static std::vector<std::string> toStdStrings (const juce::StringArray& words)
+    {
+        std::vector<std::string> out;
+        for (const auto& word : words)
+            out.push_back (word.toStdString());
+        return out;
+    }
+
     std::unique_ptr<MainWindow> mainWindow;
 };
 

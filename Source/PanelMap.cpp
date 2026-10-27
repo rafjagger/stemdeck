@@ -1,5 +1,7 @@
 #include "PanelMap.h"
 
+#include "PanelEdges.h"
+
 #include <algorithm>
 #include <cstdlib>
 
@@ -34,42 +36,6 @@ namespace panel
 
 		int deckOfColumn (int col) { return col / columnsPerDeck; }
 		int outerColumn (int deck) { return deck == 0 ? 0 : columns - 1; }
-
-		// A key's press and release from its two bits and whether it was
-		// down at the last poll -- the firmware's states, read as A³ Motion
-		// reads them.
-		struct Edges { bool pressed = false, released = false; };
-
-		Edges edges (KeyState state, bool& down)
-		{
-			Edges e;
-			switch (state)
-			{
-				case KeyState::click:
-					e.pressed = ! down;
-					e.released = true;
-					down = false;
-					break;
-				case KeyState::held:
-					e.pressed = ! down;
-					down = true;
-					break;
-				case KeyState::idle:
-					e.released = down;
-					down = false;
-					break;
-				case KeyState::bounce:
-					break;
-			}
-			return e;
-		}
-
-		Rgb scaled (Rgb c, int numerator, int denominator)
-		{
-			return { (std::uint8_t) (c.r * numerator / denominator),
-					 (std::uint8_t) (c.g * numerator / denominator),
-					 (std::uint8_t) (c.b * numerator / denominator) };
-		}
 
 		// Which slot of its row a pad control sits in; -1 for a route the stem
 		// may not use.
@@ -167,7 +133,7 @@ namespace panel
 
 		for (int i = 0; i < buttonCount; ++i)
 		{
-			const auto e = edges (frame.buttons[(size_t) i], keyDown[(size_t) i]);
+			const auto e = tracker.key (i, frame.buttons[(size_t) i]);
 			if (! e.pressed && ! e.released)
 				continue;
 
@@ -195,7 +161,7 @@ namespace panel
 			const auto knob = encoderStem (i);
 			if (encoder.delta != 0)
 				events.push_back ({ Event::Type::gain, knob.deck, knob.stem, -1, (double) encoder.delta });
-			if (edges (encoder.key, pushDown[(size_t) i]).pressed)
+			if (tracker.push (i, encoder.key).pressed)
 				events.push_back ({ Event::Type::mute, knob.deck, knob.stem, -1, 0.0 });
 		}
 
@@ -222,8 +188,7 @@ namespace panel
 
 	void InputDecoder::reset()
 	{
-		keyDown = {};
-		pushDown = {};
+		tracker.reset();
 		potAt = {};
 	}
 
@@ -244,6 +209,13 @@ namespace panel
 			return (std::uint8_t) (newLo + between * (255.0 - newLo) + 0.5);
 		};
 		return { channel (c.r), channel (c.g), channel (c.b) };
+	}
+
+	Rgb scaled (Rgb c, int numerator, int denominator)
+	{
+		return { (std::uint8_t) (c.r * numerator / denominator),
+				 (std::uint8_t) (c.g * numerator / denominator),
+				 (std::uint8_t) (c.b * numerator / denominator) };
 	}
 
 	Rgb base (Rgb colour)

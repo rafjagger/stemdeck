@@ -1,4 +1,5 @@
 #include "TempoAnalysis.h"
+#include "FileLock.h"
 
 namespace
 {
@@ -421,6 +422,7 @@ void AnalysisCache::storeNewDownbeat (const StemSet& set, double firstBeat)
 
 	element->setAttribute ("firstBeat", after.firstBeat);
 	element->setAttribute ("version", after.version);
+	touch (keyFor (set));
 	write();
 }
 
@@ -430,7 +432,7 @@ void AnalysisCache::storeCorrected (const StemSet& set, const BeatGrid& grid)
 	{
 		entry->setAttribute ("correctedBpm", grid.bpm);
 		entry->setAttribute ("correctedFirstBeat", grid.firstBeat);
-		unwritten = true;
+		touch (keyFor (set));
 	}
 }
 
@@ -440,14 +442,20 @@ void AnalysisCache::clearCorrected (const StemSet& set)
 	{
 		entry->removeAttribute ("correctedBpm");
 		entry->removeAttribute ("correctedFirstBeat");
-		unwritten = true;
+		touch (keyFor (set));
 	}
 }
 
 void AnalysisCache::flush()
 {
-	if (unwritten && xml->writeTo (file))
-		unwritten = false;
+	if (unwritten)
+		write();
+}
+
+void AnalysisCache::touch (const juce::String& key)
+{
+	touched.insert (key);
+	unwritten = true;
 }
 
 void AnalysisCache::store (const StemSet& set, const BeatGrid& grid)
@@ -465,14 +473,42 @@ void AnalysisCache::store (const StemSet& set, const BeatGrid& grid)
 	entry->setAttribute ("bpm", grid.bpm);
 	entry->setAttribute ("firstBeat", grid.firstBeat);
 	entry->setAttribute ("version", CachedGrid::currentVersion);
+	touch (key);
 	write();
 }
 
+// Under analysis.xml.lock: the file as another instance left it, with this
+// one's touched sets put in. Without the lock (a folder that refuses the lock
+// file) it is written whole, as before two instances shared it.
 void AnalysisCache::write()
 {
 	file.getParentDirectory().createDirectory();
-	if (xml->writeTo (file))
+	FileLock lock (file.getSiblingFile (file.getFileName() + ".lock"));
+	if (lock.acquire() == FileLock::Result::acquired)
+		mergeFromDisk();
+	if (xml->writeTo (file))   // through a temporary file, renamed over it
+	{
 		unwritten = false;
+		touched.clear();
+	}
+}
+
+// Every set this process did not touch is taken from the file; a touched
+// set is ours, whatever the file says (the last write wins).
+void AnalysisCache::mergeFromDisk()
+{
+	auto onDisk = juce::XmlDocument::parse (file);
+	if (onDisk == nullptr || ! onDisk->hasTagName ("ANALYSIS"))
+		return;
+
+	for (const auto& key : touched)
+	{
+		if (auto* theirs = onDisk->getChildByAttribute ("key", key))
+			onDisk->removeChildElement (theirs, true);
+		if (const auto* ours = xml->getChildByAttribute ("key", key))
+			onDisk->addChildElement (new juce::XmlElement (*ours));
+	}
+	xml = std::move (onDisk);
 }
 
 juce::File AnalysisCache::featuresFileFor (const StemSet& set) const

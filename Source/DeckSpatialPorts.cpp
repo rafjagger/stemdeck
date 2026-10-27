@@ -105,12 +105,11 @@ void DeckSpatialPorts::process (const float* const* stems, juce::AudioBuffer<flo
 	DeckSpatial::Outputs ports;
 	for (int c = 0; c < outputs::bformatChannels; ++c)
 		ports.bformat[(size_t) c] = at (layout.bformat + c);
+	// The 16-channel aux bus has no ports yet (B3 lays them out); an unset aux is not rendered.
 	for (int side = 0; side < 2; ++side)
 	{
 		ports.cue[(size_t) side] = at (layout.cue + side);
 		ports.phones[(size_t) side] = at (layout.phones + side);
-		if (layout.aux >= 0)
-			ports.aux[(size_t) side] = at (layout.aux + side);
 	}
 	spatial->process (stems, ports, count);
 }

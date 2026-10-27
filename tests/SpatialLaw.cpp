@@ -95,3 +95,18 @@ TEST (SpatialLaw, PhonesModeIsStoredByName)
     EXPECT_EQ (spatial::phonesModeFrom (""), PhonesMode::automatic);
     EXPECT_EQ (spatial::phonesModeFrom ("ON"), PhonesMode::automatic);
 }
+
+TEST (SpatialLaw, AuxGainIsLinearAndClamped)
+{
+    EXPECT_FLOAT_EQ (spatial::auxGain (0.37f), 0.37f);
+    EXPECT_EQ (spatial::auxGain (1.0f), 1.0f);
+    EXPECT_EQ (spatial::auxGain (2.0f), 1.0f);
+}
+
+TEST (SpatialLaw, AuxGainIsExactSilenceAtZero)
+{
+    EXPECT_EQ (spatial::auxGain (0.0f), 0.0f);
+    EXPECT_EQ (spatial::auxGain (1e-10f), 0.0f);
+    EXPECT_EQ (spatial::auxGain (-1.0f), 0.0f);
+    EXPECT_EQ (spatial::auxGain (std::numeric_limits<float>::quiet_NaN()), 0.0f);
+}

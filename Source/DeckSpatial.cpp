@@ -16,7 +16,7 @@ constexpr double rampSeconds = 0.01;
 constexpr float iemOrderThree = 4.0f;   // IEM's choice value for 3rd order (0 = auto)
 
 // The per-chunk scratch rows.
-enum Row { movingRow, muteRow, cueRow, steadyLeft, steadyRight, scratchRows };
+enum Row { movingRow, muteRow, cueRow, auxRow, steadyLeft, steadyRight, scratchRows };
 
 // R4 compares against 0.0f and 1.0f on purpose: silence is exactly 0, not "near 0".
 bool exactly (float value, float expected)
@@ -125,17 +125,28 @@ void timed (std::int64_t& ticks, Work&& work)
 	work();
 	ticks += juce::Time::getHighResolutionTicks() - start;
 }
+
+// The send's ramp times the stem's MUTE ramp, per sample; zero if either is 0 throughout.
+GainSpan sendGain (juce::LinearSmoothedValue<float>& sendRamp, GainSpan muteSpan, const float* mute, float* send, int count)
+{
+	const GainSpan sendSpan = fill (sendRamp, send, count);
+	if (sendSpan == GainSpan::zero || muteSpan == GainSpan::zero)
+		return GainSpan::zero;
+	if (muteSpan == GainSpan::varying)
+		FVO::multiply (send, mute, count);
+	return GainSpan::varying;
+}
 }
 
 struct DeckSpatial::Stem
 {
 	std::unique_ptr<a3::IemNode> encoder;
 	juce::AudioBuffer<float> io;   // 2 in, 16 out
-	Ramp moving, mute, cue;
+	Ramp moving, mute, cue, aux;
 	a3::StereoPose pose {};        // the pose last handed to the encoder
 	int glideRemaining = 0;        // samples IEM's high-quality smoothing still glides towards it
 
-	bool rampsSettled() const { return ! (moving.isSmoothing() || mute.isSmoothing() || cue.isSmoothing()); }
+	bool rampsSettled() const { return ! (moving.isSmoothing() || mute.isSmoothing() || cue.isSmoothing() || aux.isSmoothing()); }
 };
 
 DeckSpatial::DeckSpatial() = default;
@@ -156,7 +167,8 @@ std::unique_ptr<DeckSpatial> DeckSpatial::create (juce::String& error)
 	}
 	deck->mainBed = SteadyBed::create (error);
 	deck->cueBed = deck->mainBed != nullptr ? SteadyBed::create (error) : nullptr;
-	if (deck->cueBed == nullptr)
+	deck->auxBed = deck->cueBed != nullptr ? SteadyBed::create (error) : nullptr;
+	if (deck->auxBed == nullptr)
 		return nullptr;
 	deck->cueDecoder = binauralDecoder (error);
 	deck->phonesDecoder = deck->cueDecoder != nullptr ? binauralDecoder (error) : nullptr;
@@ -191,16 +203,17 @@ void DeckSpatial::prepare (double sampleRate, int newBlockSize)
 		stem.encoder->setStereoPose (stem.pose);
 		stem.encoder->prepare (sampleRate, blockSize);
 		stem.io.setSize (busChannels, blockSize);
-		for (auto* ramp : { &stem.moving, &stem.mute, &stem.cue })
+		for (auto* ramp : { &stem.moving, &stem.mute, &stem.cue, &stem.aux })
 			ramp->reset (sampleRate, rampSeconds);
 	}
 	mainBed->prepare (sampleRate, blockSize);
 	cueBed->prepare (sampleRate, blockSize);
+	auxBed->prepare (sampleRate, blockSize);
 	cueDecoder->prepare (sampleRate, blockSize);
 	phonesDecoder->prepare (sampleRate, blockSize);
-	for (auto* buffer : { &mainSum, &cueSum, &bedOut, &cueDecoderIo, &phonesDecoderIo })
+	for (auto* buffer : { &mainSum, &cueSum, &auxSum, &bedOut, &auxBedOut, &cueDecoderIo, &phonesDecoderIo })
 		buffer->setSize (busChannels, blockSize);
-	for (auto* buffer : { &bedIn, &cueBedIn, &auxSum, &cueOut })
+	for (auto* buffer : { &bedIn, &cueBedIn, &auxBedIn, &cueOut })
 		buffer->setSize (2, blockSize);
 	scratch.setSize (scratchRows, blockSize);
 	phonesCueWeight.reset (sampleRate, rampSeconds);
@@ -214,11 +227,13 @@ void DeckSpatial::prepare (double sampleRate, int newBlockSize)
 		stem->moving.setCurrentAndTargetValue (stem->moving.getTargetValue());
 		stem->mute.setCurrentAndTargetValue (stem->mute.getTargetValue());
 		stem->cue.setCurrentAndTargetValue (0.0f);
+		stem->aux.setCurrentAndTargetValue (stem->aux.getTargetValue());
 	}
 	phonesCueWeight.setCurrentAndTargetValue (phonesCueWeight.getTargetValue());
 	phonesMixWeight.setCurrentAndTargetValue (phonesMixWeight.getTargetValue());
 	cueGate.reset();
 	phonesGate.reset();
+	auxGate.reset();
 	phonesDecoderStale = false;
 	phonesDecoding = false;
 	phonesPrimeRemaining = 0;
@@ -237,6 +252,7 @@ void DeckSpatial::readControls()
 		stem.moving.setTargetValue (spatial::movingGain (threeD));
 		stem.mute.setTargetValue (state.muted[i].load (std::memory_order_relaxed) ? 0.0f : 1.0f);
 		stem.cue.setTargetValue (state.cued[i].load (std::memory_order_relaxed) ? 1.0f : 0.0f);
+		stem.aux.setTargetValue (spatial::auxGain (state.aux[i].load (std::memory_order_relaxed)));
 		const auto pose = poseOf (s);
 		if (! samePose (pose, stem.pose))
 		{
@@ -266,6 +282,16 @@ void DeckSpatial::process (const float* const* stemsPreMute, const Outputs& out,
 		processChunk (stemsPreMute, out, offset, juce::jmin (blockSize, numSamples - offset));
 }
 
+// R12: the aux bed runs while any send is above 0 or still moving; its
+// hold-over (auxGate) covers the bed's smoothing after the last one.
+bool DeckSpatial::auxWanted() const
+{
+	for (const auto& stem : stemNodes)
+		if (active (stem->aux))
+			return true;
+	return false;
+}
+
 bool DeckSpatial::cueWanted() const
 {
 	for (const auto& stem : stemNodes)
@@ -279,7 +305,7 @@ void DeckSpatial::processChunk (const float* const* stemsPreMute, const Outputs&
 	readControls();
 	const bool standing = stands (stemsPreMute, offset, count);
 	const bool cueInUse = ! standing && cueWanted();
-	for (auto* buffer : { &mainSum, &cueSum, &bedIn, &cueBedIn, &auxSum })
+	for (auto* buffer : { &mainSum, &cueSum, &auxSum, &bedIn, &cueBedIn, &auxBedIn })
 		buffer->clear (0, count);
 	if (standing)
 	{
@@ -290,6 +316,7 @@ void DeckSpatial::processChunk (const float* const* stemsPreMute, const Outputs&
 		for (int s = 0; s < stems; ++s)
 			encodeStem (*stemNodes[(size_t) s], stemsPreMute[2 * s] + offset, stemsPreMute[2 * s + 1] + offset, count);
 		renderMain (out, offset, count);
+		renderAux (out, offset, count);
 	}
 	renderCue (out, offset, count, cueInUse);
 	renderPhones (out, offset, count);
@@ -323,6 +350,7 @@ void DeckSpatial::renderSilentMain (const Outputs& out, int offset, int count)
 	for (auto* port : out.aux)
 		if (port != nullptr)
 			FVO::clear (port + offset, count);
+	auxGate.reset();   // standing, every send is settled and the bed has nothing to add
 }
 
 void DeckSpatial::finishGlide (Stem& stem)
@@ -342,9 +370,12 @@ void DeckSpatial::encodeStem (Stem& stem, const float* left, const float* right,
 	float* moving = scratch.getWritePointer (movingRow);
 	float* mute = scratch.getWritePointer (muteRow);
 	float* cue = scratch.getWritePointer (cueRow);
+	float* send = scratch.getWritePointer (auxRow);
 	const GainSpan movingSpan = fill (stem.moving, moving, count);
 	const GainSpan muteSpan = fill (stem.mute, mute, count);
 	const GainSpan cueSpan = fill (stem.cue, cue, count);
+	// The send acts after MUTE: both ramps in one per-sample gain.
+	const GainSpan sendSpan = sendGain (stem.aux, muteSpan, mute, send, count);
 
 	const float* const in[2] = { left, right };
 	float* const steady[2] = { scratch.getWritePointer (steadyLeft), scratch.getWritePointer (steadyRight) };
@@ -364,12 +395,13 @@ void DeckSpatial::encodeStem (Stem& stem, const float* left, const float* right,
 	{
 		addScaled (mainSum.getWritePointer (c), stem.io.getReadPointer (c), mute, muteSpan, count);
 		addScaled (cueSum.getWritePointer (c), stem.io.getReadPointer (c), cue, cueSpan, count);
+		addScaled (auxSum.getWritePointer (c), stem.io.getReadPointer (c), send, sendSpan, count);
 	}
 	for (int side = 0; side < 2; ++side)
 	{
 		addScaled (bedIn.getWritePointer (side), steady[side], mute, muteSpan, count);
 		addScaled (cueBedIn.getWritePointer (side), steady[side], cue, cueSpan, count);
-		addScaled (auxSum.getWritePointer (side), in[side], mute, muteSpan, count);
+		addScaled (auxBedIn.getWritePointer (side), steady[side], send, sendSpan, count);
 	}
 }
 
@@ -383,11 +415,25 @@ void DeckSpatial::renderMain (const Outputs& out, int offset, int count)
 		FVO::multiply (sum, spatial::trim, count);
 		copyIfWanted (out.bformat[(size_t) c] == nullptr ? nullptr : out.bformat[(size_t) c] + offset, sum, count);
 	}
-	for (int side = 0; side < 2; ++side)
+}
+
+// The stems' sends: their encoder output (auxSum) plus the steady share through
+// the aux bed. With every send at 0 the bed is not called and the bus is 0.0f.
+void DeckSpatial::renderAux (const Outputs& out, int offset, int count)
+{
+	const bool bedRuns = auxGate.next (auxWanted(), count);
+	if (bedRuns)
 	{
-		float* sum = auxSum.getWritePointer (side);
+		auxBed->process (auxBedIn.getReadPointer (0), auxBedIn.getReadPointer (1), auxBedOut, count);
+		auxBedSamples += count;
+	}
+	for (int c = 0; c < busChannels; ++c)
+	{
+		float* sum = auxSum.getWritePointer (c);
+		if (bedRuns)
+			FVO::add (sum, auxBedOut.getReadPointer (c), count);
 		FVO::multiply (sum, spatial::trim, count);
-		copyIfWanted (out.aux[(size_t) side] == nullptr ? nullptr : out.aux[(size_t) side] + offset, sum, count);
+		copyIfWanted (out.aux[(size_t) c] == nullptr ? nullptr : out.aux[(size_t) c] + offset, sum, count);
 	}
 }
 
@@ -509,7 +555,7 @@ DeckSpatial::Timing DeckSpatial::timing() const
 
 DeckSpatial::DecoderRuns DeckSpatial::decoderRuns() const
 {
-	return { cueDecoderSamples, phonesDecoderSamples };
+	return { cueDecoderSamples, phonesDecoderSamples, auxBedSamples };
 }
 
 void DeckSpatial::resetTiming()
@@ -519,6 +565,7 @@ void DeckSpatial::resetTiming()
 	timedBlocks = 0;
 	cueDecoderSamples = 0;
 	phonesDecoderSamples = 0;
+	auxBedSamples = 0;
 }
 
 float DeckSpatial::movingGainNow (int stem) const

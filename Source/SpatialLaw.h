@@ -25,6 +25,9 @@ namespace spatial
 	// clamp01 (deck) * max (clamp01 (stem), clamp01 (envelope)).
 	float effectiveThreeD (float deckThreeD, float stemThreeD, float envelope);
 
+	// A stem's AUX send: linear 0..1, exact silence at 0 (below 1e-9). NaN counts as 0.
+	float auxGain (float aux);
+
 	struct PhonesWeights { float cue, mix; };
 
 	// level^2 times an equal-power CUE<->MIX; a far end is exactly 0.

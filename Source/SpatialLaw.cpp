@@ -42,6 +42,11 @@ namespace spatial
 		return clamp01 (deckThreeD) * (stem > env ? stem : env);
 	}
 
+	float auxGain (float aux)
+	{
+		return snapToSilence (clamp01 (aux));
+	}
+
 	PhonesWeights phonesWeights (float level, float mix)
 	{
 		const double level01 = clamp01 (level);

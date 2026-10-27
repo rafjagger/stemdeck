@@ -63,8 +63,8 @@ struct StemInputs
 
 struct Rendered
 {
-	std::array<Signal, spatial::bformatChannels> bformat;
-	std::array<Signal, 2> cue, aux, phones;
+	std::array<Signal, spatial::bformatChannels> bformat, aux;
+	std::array<Signal, 2> cue, phones;
 };
 
 struct RenderOptions
@@ -78,9 +78,10 @@ inline Rendered render (DeckSpatial& deck, const StemInputs& in, const RenderOpt
 {
 	const int frames = in.frames();
 	Rendered out;
-	for (auto& channel : out.bformat)
-		channel = silence (frames);
-	for (auto* pair : { &out.cue, &out.aux, &out.phones })
+	for (auto* bus : { &out.bformat, &out.aux })
+		for (auto& channel : *bus)
+			channel = silence (frames);
+	for (auto* pair : { &out.cue, &out.phones })
 		for (auto& channel : *pair)
 			channel = silence (frames);
 
@@ -94,11 +95,13 @@ inline Rendered render (DeckSpatial& deck, const StemInputs& in, const RenderOpt
 			stems[c] = in.channels[c].data() + offset;
 		DeckSpatial::Outputs outputs;
 		for (size_t c = 0; c < outputs.bformat.size(); ++c)
+		{
 			outputs.bformat[c] = out.bformat[c].data() + offset;
+			outputs.aux[c] = out.aux[c].data() + offset;
+		}
 		for (size_t side = 0; side < 2; ++side)
 		{
 			outputs.cue[side] = out.cue[side].data() + offset;
-			outputs.aux[side] = out.aux[side].data() + offset;
 			outputs.phones[side] = options.phones ? out.phones[side].data() + offset : nullptr;
 		}
 		deck.process (stems.data(), outputs, count);

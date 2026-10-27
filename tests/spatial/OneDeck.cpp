@@ -124,7 +124,8 @@ TEST_F (OneDeck, VolumeMinimaAreExactSilence)
 	setAllStems (false, true, 1.0f);
 	player().play();
 	renderBlocks (blocksFor (0.3));
-	for (const auto ch : { layout.bformat, layout.cue, layout.aux, layout.phones })
+	// The stereo aux port is not rendered until B3 lays out the 16-channel aux bus.
+	for (const auto ch : { layout.bformat, layout.cue, layout.phones })
 		ASSERT_GT (peakOver (ch, 0.05), 0.0f) << "the deck plays: " << outputs::oneDeck::portName (ch);
 
 	// GAIN at the knob's minimum: every one of the 22.

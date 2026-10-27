@@ -10,10 +10,12 @@ Description=StemDeck, one deck (%i) of the B-format engine
 After=graphical.target pipewire.service wireplumber.service
 PartOf=a3-main.service
 # Either the two-deck player or one-deck instances, never both: they would
-# fight over the same JACK names and the panel. Shipped, not enabled: the
-# engine's drop-in pulls stemdeck@A and stemdeck@B in. Instances share one
-# screen; the screen steps below are the two-deck unit's, copied as they are.
-Conflicts=stemdeck.service
+# fight over the same JACK names and the panel. That is a3-core's to decide
+# (ExecCondition drop-ins on both units, by the engine rule), not a Conflicts=:
+# a3-main pulls both in at boot, and a conflict drops one start job before
+# either condition runs, so in REAPER mode nothing ran (2026-10-27). Shipped,
+# not enabled. Instances share one screen; the screen steps below are the
+# two-deck unit's, copied as they are.
 
 [Service]
 Environment=DISPLAY=:0

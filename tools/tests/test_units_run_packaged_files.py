@@ -94,8 +94,12 @@ class TheTemplateUnit(unittest.TestCase):
                       self.lines(self.TEMPLATE))
         self.assertEqual(self.pre(self.TWO_DECK), self.pre(self.TEMPLATE))
 
-    def test_template_conflicts_with_the_two_deck_unit(self):
-        self.assertIn("Conflicts=stemdeck.service", self.lines(self.TEMPLATE))
+    def test_template_does_not_conflict_with_the_two_deck_unit(self):
+        # 2026-10-27 rig: a3-main pulled stemdeck@A in REAPER mode; the conflict
+        # dropped stemdeck.service's start job at boot, then @A was skipped by its
+        # condition, and no StemDeck ran. Exclusivity is a3-core's ExecCondition
+        # drop-ins (a3-engine-runs / --reaper), as for REAPER.
+        self.assertFalse([l for l in self.lines(self.TEMPLATE) if l.startswith("Conflicts=")])
 
     def test_template_is_never_enabled_by_itself(self):
         self.assertNotIn("[Install]", self.TEMPLATE.read_text())

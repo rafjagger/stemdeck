@@ -29,12 +29,12 @@ pkg_check_modules(JACK REQUIRED IMPORTED_TARGET jack)
 # Key lock: Rubber Band's real-time stretcher (librubberband-dev; at run time librubberband3).
 pkg_check_modules(RUBBERBAND REQUIRED IMPORTED_TARGET rubberband)
 
-# a3-engine's IEM nodes (spatial audio), compiled into this binary by its own
+# The engine's IEM nodes (spatial audio), compiled into this binary by its own
 # recipe from a pinned submodule. IEM is built against the same JUCE as the app.
-set(STEMDECK_A3_ENGINE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/a3-engine
-    CACHE PATH "a3-engine checkout (submodule) whose IEM nodes StemDeck compiles")
-if(NOT EXISTS ${STEMDECK_A3_ENGINE_DIR}/third_party/IEMPluginSuite/MultiEncoder/Source/PluginProcessor.cpp)
-    message(FATAL_ERROR "third_party/a3-engine is not initialised: git submodule update --init third_party/a3-engine, "
+set(STEMDECK_A3_CORE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/a3-core
+    CACHE PATH "a3-core checkout (submodule) whose IEM nodes StemDeck compiles")
+if(NOT EXISTS ${STEMDECK_A3_CORE_DIR}/third_party/IEMPluginSuite/MultiEncoder/Source/PluginProcessor.cpp)
+    message(FATAL_ERROR "third_party/a3-core is not initialised: git submodule update --init third_party/a3-core, "
         "then in it (not --recursive): git submodule update --init third_party/IEMPluginSuite")
 endif()
 
@@ -66,8 +66,8 @@ target_compile_definitions(stemdeck-juce PUBLIC
 target_compile_definitions(stemdeck-juce INTERFACE $<TARGET_PROPERTY:stemdeck-juce,COMPILE_DEFINITIONS>)
 target_include_directories(stemdeck-juce INTERFACE $<TARGET_PROPERTY:stemdeck-juce,INCLUDE_DIRECTORIES>)
 
-include(${STEMDECK_A3_ENGINE_DIR}/cmake/A3IemNodes.cmake)
-include(${STEMDECK_A3_ENGINE_DIR}/third_party/IEMPluginSuite/Versions.cmake)   # only set()s the plug-in versions
+include(${STEMDECK_A3_CORE_DIR}/cmake/A3IemNodes.cmake)
+include(${STEMDECK_A3_CORE_DIR}/third_party/IEMPluginSuite/Versions.cmake)   # only set()s the plug-in versions
 a3_add_iem_nodes("-sd" stemdeck-juce)
 
 juce_add_gui_app(StemDeck
@@ -186,9 +186,9 @@ target_sources(StemDeck PRIVATE
     Source/LevelMeter.cpp
     Source/DeckMotion.cpp
     Source/StemViewer.cpp
-    third_party/a3-engine/src/a3-engine/Laws.cpp
-    third_party/a3-engine/src/a3-engine/PurestGain.cpp)
-target_include_directories(StemDeck PRIVATE third_party/a3-engine/src)
+    third_party/a3-core/src/a3-engine/Laws.cpp
+    third_party/a3-core/src/a3-engine/PurestGain.cpp)
+target_include_directories(StemDeck PRIVATE third_party/a3-core/src)
 
 target_compile_definitions(StemDeck PRIVATE
     JUCE_APPLICATION_NAME_STRING="$<TARGET_PROPERTY:StemDeck,JUCE_PRODUCT_NAME>"

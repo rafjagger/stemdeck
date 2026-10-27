@@ -10,7 +10,7 @@
 #include <new>
 
 // Every form of the global operator new/delete is replaced for the whole test
-// binary (as in a3-engine's SpatialAllocation.cpp), but only counts while the
+// binary (as in the engine's SpatialAllocation.cpp), but only counts while the
 // calling thread has armed it: other tests and other threads see the plain allocator.
 namespace
 {

@@ -10,7 +10,7 @@ namespace a3 { class IemNode; }
 
 // REAPER's steady bed for one stereo pair: one IEM MultiEncoder, four sources
 // at the azimuths of spatial::bedSources, el 0, -6 dB each, order 3, SN3D.
-// It is the same encoder a3-engine's SpatialBus runs on its steady taps.
+// It is the same encoder the engine's SpatialBus runs on its steady taps.
 class SteadyBed
 {
 public:

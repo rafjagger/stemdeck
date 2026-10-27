@@ -19,7 +19,7 @@ a3::SpatialConfig enginesConfig()
 	return *config;
 }
 
-// a3-engine's encoder, as its SpatialBus builds it, fed only one strip's
+// the engine's encoder, as its SpatialBus builds it, fed only one strip's
 // steady taps: sources 4-7 by encoder.inputs.json, the moving sources silent.
 std::array<Signal, spatial::bformatChannels> enginesBed (const Signal& left, const Signal& right)
 {

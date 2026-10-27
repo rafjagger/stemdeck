@@ -97,8 +97,8 @@ class TheTemplateUnit(unittest.TestCase):
     def test_template_does_not_conflict_with_the_two_deck_unit(self):
         # 2026-10-27 rig: a3-main pulled stemdeck@A in REAPER mode; the conflict
         # dropped stemdeck.service's start job at boot, then @A was skipped by its
-        # condition, and no StemDeck ran. Exclusivity is a3-core's ExecCondition
-        # drop-ins (a3-engine-runs / --reaper), as for REAPER.
+        # condition, and no StemDeck ran. Exclusivity is a3-core's drop-in on
+        # the two-deck unit (ExecCondition=/bin/false); this template runs unconditioned.
         self.assertFalse([l for l in self.lines(self.TEMPLATE) if l.startswith("Conflicts=")])
 
     def test_template_is_never_enabled_by_itself(self):

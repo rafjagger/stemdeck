@@ -98,9 +98,9 @@ add_executable(stemdeck-tests
     ${CMAKE_SOURCE_DIR}/Source/DeckInstance.cpp
     SpatialLaw.cpp
     ${CMAKE_SOURCE_DIR}/Source/SpatialLaw.cpp
-    ${CMAKE_SOURCE_DIR}/third_party/a3-engine/src/a3-engine/Laws.cpp
-    ${CMAKE_SOURCE_DIR}/third_party/a3-engine/src/a3-engine/PurestGain.cpp)
-target_include_directories(stemdeck-tests PRIVATE ${CMAKE_SOURCE_DIR}/Source ${CMAKE_SOURCE_DIR}/third_party/a3-engine/src)
+    ${CMAKE_SOURCE_DIR}/third_party/a3-core/src/a3-engine/Laws.cpp
+    ${CMAKE_SOURCE_DIR}/third_party/a3-core/src/a3-engine/PurestGain.cpp)
+target_include_directories(stemdeck-tests PRIVATE ${CMAKE_SOURCE_DIR}/Source ${CMAKE_SOURCE_DIR}/third_party/a3-core/src)
 
 # The session is XML: juce_core, and nothing else of JUCE, comes into the
 # tests -- as a library of its own, JUCE's way for module code outside an app.
@@ -167,8 +167,8 @@ if(XVFB_RUN)
 endif()
 gtest_discover_tests(stemdeck-gui-tests)
 
-# a3-engine's IEM nodes, compiled into StemDeck's own JUCE (stemdeck-juce).
-# One deck's spatial engine beside them; a3-engine's SpatialConfig reads the
+# The engine's IEM nodes, compiled into StemDeck's own JUCE (stemdeck-juce).
+# One deck's spatial engine beside them; the engine's SpatialConfig reads the
 # engine's own bed files for the SteadyBed reference.
 add_executable(stemdeck-spatial-tests
     spatial/IemInStemDeck.cpp
@@ -233,12 +233,12 @@ add_executable(stemdeck-spatial-tests
     ${CMAKE_SOURCE_DIR}/Source/SyncLabels.cpp
     ${CMAKE_SOURCE_DIR}/Source/SurfaceLayout.cpp
     ${CMAKE_SOURCE_DIR}/Source/Theme.cpp
-    ${CMAKE_SOURCE_DIR}/third_party/a3-engine/src/a3-engine/Laws.cpp
-    ${CMAKE_SOURCE_DIR}/third_party/a3-engine/src/a3-engine/PurestGain.cpp
-    ${CMAKE_SOURCE_DIR}/third_party/a3-engine/src/a3-engine/SpatialConfig.cpp)
-target_include_directories(stemdeck-spatial-tests PRIVATE ${CMAKE_SOURCE_DIR}/Source ${CMAKE_SOURCE_DIR}/third_party/a3-engine/src)
+    ${CMAKE_SOURCE_DIR}/third_party/a3-core/src/a3-engine/Laws.cpp
+    ${CMAKE_SOURCE_DIR}/third_party/a3-core/src/a3-engine/PurestGain.cpp
+    ${CMAKE_SOURCE_DIR}/third_party/a3-core/src/a3-engine/SpatialConfig.cpp)
+target_include_directories(stemdeck-spatial-tests PRIVATE ${CMAKE_SOURCE_DIR}/Source ${CMAKE_SOURCE_DIR}/third_party/a3-core/src)
 target_compile_definitions(stemdeck-spatial-tests PRIVATE
-    STEMDECK_SPATIAL_DATA="${CMAKE_SOURCE_DIR}/third_party/a3-engine/data/spatial")
+    STEMDECK_SPATIAL_DATA="${CMAKE_SOURCE_DIR}/third_party/a3-core/data/spatial")
 target_compile_features(stemdeck-spatial-tests PRIVATE cxx_std_17)
 target_link_libraries(stemdeck-spatial-tests PRIVATE GTest::gtest GTest::gtest_main a3-iem-sd PkgConfig::RUBBERBAND)
 # The player (Stage S2) includes the app's JuceHeader.h: StemDeck generates it.

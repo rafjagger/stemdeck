@@ -1,9 +1,9 @@
 [Unit]
 Description=QjackCtl with StemDeck's patchbay, on a machine without A3 Core
-# Only where there is no Core: the Core runs its own qjackctl.service with
-# its own patchbay, and two QjackCtls must not wire one JACK. The installer
-# installs this unit only without the Core role and takes it away when the
-# Core role is chosen. Its own name, so it never overwrites the Core's.
+# Only where there is no Core: the Core no longer runs a qjackctl of its own
+# (removed 2026-10-27). The installer installs this unit only without the Core
+# role and takes it away when the Core role is chosen. Its own name, so it
+# never overwrites a Core unit.
 After=graphical.target pipewire.service wireplumber.service
 PartOf=a3-main.service
 

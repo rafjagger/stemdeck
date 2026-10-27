@@ -6,6 +6,7 @@ add_executable(stemdeck-spatial-timing
     ${CMAKE_SOURCE_DIR}/Source/DeckSpatial.cpp
     ${CMAKE_SOURCE_DIR}/Source/SpatialLaw.cpp
     ${CMAKE_SOURCE_DIR}/third_party/a3-engine/src/a3-engine/Laws.cpp
+    ${CMAKE_SOURCE_DIR}/third_party/a3-engine/src/a3-engine/PurestGain.cpp
     ${CMAKE_SOURCE_DIR}/third_party/a3-engine/src/a3-engine/SpatialConfig.cpp)
 target_include_directories(stemdeck-spatial-timing PRIVATE
     ${CMAKE_SOURCE_DIR}/Source ${CMAKE_SOURCE_DIR}/third_party/a3-engine/src)

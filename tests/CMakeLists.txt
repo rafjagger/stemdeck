@@ -98,7 +98,8 @@ add_executable(stemdeck-tests
     ${CMAKE_SOURCE_DIR}/Source/DeckInstance.cpp
     SpatialLaw.cpp
     ${CMAKE_SOURCE_DIR}/Source/SpatialLaw.cpp
-    ${CMAKE_SOURCE_DIR}/third_party/a3-engine/src/a3-engine/Laws.cpp)
+    ${CMAKE_SOURCE_DIR}/third_party/a3-engine/src/a3-engine/Laws.cpp
+    ${CMAKE_SOURCE_DIR}/third_party/a3-engine/src/a3-engine/PurestGain.cpp)
 target_include_directories(stemdeck-tests PRIVATE ${CMAKE_SOURCE_DIR}/Source ${CMAKE_SOURCE_DIR}/third_party/a3-engine/src)
 
 # The session is XML: juce_core, and nothing else of JUCE, comes into the
@@ -229,6 +230,7 @@ add_executable(stemdeck-spatial-tests
     ${CMAKE_SOURCE_DIR}/Source/SurfaceLayout.cpp
     ${CMAKE_SOURCE_DIR}/Source/Theme.cpp
     ${CMAKE_SOURCE_DIR}/third_party/a3-engine/src/a3-engine/Laws.cpp
+    ${CMAKE_SOURCE_DIR}/third_party/a3-engine/src/a3-engine/PurestGain.cpp
     ${CMAKE_SOURCE_DIR}/third_party/a3-engine/src/a3-engine/SpatialConfig.cpp)
 target_include_directories(stemdeck-spatial-tests PRIVATE ${CMAKE_SOURCE_DIR}/Source ${CMAKE_SOURCE_DIR}/third_party/a3-engine/src)
 target_compile_definitions(stemdeck-spatial-tests PRIVATE

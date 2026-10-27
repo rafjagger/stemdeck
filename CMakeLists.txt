@@ -185,7 +185,8 @@ target_sources(StemDeck PRIVATE
     Source/LevelMeter.cpp
     Source/DeckMotion.cpp
     Source/StemViewer.cpp
-    third_party/a3-engine/src/a3-engine/Laws.cpp)
+    third_party/a3-engine/src/a3-engine/Laws.cpp
+    third_party/a3-engine/src/a3-engine/PurestGain.cpp)
 target_include_directories(StemDeck PRIVATE third_party/a3-engine/src)
 
 target_compile_definitions(StemDeck PRIVATE

@@ -1,6 +1,8 @@
 #pragma once
 
+#include <functional>
 #include <string>
+#include <vector>
 
 // The rig's i3 workspaces as StemDeck's switch shows them. Their names are
 // set in a3-core's i3 config ("1:MOTION", "2:STEMDECK", ...); the switch
@@ -30,3 +32,19 @@ struct SwitcherGeometry
 };
 
 SwitcherGeometry switcherGeometry (int windowWidth);
+
+// i3 is asked through a runner: it gets the whole command line ("i3-msg", ...)
+// and returns what i3-msg printed, "" when it could not run. The tests hand in
+// a fake, so no i3-msg runs in them.
+using I3Runner = std::function<std::string (const std::vector<std::string>& argv)>;
+
+// Runs the real i3-msg.
+I3Runner systemI3Runner();
+
+struct WorkspaceEntry { int number; std::string label; bool current; };
+
+// Over to workspace `number`.
+void goToWorkspace (const I3Runner&, int number);
+
+// The workspaces i3 reports that have a number to go to; empty without an answer.
+std::vector<WorkspaceEntry> listWorkspaces (const I3Runner&);

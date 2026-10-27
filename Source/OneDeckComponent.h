@@ -21,6 +21,7 @@
 #include "StemCreatorLink.h"
 #include "StemLibrary.h"
 #include "Theme.h"
+#include "WorkspaceSwitch.h"
 
 // The content of a -bformat instance (ruling R10): one deck, its JACK client
 // StemDeck-<X> with the 22 one-deck ports and rec_L/R, its own session
@@ -109,6 +110,8 @@ private:
 	OneDeckView view { deckAudio, formatManager, instance.letter - 'A' };
 	juce::Label deckLabel, deviceStatus;
 	juce::TextButton autoDjButton { "AUTO DJ" }, syncSourceButton { "SYNC: DECK" }, settingsButton { "Settings" };
+	// The way out of this workspace by touch: the i3 bar is hidden on the rig.
+	WorkspaceSwitch workspaceSwitch;
 
 	osctruth::ProLinkPorts linkPorts;   // from the truth; incomplete: SYNC and MASTER greyed
 	OneDeckSync sync { deckAudio.host().player(), view.deckPanel() };

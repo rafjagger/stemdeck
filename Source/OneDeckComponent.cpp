@@ -73,6 +73,7 @@ OneDeckComponent::OneDeckComponent (DeckInstance deck)
 	}
 
 	addAndMakeVisible (view);
+	workspaceSwitch.attachTo (*this);
 	view.waveform().onSetDropped = [this] (const juce::String& id) { loadById (id); };
 	view.deckPanel().onSetDropped = [this] (const juce::String& id) { loadById (id); };
 	view.deckPanel().onStep = [this] (int direction) { step (direction); };
@@ -512,6 +513,7 @@ void OneDeckComponent::resized()
 	const auto key = [&area] (float share) { return juce::roundToInt ((float) area.getWidth() * share); };
 
 	auto top = area.removeFromTop (barHeight);
+	top = workspaceSwitch.place (top, gap);   // at the window's right edge, as in the two-deck screen
 	deckLabel.setFont (juce::FontOptions ((float) barHeight * 0.6f, juce::Font::bold));
 	deckLabel.setBounds (top.removeFromLeft (key (0.13f)));
 	top.removeFromLeft (gap);

@@ -94,17 +94,7 @@ MainComponent::MainComponent()
 		deviceStatus.setColour (juce::Label::textColourId, Theme::cue);
 		statusCountdown = 240;   // four seconds at 60 Hz, then the device again
 	};
-	motionButton.setTooltip ("Over to A3 Motion (i3 workspace 1)");
-	motionButton.onClick = [this] { goToWorkspace (1); };
-	workspacesButton.setTooltip ("Any of the rig's workspaces");
-	workspacesButton.onClick = [this] { showWorkspaces(); };
-	for (auto* b : { &motionButton, &workspacesButton })
-	{
-		b->setMouseClickGrabsKeyboardFocus (false);
-		addAndMakeVisible (b);
-	}
-	workspacePanel.onChosen = [this] (int number) { goToWorkspace (number); };
-	addChildComponent (workspacePanel);
+	workspaceSwitch.attachTo (*this);
 	deviceStatus.setColour (juce::Label::textColourId, Theme::textDim);
 	addAndMakeVisible (deviceStatus);
 
@@ -1022,40 +1012,6 @@ void MainComponent::updateDeviceStatus()
 	deviceStatus.setColour (juce::Label::textColourId, AudioOutput::colourOf (status.health));
 }
 
-void MainComponent::goToWorkspace (int number)
-{
-	juce::ChildProcess i3;
-	if (i3.start (juce::StringArray { "i3-msg", "-q", "workspace number " + juce::String (number) }))
-		i3.waitForProcessToFinish (1000);
-}
-
-void MainComponent::showWorkspaces()
-{
-	juce::ChildProcess i3;
-	if (! i3.start (juce::StringArray { "i3-msg", "-t", "get_workspaces" }))
-		return;
-
-	// Held in a named var: getArray() points into it, and a temporary's list
-	// was gone before the loop read it (SIGSEGV on the rig, 2026-09-30).
-	const auto workspaces = juce::JSON::parse (i3.readAllProcessOutput());
-	const auto* list = workspaces.getArray();
-	if (list == nullptr)
-		return;
-
-	std::vector<WorkspacePanel::Entry> entries;
-	for (const auto& workspace : *list)
-	{
-		const auto name = workspace["name"].toString().toStdString();
-		if (const auto number = workspaceNumber (name); number > 0)
-			entries.push_back ({ number, juce::String (workspaceLabel (name)), (bool) workspace["focused"] });
-	}
-
-	if (entries.empty())
-		return;
-	workspacePanel.setBounds (getLocalBounds());
-	workspacePanel.show (entries);
-}
-
 void MainComponent::showTips (bool shown)
 {
 	if (shown && tooltips == nullptr)
@@ -1271,17 +1227,10 @@ void MainComponent::resized()
 	const auto layout = surface::sections (getWidth(), getHeight());
 
 	auto topBar = surface::toJuce (layout.topBar);
-	// The switch at the very right, where A3 Motion has it: the key under the
-	// finger stays put when the workspace changes.
-	const auto switcher = switcherGeometry (getWidth());
-	auto switchArea = topBar.withRight (getWidth() - switcher.margin);
-	workspacesButton.setBounds (switchArea.removeFromRight (switcher.arrowWidth));
-	switchArea.removeFromRight (switcher.gap);
-	motionButton.setBounds (switchArea.removeFromRight (switcher.appKeyWidth));
 	// The rest as shares of the window's width (sized for 768 px, the rig).
 	const auto share = [this] (int perMille) { return getWidth() * perMille / 1000; };
 	const auto gap = layout.metrics.gap;
-	topBar.setRight (motionButton.getX() - gap);
+	topBar = workspaceSwitch.place (topBar, gap);
 	settingsButton.setBounds (topBar.removeFromRight (share (117)));
 	topBar.removeFromRight (gap);
 	keysButton.setBounds (topBar.removeFromRight (share (78)));

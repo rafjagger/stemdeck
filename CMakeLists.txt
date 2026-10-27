@@ -128,6 +128,7 @@ target_sources(StemDeck PRIVATE
     Source/KeyboardPolicy.cpp
     Source/OnScreenKeyboard.cpp
     Source/WorkspacePanel.cpp
+    Source/WorkspaceSwitch.cpp
     Source/JackOutput.cpp
     Source/ProLinkPackets.cpp
     Source/PioneerClock.cpp

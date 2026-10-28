@@ -1,8 +1,7 @@
 #include <gtest/gtest.h>
 
+#include "BareXServer.h"
 #include "PointerInjector.h"
-
-#include <dlfcn.h>
 
 #include <cstdlib>
 #include <vector>
@@ -35,41 +34,14 @@ namespace
 		}
 	};
 
-	// A bare Xvfb has no window manager, so the atoms JUCE only looks up
-	// (WM_PROTOCOLS, _NET_WM_WINDOW_TYPE, ...) do not exist, and its first
-	// window dies with BadAtom. Creating them, as a window manager would,
-	// is what makes the bare server usable. Atoms live as long as one client is connected.
-	void internWindowManagerAtoms()
-	{
-		void* x11 = dlopen ("libX11.so.6", RTLD_NOW);
-		if (x11 == nullptr)
-			return;
-		using Open = void* (*) (const char*);
-		using Intern = unsigned long (*) (void*, const char*, int);
-		const auto open = reinterpret_cast<Open> (dlsym (x11, "XOpenDisplay"));
-		const auto intern = reinterpret_cast<Intern> (dlsym (x11, "XInternAtom"));
-		if (open == nullptr || intern == nullptr)
-			return;
-		if (auto* display = open (nullptr))
-		{
-			for (const char* name : { "WM_PROTOCOLS", "WM_TAKE_FOCUS", "WM_DELETE_WINDOW", "_NET_WM_PING",
-								 "_NET_WM_WINDOW_TYPE", "_NET_WM_STATE" })
-				intern (display, name, 0);
-			// Kept open: Xvfb resets, atoms included, when its last client leaves.
-			static void* keepAlive = display;
-			(void) keepAlive;
-		}
-	}
-
-	bool hasDisplay() { return std::getenv ("DISPLAY") != nullptr && *std::getenv ("DISPLAY") != 0; }
 
 	struct PointerInjector : ::testing::Test
 	{
 		void SetUp() override
 		{
-			if (! hasDisplay())
+			if (! barex::hasDisplay())
 				GTEST_SKIP() << "no X display";
-			internWindowManagerAtoms();
+			barex::internWindowManagerAtoms();
 			init = std::make_unique<juce::ScopedJuceInitialiser_GUI>();
 			catcher.setSize (200, 200);
 			catcher.addToDesktop (0);

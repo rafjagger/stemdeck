@@ -1,7 +1,11 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include "CuePlay.h"
+#include "DeckLoop.h"
 #include "GridAction.h"
+#include "HoldKey.h"
+#include "PlayerTransport.h"
 #include "StemDeckPlayer.h"
 #include "StemThumbnails.h"
 #include "Waveforms.h"
@@ -15,9 +19,10 @@
 // key and KEY, the key lock) stand in the band under the decks and the mixer: the deck owns and
 // drives them, the window holds and places them (addBandPartsTo, setBandBounds).
 //
-// Cue works like Mixxx's CDJ mode: while playing it jumps back to the cue
-// point and stops; while stopped it sets the cue point, or, if already on
-// it, plays for as long as it is held.
+// CUE and PLAY work like a CDJ-3000's (CuePlay.h): while playing CUE jumps
+// back to the cue point and stops; while stopped it sets the cue point, or,
+// if already on it, plays for as long as it is held -- and PLAY meanwhile
+// plays on. The loop keys are a CDJ's too (DeckLoop.h).
 class DeckPanel : public juce::Component,
 				  public StemSetDropTarget
 {
@@ -28,9 +33,16 @@ public:
 	void setAnalysing (bool isAnalysing) { analysing = isAnalysing; }
 	void refresh(); // called by the main timer
 
-	void togglePlay();
+	// The keys, from the screen, the panels and the keyboard alike.
+	void playPressed();
 	void cuePressed();
 	void cueReleased();
+	void loopIn();
+	void loopOut();
+	void toggleLoop();     // RELOOP / EXIT
+	void loopInOrOut();    // the SCS.3d's one key for both
+	bool isLoopInMarked() const { return deckLoop.isInMarked(); }
+	bool canReloop() const { return deckLoop.canReloop (transport); }
 
 	// Tempo set by sync: widens the tempo range if needed and doesn't count
 	// as the user moving the fader.
@@ -71,9 +83,10 @@ public:
 	void addBandPartsTo (juce::Component& parent);
 	void setBandBounds (const surface::DeckTile& parts);   // window coordinates
 
-	// The one-deck screen's: |< >| CUE PLAY made children of `parent`, placed
-	// by it in its foot row (surface::oneDeckFoot); the column's other keys
-	// take the transport's room.
+	// The one-deck screen's: |< >| CUE PLAY and the loop block (LOOP, IN,
+	// OUT) made children of `parent`, placed by it in its foot row
+	// (surface::oneDeckFoot); the column loses LOOP OFF, and its other keys
+	// take the room.
 	void addTransportTo (juce::Component& parent);
 	void setTransportBounds (const surface::TransportKeys& keys);   // `parent`'s coordinates
 
@@ -81,6 +94,11 @@ public:
 	juce::TextButton& playKey() { return playButton; }
 	juce::TextButton& previousKey() { return previousButton; }
 	juce::TextButton& nextKey() { return nextButton; }
+	juce::TextButton& loopKey() { return loopButton; }
+	juce::TextButton& loopInKey() { return loopInButton; }
+	juce::TextButton& loopOutKey() { return loopOutButton; }
+	juce::TextButton& loopOffKey() { return loopOffButton; }
+	juce::TextButton& repeatKey() { return repeatButton; }
 	std::function<void (GridAction, double seconds)> onGridEdit;
 
 	void saveState (DeckSession& state) const;
@@ -93,11 +111,12 @@ private:
 	void setTempoRange (double range);
 
 	StemDeckPlayer& player;
+	PlayerTransport transport { player };
+	CuePlay cuePlay;
+	DeckLoop deckLoop;
 	const int deckIndex;
-	bool previewingFromCue = false;
-	bool cueButtonWasDown = false;
-	bool cueHeld = false;
 	void updateCueLight();
+	void updateLoopLights();
 	bool analysing = false;
 	bool settingTempoFromSync = false;
 	double tempoRange = 0.08;
@@ -109,7 +128,10 @@ private:
 	JogWheel jog;
 
 	juce::TextButton previousButton { juce::String::fromUTF8 ("|\xe2\x97\x80") }, nextButton { juce::String::fromUTF8 ("\xe2\x96\xb6|") };
-	juce::TextButton cueButton { "CUE" }, playButton { "PLAY" }, loopOffButton { "LOOP OFF" }, repeatButton { "REPEAT" };
+	HoldKey cueButton { "CUE" };
+	juce::TextButton playButton { "PLAY" }, loopOffButton { "LOOP OFF" }, repeatButton { "REPEAT" };
+	// The one-deck foot's loop block; their state is their light, never their text.
+	juce::TextButton loopButton { "LOOP" }, loopInButton { "IN" }, loopOutButton { "OUT" };
 	juce::TextButton syncButton { "SYNC" }, masterButton { "MASTER" }, vinylButton { "VINYL" };
 	juce::TextButton gridButton { "GRID" };
 	juce::TextButton halfBackButton { juce::String::fromUTF8 ("\xe2\x80\xb9" "\xc2\xbd") }, halfForwardButton { juce::String::fromUTF8 ("\xc2\xbd" "\xe2\x80\xba") };

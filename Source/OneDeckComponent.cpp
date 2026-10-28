@@ -407,7 +407,7 @@ void OneDeckComponent::handlePanel (const panel1::Event& e)
 	{
 		case Type::cueDown:   deck.cuePressed(); return;
 		case Type::cueUp:     deck.cueReleased(); return;
-		case Type::play:      deck.togglePlay(); return;
+		case Type::play:      deck.playPressed(); return;
 		case Type::shiftDown: view.shift().setToggleState (true, juce::dontSendNotification); return;
 		case Type::shiftUp:   view.shift().setToggleState (false, juce::dontSendNotification); return;
 		default: break;

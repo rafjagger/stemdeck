@@ -122,6 +122,8 @@ target_sources(StemDeck PRIVATE
     Source/Sections.cpp
     Source/Preview.cpp
     Source/CueLight.cpp
+    Source/CuePlay.cpp
+    Source/DeckLoop.cpp
     Source/SectionAnalysis.cpp
     Source/BarPhase.cpp
     Source/CachedGrid.cpp

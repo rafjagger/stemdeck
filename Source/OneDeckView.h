@@ -44,8 +44,8 @@ private:
 // panel -- the two-deck DeckPanel (times, keys) with its band parts (title,
 // stems, BPM, pitch fader, range, KEY) placed here -- and SHIFT, which makes
 // the next pad press start now; the four stem columns; the foot row with the
-// deck's transport (CUE | PLAY, the track search) and the meters
-// (surface::oneDeckFoot). The top bar and the library are the window's.
+// deck's transport (CUE | PLAY, the track search, the loop block) and the
+// meters (surface::oneDeckFoot). The top bar and the library are the window's.
 class OneDeckView : public juce::Component
 {
 public:

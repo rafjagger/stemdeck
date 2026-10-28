@@ -10,18 +10,20 @@ namespace prolink
 	{
 		const uint8_t magic[10] = { 'Q', 's', 'p', 't', '1', 'W', 'm', 'J', 'O', 'L' };
 
-		constexpr uint8_t typeBeat = 0x28, typeStatus = 0x0a, typeKeepAlive = 0x06;
-		constexpr size_t beatSize = 0x60, statusMinSize = 0xa0, keepAliveSize = 0x36;
+		constexpr uint8_t typeBeat = 0x28, typeStatus = 0x0a, typeMixerStatus = 0x29, typeKeepAlive = 0x06;
+		constexpr size_t beatSize = 0x60, statusMinSize = 0xa0, mixerStatusSize = 0x38, keepAliveSize = 0x36;
 
 		constexpr size_t offName = 0x0b, offDevice = 0x21;
 		constexpr size_t offPitch = 0x55, offBpm = 0x5a, offBeatInBar = 0x5c;       // beat
 		constexpr size_t offFlags = 0x89, offStatusBpm = 0x92;                       // status
-		constexpr uint8_t flagMaster = 0x20, flagPlaying = 0x40;
+		constexpr size_t offSyncCounter = 0x84, offHandoff = 0x9f;                  // status
+		constexpr uint8_t flagMaster = 0x20, flagPlaying = 0x40, flagSync = 0x10;
 		constexpr uint32_t neutralPitch = 0x100000;
 		constexpr uint16_t noTrack = 0xffff;
 
 		uint16_t readBE16 (const uint8_t* p) { return (uint16_t) ((p[0] << 8) | p[1]); }
 		uint32_t readBE24 (const uint8_t* p) { return ((uint32_t) p[0] << 16) | ((uint32_t) p[1] << 8) | p[2]; }
+		uint32_t readBE32 (const uint8_t* p) { return ((uint32_t) p[0] << 24) | readBE24 (p + 1); }
 
 		bool isPacket (const uint8_t* data, size_t size, uint8_t type, size_t minSize)
 		{
@@ -58,7 +60,29 @@ namespace prolink
 		status.device = data[offDevice];
 		status.isMaster = (data[offFlags] & flagMaster) != 0;
 		status.isPlaying = (data[offFlags] & flagPlaying) != 0;
+		status.isSynced = (data[offFlags] & flagSync) != 0;
+		status.handoffTo = data[offHandoff];
+		status.syncCounter = readBE32 (data + offSyncCounter);
 		const auto rawBpm = readBE16 (data + offStatusBpm);
+		status.bpm = rawBpm == noTrack ? 0.0 : rawBpm / 100.0;
+		return status;
+	}
+
+	std::optional<StatusPacket> parseMixerStatus (const uint8_t* data, size_t size)
+	{
+		// vcdj.html, "Mixer status packets": F at 27, BPM at 2e, Mh at 36.
+		if (! isPacket (data, size, typeMixerStatus, mixerStatusSize))
+			return std::nullopt;
+
+		StatusPacket status;
+		status.isMixer = true;
+		status.device = data[offDevice];
+		const auto flags = data[0x27];
+		status.isMaster = (flags & flagMaster) != 0;
+		status.isPlaying = (flags & flagPlaying) != 0;
+		status.isSynced = (flags & flagSync) != 0;
+		status.handoffTo = data[0x36];
+		const auto rawBpm = readBE16 (data + 0x2e);
 		status.bpm = rawBpm == noTrack ? 0.0 : rawBpm / 100.0;
 		return status;
 	}
@@ -70,6 +94,8 @@ namespace prolink
 		// nobody has decoded.
 		constexpr size_t statusSize = 0x11c;
 		constexpr uint8_t statusSubtype = 0x04;
+
+		constexpr uint32_t unknown32 = 0xffffffff;
 
 		void writeBE16 (uint8_t* p, uint32_t v) { p[0] = (uint8_t) (v >> 8); p[1] = (uint8_t) v; }
 		void writeBE32 (uint8_t* p, uint32_t v)
@@ -85,15 +111,17 @@ namespace prolink
 
 		uint32_t pitchField (double pitch) { return (uint32_t) std::lround (std::max (0.0, pitch) * neutralPitch); }
 
-		// Ports 50001/50002: the name from 0b, then 01 and the subtype; D and
-		// the length of the rest (lenr) follow.
-		std::vector<uint8_t> packet (size_t size, uint8_t type, uint8_t subtype, int device, const std::string& name)
+		// Ports 50001/50002: the name from 0b, then 01 (02 in the absolute
+		// position packet) and the subtype; D and the length of the rest (lenr)
+		// follow.
+		std::vector<uint8_t> packet (size_t size, uint8_t type, uint8_t subtype, int device, const std::string& name,
+									 uint8_t afterName = 0x01)
 		{
 			std::vector<uint8_t> p (size, 0);
 			std::memcpy (p.data(), magic, sizeof (magic));
 			p[0x0a] = type;
 			std::memcpy (p.data() + offName, name.data(), std::min<size_t> (name.size(), 20));
-			p[0x1f] = 0x01;
+			p[0x1f] = afterName;
 			p[0x20] = subtype;
 			p[offDevice] = (uint8_t) device;
 			writeBE16 (p.data() + 0x22, (uint32_t) (size - 0x24));
@@ -101,10 +129,16 @@ namespace prolink
 		}
 	}
 
-	std::vector<uint8_t> beatPacket (int device, const std::string& name, double bpm, double pitch, int beatInBar)
+	std::vector<uint8_t> beatPacket (int device, const std::string& name, double bpm, double pitch, int beatInBar,
+									 double msToTrackEnd)
 	{
-		// The coming beats and bars in ms, as at pitch 0 % (beats.html).
-		const auto beat = [bpm] (double beats) { return (uint32_t) std::lround (beats * 60000.0 / std::max (bpm, 1.0)); };
+		// The coming beats and bars in ms, as at pitch 0 % (beats.html); one
+		// the track ends before is ffffffff.
+		const auto beat = [bpm, msToTrackEnd] (double beats)
+		{
+			const auto ms = beats * 60000.0 / std::max (bpm, 1.0);
+			return ms > msToTrackEnd ? unknown32 : (uint32_t) std::lround (ms);
+		};
 		const auto toNextBar = 5 - std::clamp (beatInBar, 1, 4);
 
 		auto p = packet (beatSize, typeBeat, 0x00, device, name);
@@ -122,48 +156,128 @@ namespace prolink
 		return p;
 	}
 
-	std::vector<uint8_t> statusPacket (int device, const std::string& name, double bpm, double pitch,
-									   bool master, bool playing, uint32_t beatNumber, int beatInBar)
+	std::vector<uint8_t> statusPacket (int device, const std::string& name, const PlayerState& deck, const MasterState& role)
 	{
 		// Field names as vcdj.html labels them.
 		constexpr uint8_t slotUsb = 0x03, trackRekordbox = 0x01;
 		constexpr uint8_t flagsFixed = 0x84;   // bits 7 and 2 are always set
 
+		const auto loaded = deck.hasTrack;
+		const auto playing = loaded && deck.playing;
+		// Only a player with a track can be a meaningful master (Mm 01).
+		const auto master = role.master;
+
 		auto p = packet (statusSize, typeStatus, statusSubtype, device, name);
 		p[0x24] = (uint8_t) device;
 		p[0x26] = 0x01;
 		p[0x27] = playing ? 0x01 : 0x00;   // A
-		// Dr, Sr, Tr: an analysed track loaded here -- players accept a
-		// master's tempo only from one (Mv below).
-		p[0x28] = (uint8_t) device;
-		p[0x29] = slotUsb;
-		p[0x2a] = trackRekordbox;
-		p[0x2f] = 0x01;                    // rekordbox id
-		p[0x33] = 0x01;                    // track number
+		if (loaded)
+		{
+			// Dr, Sr, Tr: an analysed track loaded here -- players accept a
+			// master's tempo only from one (Mv below).
+			p[0x28] = (uint8_t) device;
+			p[0x29] = slotUsb;
+			p[0x2a] = trackRekordbox;
+			p[0x2f] = 0x01;                // rekordbox id
+			p[0x33] = 0x01;                // track number
+		}
 		p[0x6f] = 0x04;                    // Ul: no USB stick
 		p[0x73] = 0x04;                    // Sl: no SD card
-		p[0x7b] = playing ? 0x03 : 0x05;   // P1
+		p[0x7b] = ! loaded ? 0x00 : playing ? 0x03 : 0x05;   // P1
 		std::memcpy (p.data() + 0x7c, "1.43", 4);   // Firmware, as beat-link sends it
-		p[offFlags] = (uint8_t) (flagsFixed | (master ? flagMaster : 0) | (playing ? flagPlaying : 0));
+		writeBE32 (p.data() + offSyncCounter, role.syncCounter);   // Syncn
+		p[offFlags] = (uint8_t) (flagsFixed | (master ? flagMaster : 0) | (playing ? flagPlaying : 0)
+								 | (deck.synced ? flagSync : 0));
 		p[0x8b] = playing ? 0x7a : 0x7e;   // P2
 		// Pitch1/3 the pitch in effect; Pitch2/4 the local fader, frozen at
 		// -100 % (0) while paused.
-		writeBE32 (p.data() + 0x8c, pitchField (pitch));
-		writeBE16 (p.data() + 0x90, 0x8000);   // Mv
-		writeBE16 (p.data() + offStatusBpm, bpmField (bpm));
+		writeBE32 (p.data() + 0x8c, pitchField (deck.pitch));
+		writeBE16 (p.data() + 0x90, loaded ? 0x8000 : 0x7fff);   // Mv
+		writeBE16 (p.data() + offStatusBpm, loaded ? bpmField (deck.bpm) : noTrack);
 		writeBE16 (p.data() + 0x94, 0x7fff);   // Mslip
 		writeBE16 (p.data() + 0x96, 0xffff);   // BPMslip
-		writeBE32 (p.data() + 0x98, playing ? pitchField (pitch) : 0);
-		p[0x9d] = playing ? 0x09 : 0x01;   // P3: forward, jog in vinyl mode
-		p[0x9e] = master ? 0x01 : 0x00;    // Mm
-		p[0x9f] = 0xff;                    // Mh: no handoff
-		writeBE32 (p.data() + 0xa0, beatNumber);
+		writeBE32 (p.data() + 0x98, playing ? pitchField (deck.pitch) : 0);
+		p[0x9d] = ! loaded ? 0x00 : playing ? 0x09 : 0x01;   // P3: forward, jog in vinyl mode
+		p[0x9e] = master && loaded ? 0x01 : 0x00;            // Mm
+		p[offHandoff] = (uint8_t) role.handoffTo;            // Mh
+		writeBE32 (p.data() + 0xa0, loaded ? deck.beatNumber : unknown32);
 		writeBE16 (p.data() + 0xa4, 0x01ff);   // Cue: none ahead
-		p[0xa6] = (uint8_t) beatInBar;
-		writeBE32 (p.data() + 0xc0, pitchField (pitch));
-		writeBE32 (p.data() + 0xc4, playing ? pitchField (pitch) : 0);
+		p[0xa6] = loaded ? (uint8_t) deck.beatInBar : 0;
+		writeBE32 (p.data() + 0xc0, pitchField (deck.pitch));
+		writeBE32 (p.data() + 0xc4, playing ? pitchField (deck.pitch) : 0);
 		p[0xcc] = 0x0f;                    // nx: the layout's family (nexus 2)
 		return p;
+	}
+
+	std::vector<uint8_t> statusPacket (int device, const std::string& name, double bpm, double pitch,
+									   bool master, bool playing, uint32_t beatNumber, int beatInBar)
+	{
+		PlayerState deck;
+		deck.hasTrack = true;
+		deck.bpm = bpm;
+		deck.pitch = pitch;
+		deck.playing = playing;
+		deck.beatNumber = beatNumber;
+		deck.beatInBar = beatInBar;
+		MasterState role;
+		role.master = master;
+		return statusPacket (device, name, deck, role);
+	}
+
+	std::vector<uint8_t> absolutePosition (int device, const std::string& name, const Position& at)
+	{
+		constexpr uint8_t typePosition = 0x0b;
+		auto p = packet (0x3c, typePosition, 0x00, device, name, 0x02);
+		writeBE32 (p.data() + 0x24, (uint32_t) std::max (0.0, std::floor (at.trackSeconds)));
+		writeBE32 (p.data() + 0x28, (uint32_t) std::max (0.0, std::floor (at.playheadSeconds * 1000.0)));
+		// The fader as the screen shows it, in hundredths of a percent, signed.
+		writeBE32 (p.data() + 0x2c, (uint32_t) (int32_t) std::lround ((at.pitch - 1.0) * 10000.0));
+		writeBE32 (p.data() + 0x38, at.effectiveBpm > 0.0 ? (uint32_t) std::lround (at.effectiveBpm * 10.0) : unknown32);
+		return p;
+	}
+
+	//==========================================================================
+	namespace
+	{
+		constexpr uint8_t typeMasterRequest = 0x26, typeMasterResponse = 0x27, typeSyncControl = 0x2a;
+
+		// sync.html: D at 21 and again at 27; a response or command carries
+		// one more word, its last byte at 2b.
+		std::vector<uint8_t> control (uint8_t type, int device, const std::string& name, std::optional<int> value)
+		{
+			auto p = packet (value ? 0x2c : 0x28, type, 0x00, device, name);
+			p[0x27] = (uint8_t) device;
+			if (value)
+				p[0x2b] = (uint8_t) *value;
+			return p;
+		}
+	}
+
+	std::vector<uint8_t> masterRequest (int device, const std::string& name)
+	{
+		return control (typeMasterRequest, device, name, std::nullopt);
+	}
+
+	std::vector<uint8_t> masterResponse (int device, const std::string& name)
+	{
+		return control (typeMasterResponse, device, name, 0x01);
+	}
+
+	std::vector<uint8_t> syncCommand (int device, const std::string& name, int value)
+	{
+		return control (typeSyncControl, device, name, value);
+	}
+
+	std::optional<Control> parseControl (const uint8_t* data, size_t size)
+	{
+		using Type = Control::Type;
+		if (isPacket (data, size, typeMasterRequest, 0x28))
+			return Control { Type::masterRequest, data[offDevice], 0 };
+		if (isPacket (data, size, typeMasterResponse, 0x2c))
+			return Control { Type::masterResponse, data[offDevice], data[0x2b] };
+		if (isPacket (data, size, typeSyncControl, 0x2c))
+			return Control { Type::syncCommand, data[offDevice], data[0x2b] };
+		return std::nullopt;
 	}
 
 	//==========================================================================
@@ -171,6 +285,8 @@ namespace prolink
 	{
 		constexpr uint8_t typeHello = 0x0a, typeClaim1 = 0x00, typeClaim2 = 0x02, typeClaim3 = 0x04;
 		constexpr uint8_t typeFinished = 0x05, typeConflict = 0x08;
+		constexpr uint8_t typeIntention = 0x01, typeAssignment = 0x03;
+		constexpr uint8_t viaMixer = 0x01;   // byte 0b of the channel-port exchange
 		constexpr uint8_t aPlayer = 0x01;
 		// Byte 21: the old structure is 02; a CDJ-3000 on player 5 or 6 needs
 		// 04 in the hello and 03 in the claims.
@@ -225,6 +341,33 @@ namespace prolink
 		p[0x2f] = (uint8_t) counter;
 		p[0x30] = 0x01;
 		p[0x31] = specificNumber;
+		return p;
+	}
+
+	std::vector<uint8_t> numberRequest (const Identity& self, int counter)
+	{
+		// The second-stage claim, marked 01 at 0b and with no number of its own.
+		auto p = claimStage2 (self, counter);
+		p[0x0b] = viaMixer;
+		p[0x2e] = 0x00;
+		return p;
+	}
+
+	std::vector<uint8_t> mixerIntention (const Identity& mixer)
+	{
+		auto p = announcement (0x2f, typeIntention, structure, mixer.name);
+		std::memcpy (p.data() + 0x24, &mixer.ip, 4);
+		std::memcpy (p.data() + 0x28, mixer.mac.data(), 6);
+		p[0x2e] = 0x01;
+		return p;
+	}
+
+	std::vector<uint8_t> numberAssignment (const Identity& mixer, int device, int counter)
+	{
+		auto p = announcement (0x27, typeAssignment, structure, mixer.name);
+		p[0x0b] = viaMixer;
+		p[0x24] = (uint8_t) device;
+		p[0x25] = (uint8_t) counter;
 		return p;
 	}
 
@@ -286,7 +429,11 @@ namespace prolink
 			return Announcement { Type::conflict, data[0x24], readIp (data + 0x25) };
 		if (type == typeFinished && fits (0x26))
 			return Announcement { Type::assignmentFinished, data[0x24], 0 };
-		if (type == typeHello || type == typeClaim1 || type == 0x01 || type == 0x03)
+		if (type == typeIntention && fits (0x2f))
+			return Announcement { Type::mixerIntention, 0, readIp (data + 0x24) };
+		if (type == typeAssignment && fits (0x27))
+			return Announcement { Type::numberAssigned, data[0x24], 0 };
+		if (type == typeHello || type == typeClaim1 || type == typeIntention || type == typeAssignment)
 			return Announcement { Type::other, 0, 0 };
 		return std::nullopt;
 	}

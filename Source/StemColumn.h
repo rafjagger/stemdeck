@@ -41,13 +41,14 @@ public:
 	StemViewer& viewer() { return stemViewer; }
 	OneShotKeys& oneShots() { return keys; }
 	juce::String stateText() const { return stateLabel.getText(); }
+	juce::String auxCaptionText() const { return auxCaption.getText(); }
 
 	void paint (juce::Graphics&) override;
 	void resized() override;
 
 private:
 	void homeDragged (spatial::Pose);
-	void showThreeD();
+	void showShares();   // the 3D and AUX captions carry their values
 
 	StemDeckPlayer& player;
 	DeckSpatialPorts& ports;

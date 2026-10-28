@@ -74,7 +74,7 @@ OneDeckOutputs::OneDeckOutputs (OneDeckAudio& a) : audio (a)
 	}
 
 	boxes[0].title = "OUT " + juce::String::fromUTF8 ("\xc2\xb7") + " B-format";
-	boxes[1].title = "CUE " + juce::String::fromUTF8 ("\xc2\xb7") + " binaural";
+	boxes[1].title = "CUE " + juce::String::fromUTF8 ("\xc2\xb7") + " B-format";
 	boxes[2].title = "AUX " + juce::String::fromUTF8 ("\xc2\xb7") + " send";
 	boxes[3].title = "PHONES";
 	captions[0] = juce::String (outputs::bformatChannels) + " ch " + juce::String::fromUTF8 ("\xe2\x86\x92") + " Core";

@@ -50,7 +50,7 @@ StemColumn::StemColumn (StemDeckPlayer& p, DeckSpatialPorts& spatialPorts, int s
 	nameLabel.setMinimumHorizontalScale (0.6f);
 	stateLabel.setColour (juce::Label::textColourId, Theme::textDim);
 	stateLabel.setJustificationType (juce::Justification::centred);
-	stateLabel.setMinimumHorizontalScale (0.45f);   // "ORBIT 4 · 1/16 · AUX 25" is the longest line
+	stateLabel.setMinimumHorizontalScale (0.6f);
 	setStemName ("STEM " + juce::String (stem + 1));   // until a set says
 	addAndMakeVisible (nameLabel);
 	addAndMakeVisible (stateLabel);
@@ -62,11 +62,15 @@ StemColumn::StemColumn (StemDeckPlayer& p, DeckSpatialPorts& spatialPorts, int s
 	threeDKnob.onValueChange = [this, s]
 	{
 		ports.settings().threeD[s].store ((float) threeDKnob.getValue());
-		showThreeD();
+		showShares();
 	};
 	setUpKnob (auxKnob, { 0.0, 1.0 }, 0.01, 0.0, {});
 	auxKnob.setValue (settings.aux[s].load(), juce::dontSendNotification);
-	auxKnob.onValueChange = [this, s] { ports.settings().aux[s].store ((float) auxKnob.getValue()); };
+	auxKnob.onValueChange = [this, s]
+	{
+		ports.settings().aux[s].store ((float) auxKnob.getValue());
+		showShares();
+	};
 	setUpKnob (widthKnob, { 0.0, 360.0 }, 1.0, spatial::Pose{}.width, juce::String::fromUTF8 ("\xc2\xb0"));
 	widthKnob.setValue (settings.width[s].load(), juce::dontSendNotification);
 	widthKnob.onValueChange = [this, s] { ports.settings().width[s].store ((float) widthKnob.getValue()); };
@@ -82,7 +86,7 @@ StemColumn::StemColumn (StemDeckPlayer& p, DeckSpatialPorts& spatialPorts, int s
 		addAndMakeVisible (knob);
 		addAndMakeVisible (caption);
 	}
-	showThreeD();
+	showShares();
 
 	stemViewer.setColour (StemViewer::stemColourId, colour);
 	stemViewer.onHomeChanged = [this] (spatial::Pose pose) { homeDragged (pose); };
@@ -109,9 +113,14 @@ void StemColumn::setStemName (const juce::String& name)
 	nameLabel.setText (name.toUpperCase(), juce::dontSendNotification);
 }
 
-void StemColumn::showThreeD()
+void StemColumn::showShares()
 {
-	threeDCaption.setText ("3D " + juce::String (juce::roundToInt (threeDKnob.getValue() * 100.0)), juce::dontSendNotification);
+	const auto share = [] (const juce::String& name, const juce::Slider& knob)
+	{
+		return name + " " + juce::String (juce::roundToInt (knob.getValue() * 100.0));
+	};
+	threeDCaption.setText (share ("3D", threeDKnob), juce::dontSendNotification);
+	auxCaption.setText (share ("AUX", auxKnob), juce::dontSendNotification);
 }
 
 void StemColumn::homeDragged (spatial::Pose pose)
@@ -133,9 +142,8 @@ void StemColumn::refresh()
 	const auto state = motion.stemState (stem);
 
 	auto line = OneShotKeys::stateLine (motion, stem);
-	const auto aux = juce::roundToInt (settings.aux[s].load() * 100.0f);
-	if (aux > 0)
-		line << juce::String::fromUTF8 (" \xc2\xb7 ") << "AUX " << aux;
+	if (settings.aux[s].load() > 0.0f)   // the amount is on the knob's caption
+		line << juce::String::fromUTF8 (" \xc2\xb7 ") << "AUX";
 	stateLabel.setText (line, juce::dontSendNotification);
 	stateLabel.setColour (juce::Label::textColourId, state == motionlite::PadState::running ? colour
 													 : state == motionlite::PadState::armed ? Theme::text : Theme::textDim);
@@ -145,7 +153,7 @@ void StemColumn::refresh()
 	follow (threeDKnob, settings.threeD[s].load());
 	follow (auxKnob, settings.aux[s].load());
 	follow (widthKnob, settings.width[s].load());
-	showThreeD();
+	showShares();
 	cueKey.setToggleState (player.isStemCued (stem), juce::dontSendNotification);
 	muteKey.setToggleState (player.isStemMuted (stem), juce::dontSendNotification);
 }

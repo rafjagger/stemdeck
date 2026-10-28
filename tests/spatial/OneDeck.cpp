@@ -453,6 +453,7 @@ TEST_F (OneDeck, AuxKnobWritesTheStemsAux)
 
 	column.aux().setValue (0.4, juce::sendNotificationSync);
 	EXPECT_FLOAT_EQ (settings().aux[1].load(), 0.4f);
+	EXPECT_EQ (column.auxCaptionText(), "AUX 40") << "the readout matches 3D's";
 	for (int other : { 0, 2, 3 })
 		EXPECT_EQ (settings().aux[(size_t) other].load(), 0.0f);
 
@@ -472,7 +473,7 @@ TEST_F (OneDeck, StemColumnStateLineSaysAuxWhenSent)
 
 	column.aux().setValue (0.4, juce::sendNotificationSync);
 	column.refresh();
-	EXPECT_EQ (column.stateText(), "home " + juce::String::fromUTF8 ("\xc2\xb7") + " AUX 40");
+	EXPECT_EQ (column.stateText(), "home " + juce::String::fromUTF8 ("\xc2\xb7") + " AUX");
 
 	view.column (3).refresh();
 	EXPECT_EQ (view.column (3).stateText(), "home");

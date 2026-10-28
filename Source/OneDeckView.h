@@ -15,7 +15,7 @@
 #include <memory>
 
 // The one-deck screen's outputs row (v4): the B-format meter (16 channels to
-// Core), the binaural cue's, the AUX's, and the phones' LEVEL and CUE<->MIX.
+// Core), the cue's (B-format, decoded in Core), the AUX's, and the phones' LEVEL and CUE<->MIX.
 // A bar for the cue bus and one for the AUX bus (each its W); meters only for what StemDeck sends; the phones' knobs write the deck.
 class OneDeckOutputs : public juce::Component
 {

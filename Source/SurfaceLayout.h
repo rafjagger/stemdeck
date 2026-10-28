@@ -107,7 +107,34 @@ namespace surface
 		std::array<Rect, 5> gridNudge;   // <1/2  <1  SET 1  1>  1/2>
 		std::array<Rect, 5> gridEdit;    // SNAP  SHIFT  RESET  x2  1/2
 	};
-	DeckColumn deckColumn (Rect local, bool gridOn, int deckIndex, Metrics metrics);
+	// The transport in the column's foot (the two-deck screen), or placed by
+	// the window, which leaves the column's room to its other keys (the
+	// one-deck screen's foot row, oneDeckFoot).
+	enum class Transport { inColumn, elsewhere };
+	DeckColumn deckColumn (Rect local, bool gridOn, int deckIndex, Metrics metrics, Transport transport = Transport::inColumn);
+
+	// The one-deck screen's foot row (2026-10-28), in its own coordinates:
+	// the transport on its tile at the left, CUE | PLAY as tall as the row
+	// and the biggest keys, the track search (|< over >|) beside PLAY; the
+	// meters' card at the right, one bar each for MAIN, AUX and CUE.
+	struct TransportKeys
+	{
+		Rect tile, previous, cue, play, next;
+	};
+	struct OneDeckFoot
+	{
+		TransportKeys transport;
+		Rect metersTile;
+	};
+	OneDeckFoot oneDeckFoot (Rect row, Metrics metrics);
+
+	// Inside the meters' card (its own coordinates): MAIN, AUX, CUE left to
+	// right, each a bar over its bus's name.
+	struct MeterSlot
+	{
+		Rect bar, caption;
+	};
+	std::array<MeterSlot, 3> oneDeckMeterSlots (Rect tile, Metrics metrics);
 
 	// How tall a deck column is for keys `keyHeight` high.
 	int deckColumnHeight (int keyHeight, Metrics metrics);

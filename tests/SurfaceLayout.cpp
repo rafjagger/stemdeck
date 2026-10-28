@@ -523,3 +523,120 @@ TEST (SurfaceLayout, GridEditRowHasFiveKeysUnderTheNudgeKeys)
 		EXPECT_EQ (c.gridEdit[i].w, c.gridNudge[i].w) << "key " << i;
 	}
 }
+
+//==============================================================================
+// The one-deck screen (2026-10-28): its outputs row lost the phones and the
+// 16 B-format bars, and the transport moved into the room -- CUE | PLAY as
+// tall as the row at the left, the track search stacked beside them, the
+// three meters' card at the right.
+namespace
+{
+	// OneDeckView's foot row on the rig: 15 % of its 756 x 718.
+	constexpr int rigFootWidth = 756, rigFootHeight = 108;
+	const std::vector<std::pair<int, int>> footRows { { rigFootWidth, rigFootHeight }, { 588, 82 }, { 1068, 190 } };
+
+	Rect footRow (int w, int h) { return Rect { 0, 0, w, h }; }
+}
+
+TEST (SurfaceLayout, OneDeckFootHasCueThenPlayAtTheLeftAsTallAsTheRow)
+{
+	for (const auto& [w, h] : footRows)
+	{
+		const auto row = footRow (w, h);
+		const auto foot = surface::oneDeckFoot (row, surface::metrics (w));
+		const auto& t = foot.transport;
+
+		EXPECT_TRUE (row.contains (t.tile)) << sizeName (w, h);
+		EXPECT_TRUE (row.contains (foot.metersTile)) << sizeName (w, h);
+		EXPECT_FALSE (t.tile.intersects (foot.metersTile)) << sizeName (w, h);
+		EXPECT_LT (t.tile.right(), foot.metersTile.x) << "the meters at the right, " << sizeName (w, h);
+		EXPECT_EQ (t.tile.x, row.x) << "the transport at the hand's corner";
+
+		for (const auto& key : { t.cue, t.play, t.previous, t.next })
+			EXPECT_TRUE (t.tile.contains (key)) << sizeName (w, h);
+		EXPECT_LT (t.cue.right(), t.play.x) << "CUE before PLAY, as on a CDJ";
+		EXPECT_EQ (t.cue.y, t.play.y);
+		EXPECT_EQ (t.cue.w, t.play.w);
+		EXPECT_EQ (t.cue.h, t.play.h);
+		EXPECT_GE (t.cue.h * 10, h * 8) << "nearly the row's height, " << sizeName (w, h);
+
+		EXPECT_LT (t.play.right(), t.previous.x) << "track search after PLAY";
+		EXPECT_EQ (t.previous.x, t.next.x);
+		EXPECT_EQ (t.previous.w, t.next.w);
+		EXPECT_LT (t.previous.bottom(), t.next.y + 1) << "|< over >|";
+		EXPECT_FALSE (t.previous.intersects (t.next));
+		EXPECT_LT (t.previous.w * t.previous.h, t.cue.w * t.cue.h) << "CUE and PLAY are the biggest";
+	}
+}
+
+TEST (SurfaceLayout, OneDeckTransportIsFingerSizedOnTheRig)
+{
+	const auto foot = surface::oneDeckFoot (footRow (rigFootWidth, rigFootHeight), surface::metrics (rigFootWidth));
+	const auto& t = foot.transport;
+	// About 7 px a mm: CUE and PLAY over 12 mm high, the track search over 6 mm.
+	for (const auto& key : { t.cue, t.play })
+	{
+		EXPECT_GE (key.h, 84);
+		EXPECT_GE (key.w, 2 * key.h) << "wide enough to hit without looking";
+	}
+	for (const auto& key : { t.previous, t.next })
+	{
+		EXPECT_GE (key.h, 40);
+		EXPECT_GE (key.w, 80);
+	}
+}
+
+TEST (SurfaceLayout, OneDeckMetersAreMainAuxCueOneBarEach)
+{
+	for (const auto& [w, h] : footRows)
+	{
+		const auto foot = surface::oneDeckFoot (footRow (w, h), surface::metrics (w));
+		const auto tile = foot.metersTile;
+		const auto slots = surface::oneDeckMeterSlots (Rect { 0, 0, tile.w, tile.h }, surface::metrics (w));
+		const Rect local { 0, 0, tile.w, tile.h };
+
+		for (size_t i = 0; i < slots.size(); ++i)
+		{
+			const auto& s = slots[i];
+			EXPECT_TRUE (local.contains (s.bar)) << i << " " << sizeName (w, h);
+			EXPECT_TRUE (local.contains (s.caption)) << i << " " << sizeName (w, h);
+			EXPECT_LT (s.bar.bottom(), s.caption.y + 1) << "the bus's name under its bar";
+			EXPECT_GT (s.bar.h, s.caption.h * 2) << "the bar is the slot";
+			EXPECT_GE (s.bar.w, 3) << "a bar, not a hairline";
+			EXPECT_EQ (s.bar.w, slots[0].bar.w);
+			EXPECT_EQ (s.bar.h, slots[0].bar.h);
+			if (i > 0)
+			{
+				EXPECT_LT (slots[i - 1].bar.right(), s.bar.x) << "MAIN, AUX, CUE left to right";
+				EXPECT_FALSE (slots[i - 1].caption.intersects (s.caption));
+			}
+		}
+	}
+}
+
+// Without its transport the deck column gives the room to the keys left in
+// it: each taller than in the two-deck column, none moved below another.
+TEST (SurfaceLayout, DeckColumnWithoutTransportGivesTheRoomToTheKeys)
+{
+	for (const auto& [w, h] : windows)
+	{
+		const auto s = surface::sections (w, h);
+		const Rect column { 0, 0, s.deck[0].w, s.deck[0].h };
+		for (const auto gridOn : { false, true })
+		{
+			const auto with = surface::deckColumn (column, gridOn, 0, s.metrics);
+			const auto without = surface::deckColumn (column, gridOn, 0, s.metrics, surface::Transport::elsewhere);
+
+			for (const auto& key : { without.transportTile, without.previous, without.cue, without.play, without.next })
+				EXPECT_TRUE (key.isEmpty()) << "nothing of the transport in the column";
+			for (const auto& [a, b] : { std::pair { with.loopOff, without.loopOff }, { with.sync, without.sync }, { with.vinyl, without.vinyl },
+										{ with.gridNudge[0], without.gridNudge[0] }, { with.gridEdit[0], without.gridEdit[0] } })
+				EXPECT_GT (b.h, a.h) << sizeName (w, h);
+			EXPECT_LT (without.loopOff.bottom(), without.sync.y + 1);
+			EXPECT_LT (without.sync.bottom(), without.vinyl.y + 1);
+			for (const auto& key : { without.loopOff, without.repeat, without.sync, without.master, without.vinyl, without.grid })
+				EXPECT_TRUE (column.contains (key)) << sizeName (w, h);
+			EXPECT_GE (without.vinyl.bottom(), column.h - column.h / 10) << "the keys at the column's foot";
+		}
+	}
+}

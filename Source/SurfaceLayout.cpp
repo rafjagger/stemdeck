@@ -87,6 +87,15 @@ namespace surface
 		constexpr int timesUnits = 550, gridUnits = 830, keyUnits = 1000, transportUnits = 1400, gapUnits = 120;
 		constexpr int deckUnits = timesUnits + 2 * gridUnits + 3 * keyUnits + 2 * transportUnits
 								+ 7 * gapUnits;   // 6 between rows, 1 inside the transport
+		// Without the transport (Transport::elsewhere): its two rows, the gap
+		// between them and the one above it.
+		constexpr int keysOnlyUnits = deckUnits - 2 * transportUnits - 2 * gapUnits;
+
+		// The one-deck foot row, in per mille: the meters' card of the row's
+		// width, the track search of the transport tile's.
+		constexpr int footMetersShare = 250, trackSearchShare = 200;
+		// A meter slot: its bar of the slot's width, its caption of the card's height.
+		constexpr int meterBarShare = 300, meterCaptionShare = 220;
 
 		// The column's panel stands this far inside its bounds.
 		int panelInset (Metrics m) { return m.line * 2 / 3; }
@@ -234,7 +243,7 @@ namespace surface
 		return line;
 	}
 
-	DeckColumn deckColumn (Rect local, bool gridOn, int deckIndex, Metrics m)
+	DeckColumn deckColumn (Rect local, bool gridOn, int deckIndex, Metrics m, Transport transport)
 	{
 		DeckColumn c;
 		const auto gap = m.gap;
@@ -248,7 +257,8 @@ namespace surface
 		area = deckIndex == 0 ? Rect { area.x + gap, area.y, area.w - gap, area.h } : Rect { area.x, area.y, area.w - gap, area.h };
 		area = area.reduced (0, gap);
 
-		const auto key = (area.h - 2 * gap) * 1000 / deckUnits;
+		const auto hasTransport = transport == Transport::inColumn;
+		const auto key = hasTransport ? (area.h - 2 * gap) * 1000 / deckUnits : area.h * 1000 / keysOnlyUnits;
 		const auto units = [key] (int u) { return key * u / 1000; };
 		const auto rowGap = units (gapUnits);
 
@@ -256,12 +266,15 @@ namespace surface
 		// on their own tile: CUE | PLAY, and the track search over them, as
 		// large -- a 2 x 2 block gives each key half the tile's width, where a
 		// row of four would give a quarter.
-		c.transportTile = area.removeFromBottom (2 * units (transportUnits) + rowGap + 2 * gap);
-		auto transport = c.transportTile.reduced (gap);
-		splitPair (transport.removeFromBottom (units (transportUnits)), rowGap, c.cue, c.play);
-		transport.removeFromBottom (rowGap);
-		splitPair (transport, rowGap, c.previous, c.next);
-		area.removeFromBottom (rowGap);
+		if (hasTransport)
+		{
+			c.transportTile = area.removeFromBottom (2 * units (transportUnits) + rowGap + 2 * gap);
+			auto tile = c.transportTile.reduced (gap);
+			splitPair (tile.removeFromBottom (units (transportUnits)), rowGap, c.cue, c.play);
+			tile.removeFromBottom (rowGap);
+			splitPair (tile, rowGap, c.previous, c.next);
+			area.removeFromBottom (rowGap);
+		}
 
 		// Above: the keys, which stay where they are whatever GRID does.
 		splitPair (area.removeFromBottom (units (keyUnits)), rowGap, c.vinyl, c.grid);
@@ -290,6 +303,40 @@ namespace surface
 			c.remaining = times;
 		}
 		return c;
+	}
+
+	OneDeckFoot oneDeckFoot (Rect row, Metrics m)
+	{
+		OneDeckFoot foot;
+		foot.metersTile = row.removeFromRight (share (row.w, footMetersShare));
+		row.removeFromRight (m.gap);
+
+		auto& t = foot.transport;
+		t.tile = row;
+		auto keys = t.tile.reduced (m.gap);
+		auto search = keys.removeFromRight (share (keys.w, trackSearchShare));
+		keys.removeFromRight (m.gap);
+		splitPair (keys, m.gap, t.cue, t.play);
+		t.previous = search.removeFromTop ((search.h - m.gap) / 2);
+		search.removeFromTop (m.gap);
+		t.next = search;
+		return foot;
+	}
+
+	std::array<MeterSlot, 3> oneDeckMeterSlots (Rect tile, Metrics m)
+	{
+		std::array<MeterSlot, 3> slots;
+		auto inside = tile.reduced (m.gap);
+		const auto captionHeight = share (tile.h, meterCaptionShare);
+		const auto slotWidth = inside.w / (int) slots.size();
+		for (auto& slot : slots)
+		{
+			auto column = inside.removeFromLeft (slotWidth);
+			slot.caption = column.removeFromBottom (captionHeight);
+			column.removeFromBottom (m.gap / 2);
+			slot.bar = column.withSizeKeepingCentre (std::max (3, share (slotWidth, meterBarShare)), column.h);
+		}
+		return slots;
 	}
 
 	Strip channelStrip (Rect local, int deckIndex)

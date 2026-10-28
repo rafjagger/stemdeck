@@ -177,3 +177,21 @@ TEST (Outputs, OneDeckFoldsOnlyPhonesOntoAStereoDevice)
 	EXPECT_EQ (foldsInto (phones, 1), -1);
 	EXPECT_EQ (foldsInto (phones, 0), -1);
 }
+
+// The one-deck screen's three meters (2026-10-28): MAIN, AUX and CUE each show
+// their bus's W, ACN 0 -- the first port of each, never a higher order.
+TEST (Outputs, OneDeckMetersReadEachBussW)
+{
+	using outputs::oneDeck::MeteredBus;
+	const auto layout = outputs::oneDeck::layout();
+	EXPECT_EQ (outputs::oneDeck::wChannel (MeteredBus::main), layout.bformat);
+	EXPECT_EQ (outputs::oneDeck::wChannel (MeteredBus::aux), layout.aux);
+	EXPECT_EQ (outputs::oneDeck::wChannel (MeteredBus::cue), layout.cue);
+	EXPECT_EQ (outputs::oneDeck::portName (outputs::oneDeck::wChannel (MeteredBus::main)), "bformat_1");
+	EXPECT_EQ (outputs::oneDeck::portName (outputs::oneDeck::wChannel (MeteredBus::aux)), "aux_1");
+	EXPECT_EQ (outputs::oneDeck::portName (outputs::oneDeck::wChannel (MeteredBus::cue)), "cue_1");
+	ASSERT_EQ (outputs::oneDeck::meteredBuses.size(), 3u);
+	EXPECT_EQ (outputs::oneDeck::meteredBuses[0], MeteredBus::main) << "MAIN, AUX, CUE, left to right";
+	EXPECT_EQ (outputs::oneDeck::meteredBuses[1], MeteredBus::aux);
+	EXPECT_EQ (outputs::oneDeck::meteredBuses[2], MeteredBus::cue);
+}

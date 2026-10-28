@@ -19,8 +19,6 @@ double nowSeconds() { return juce::Time::getMillisecondCounterHiRes() / 1000.0; 
 constexpr const char* phonesModeKey = "phonesMode";
 // Per deck, in the deck's own settings file. "1" take the panel at start if free, "0" never, unset: deck A by default.
 constexpr const char* panelHereKey = "panelHere";
-constexpr const char* phonesLevelKey = "phonesLevel";
-constexpr const char* phonesMixKey = "phonesMix";
 constexpr int refreshHz = 60;   // the rolling waveform's
 // Shares of the window's height: the top bar and the library (the two-deck screen's 3 % and about 22 %).
 constexpr float topBarShare = 0.035f, libraryShare = 0.24f;
@@ -82,12 +80,6 @@ OneDeckComponent::OneDeckComponent (DeckInstance deck, double pathLatencySeconds
 	view.waveform().onSetDropped = [this] (const juce::String& id) { loadById (id); };
 	view.deckPanel().onSetDropped = [this] (const juce::String& id) { loadById (id); };
 	view.deckPanel().onStep = [this] (int direction) { step (direction); };
-	view.outputs().setPhones ((float) instanceSettings().getDoubleValue (phonesLevelKey, 1.0), (float) instanceSettings().getDoubleValue (phonesMixKey, 0.0));
-	view.outputs().onPhonesChanged = [this] (float level, float mix)
-	{
-		instanceSettings().setValue (phonesLevelKey, level);
-		instanceSettings().setValue (phonesMixKey, mix);
-	};
 
 	rec.button.onClick = [this] { rec.toggle (audio->jackClient().getSampleRate()); };
 	rec.addTo (*this);

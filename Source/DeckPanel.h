@@ -70,6 +70,17 @@ public:
 	// The parts in the band: made children of `parent`, placed by it.
 	void addBandPartsTo (juce::Component& parent);
 	void setBandBounds (const surface::DeckTile& parts);   // window coordinates
+
+	// The one-deck screen's: |< >| CUE PLAY made children of `parent`, placed
+	// by it in its foot row (surface::oneDeckFoot); the column's other keys
+	// take the transport's room.
+	void addTransportTo (juce::Component& parent);
+	void setTransportBounds (const surface::TransportKeys& keys);   // `parent`'s coordinates
+
+	juce::TextButton& cueKey() { return cueButton; }
+	juce::TextButton& playKey() { return playButton; }
+	juce::TextButton& previousKey() { return previousButton; }
+	juce::TextButton& nextKey() { return nextButton; }
 	std::function<void (GridAction, double seconds)> onGridEdit;
 
 	void saveState (DeckSession& state) const;
@@ -109,7 +120,8 @@ private:
 	void setGridMode (bool on);
 	void showPitchValue();
 	surface::Metrics metrics() const;   // the window's gap and line width
-	juce::Rectangle<int> transportTile;
+	juce::Rectangle<int> transportTile;   // empty while the transport stands elsewhere
+	surface::Transport transportPlace = surface::Transport::inColumn;
 	juce::Slider pitchFader { juce::Slider::LinearVertical, juce::Slider::NoTextBox };
 	juce::Label pitchValue;
 	juce::TextButton rangeKey;

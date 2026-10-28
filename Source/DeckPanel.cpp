@@ -352,9 +352,12 @@ void DeckPanel::paint (juce::Graphics& g)
 	g.fillRoundedRectangle (panel, Theme::corner (panel));
 
 	// The transport on its own tile.
-	const auto tile = transportTile.toFloat();
-	g.setColour (Theme::panelRaised);
-	g.fillRoundedRectangle (tile, Theme::corner (tile));
+	if (! transportTile.isEmpty())
+	{
+		const auto tile = transportTile.toFloat();
+		g.setColour (Theme::panelRaised);
+		g.fillRoundedRectangle (tile, Theme::corner (tile));
+	}
 
 	// The coloured stripe on the side facing the mixer: the start of the
 	// deck's line, which the window carries on around its tile in the band.
@@ -364,7 +367,7 @@ void DeckPanel::paint (juce::Graphics& g)
 
 void DeckPanel::resized()
 {
-	const auto layout = surface::deckColumn (surface::fromJuce (getLocalBounds()), gridButton.getToggleState(), deckIndex, metrics());
+	const auto layout = surface::deckColumn (surface::fromJuce (getLocalBounds()), gridButton.getToggleState(), deckIndex, metrics(), transportPlace);
 	transportTile = surface::toJuce (layout.transportTile);
 	const auto place = [] (juce::Component& c, const surface::Rect& r) { c.setBounds (surface::toJuce (r)); };
 
@@ -373,10 +376,8 @@ void DeckPanel::resized()
 	// The times a share of their height: big when GRID gives them its room.
 	for (auto* time : { &elapsedLabel, &remainingLabel })
 		time->setFont (juce::FontOptions ((float) time->getHeight() * 0.7f));
-	place (previousButton, layout.previous);
-	place (cueButton, layout.cue);
-	place (playButton, layout.play);
-	place (nextButton, layout.next);
+	if (transportPlace == surface::Transport::inColumn)
+		setTransportBounds ({ layout.transportTile, layout.previous, layout.cue, layout.play, layout.next });
 	place (loopOffButton, layout.loopOff);
 	place (repeatButton, layout.repeat);
 	place (syncButton, layout.sync);
@@ -403,6 +404,22 @@ void DeckPanel::addBandPartsTo (juce::Component& parent)
 	for (auto* part : std::initializer_list<juce::Component*> { &overview, &pitchFader, &pitchValue, &rangeKey, &keyLockButton,
 																&titleLabel, &stemsLabel, &bpmLabel, &bpmInfoLabel })
 		parent.addAndMakeVisible (part);
+}
+
+void DeckPanel::addTransportTo (juce::Component& parent)
+{
+	transportPlace = surface::Transport::elsewhere;
+	for (auto* key : { &previousButton, &cueButton, &playButton, &nextButton })
+		parent.addAndMakeVisible (key);
+	resized();
+}
+
+void DeckPanel::setTransportBounds (const surface::TransportKeys& keys)
+{
+	previousButton.setBounds (surface::toJuce (keys.previous));
+	cueButton.setBounds (surface::toJuce (keys.cue));
+	playButton.setBounds (surface::toJuce (keys.play));
+	nextButton.setBounds (surface::toJuce (keys.next));
 }
 
 void DeckPanel::setBandBounds (const surface::DeckTile& parts)

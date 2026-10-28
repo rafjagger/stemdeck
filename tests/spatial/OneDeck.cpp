@@ -319,10 +319,6 @@ TEST_F (OneDeck, PaintsEveryState)
 	ASSERT_TRUE (player().isStemMuted (3));
 	shoot ("muted");
 
-	view.outputs().phonesMix().setValue (1.0, juce::sendNotificationSync);
-	ASSERT_EQ (settings().phonesMix.load(), 1.0f);
-	shoot ("phones mix");
-
 	view.column (0).aux().setValue (0.6, juce::sendNotificationSync);
 	ASSERT_FLOAT_EQ (settings().aux[0].load(), 0.6f);
 	shoot ("aux sent");
@@ -527,14 +523,15 @@ TEST_F (OneDeck, StemColumnStateLineSaysAuxWhenSent)
 	EXPECT_EQ (column.stateText(), "home");
 }
 
-// The AUX meter is the aux bus's W and the cue meter the cue bus's W: cued
-// stems with no send light the cue only, a send lights the AUX.
-TEST_F (OneDeck, AuxMeterReadsTheAuxBus)
+// The MAIN meter is the B-format's W, the AUX meter the aux bus's W and the
+// cue meter the cue bus's W: playing lights MAIN, cued stems with no send the
+// cue only, a send the AUX.
+TEST_F (OneDeck, MetersReadMainAuxAndCue)
 {
+	using outputs::oneDeck::MeteredBus;
 	OneDeckView view (audio, formats, 0);
-	view.setSize (screenWidth, viewHeight);
+	view.setSize (rigViewWidth, rigViewHeight);
 	setAllStems (false, true, 1.0f);
-	player().play();
 	const auto settle = [&]
 	{
 		for (int i = 0; i < blocksFor (0.3); ++i)
@@ -544,14 +541,106 @@ TEST_F (OneDeck, AuxMeterReadsTheAuxBus)
 		}
 	};
 	settle();
-	const auto& cue = view.outputs().cueMeter();
-	const auto& aux = view.outputs().auxMeter();
+	const auto& main = view.outputs().meter (MeteredBus::main);
+	const auto& cue = view.outputs().meter (MeteredBus::cue);
+	const auto& aux = view.outputs().meter (MeteredBus::aux);
+	EXPECT_LE (main.levelDb(), -60.0f) << "stopped";
+
+	player().play();
+	settle();
+	EXPECT_GT (main.levelDb(), -60.0f) << "the deck plays on MAIN";
 	EXPECT_GT (cue.levelDb(), -60.0f) << "cued stems play in the cue";
 	EXPECT_LE (aux.levelDb(), -60.0f) << "nothing is sent yet";
 
 	setAllAux (1.0f);
 	settle();
 	EXPECT_GT (aux.levelDb(), -60.0f) << "the send lights the aux bus's W";
+}
+
+// Each meter takes its bus's W and nothing else: the higher orders' peaks are
+// left where the audio thread put them.
+TEST_F (OneDeck, MetersTakeOnlyW)
+{
+	OneDeckView view (audio, formats, 0);
+	view.setSize (rigViewWidth, rigViewHeight);
+	setAllStems (false, true, 1.0f);
+	setAllAux (1.0f);
+	player().play();
+	renderBlocks (blocksFor (0.3));
+	view.outputs().refresh();
+	for (const auto bus : { layout.bformat, layout.aux, layout.cue })
+	{
+		EXPECT_EQ (audio.popPeak (bus), 0.0f) << outputs::oneDeck::portName (bus) << " was read by its meter";
+		EXPECT_GT (audio.popPeak (bus + 1), 0.0f) << outputs::oneDeck::portName (bus + 1) << " is no meter's";
+	}
+}
+
+// The transport in the foot row at the rig's size (2026-10-28): the view's
+// children, CUE | PLAY at the left and far bigger than the column gave them,
+// the meters' card beside them; every key inside the view, none on another.
+TEST_F (OneDeck, TheTransportStandsInTheFootRow)
+{
+	OneDeckView view (audio, formats, 0);
+	view.setSize (rigViewWidth, rigViewHeight);
+	auto& panel = view.deckPanel();
+	const auto foot = view.getLocalBounds().removeFromBottom (juce::roundToInt (rigViewHeight * 0.15f));
+
+	std::vector<juce::Rectangle<int>> keys;
+	for (auto* key : { &panel.previousKey(), &panel.cueKey(), &panel.playKey(), &panel.nextKey() })
+	{
+		EXPECT_EQ (key->getParentComponent(), &view);
+		EXPECT_TRUE (key->isVisible());
+		EXPECT_TRUE (foot.contains (key->getBounds())) << key->getButtonText();
+		for (const auto& other : keys)
+			EXPECT_FALSE (other.intersects (key->getBounds())) << key->getButtonText();
+		keys.push_back (key->getBounds());
+	}
+	EXPECT_LT (panel.cueKey().getRight(), panel.playKey().getX());
+	EXPECT_EQ (panel.cueKey().getX(), foot.getX() + surface::metrics (rigViewWidth).gap) << "CUE at the hand's corner";
+	EXPECT_GE (panel.cueKey().getHeight(), 84) << "over 12 mm on the rig";
+	EXPECT_GE (panel.previousKey().getHeight(), 40);
+
+	const auto meters = view.outputs().getBounds();
+	EXPECT_TRUE (foot.contains (meters));
+	EXPECT_LT (panel.nextKey().getRight(), meters.getX()) << "the meters right of the transport";
+	for (const auto bus : outputs::oneDeck::meteredBuses)
+		EXPECT_TRUE (view.outputs().getLocalBounds().contains (view.outputs().meter (bus).getBounds()));
+
+	// GRID re-lays the column: the transport stays where the view put it.
+	const auto cue = panel.cueKey().getBounds();
+	panel.resized();
+	EXPECT_EQ (panel.cueKey().getBounds(), cue);
+}
+
+// A page test must paint: the foot row at the rig's size, stopped and playing
+// (PLAY lit, the meters up) -- each paints more than its ground, and PLAY's
+// own pixels change.
+TEST_F (OneDeck, PaintsTheFootRowInEachState)
+{
+	DJLookAndFeel look;
+	OneDeckView view (audio, formats, 0);
+	view.setLookAndFeel (&look);
+	view.setSize (rigViewWidth, rigViewHeight);
+	view.setSet (set);
+	const auto foot = view.getLocalBounds().removeFromBottom (juce::roundToInt (rigViewHeight * 0.15f));
+	const auto footOf = [&] { return snapshotOf (view).getClippedImage (foot); };
+
+	setAllStems (false, true, 1.0f);
+	const auto stopped = footOf();
+	player().play();
+	for (int i = 0; i < blocksFor (0.3); ++i)
+	{
+		renderBlock();
+		view.refresh();
+	}
+	const auto playing = footOf();
+	EXPECT_GT (lumaVariance (stopped), 50.0);
+	EXPECT_GT (lumaVariance (playing), 50.0);
+	EXPECT_GT (differingPixels (stopped, playing), 100) << "PLAY and the meters light";
+
+	const auto playArea = view.deckPanel().playKey().getBounds().translated (-foot.getX(), -foot.getY());
+	EXPECT_GT (differingPixels (stopped.getClippedImage (playArea), playing.getClippedImage (playArea)), 10) << "PLAY is lit";
+	view.setLookAndFeel (nullptr);
 }
 
 //==============================================================================

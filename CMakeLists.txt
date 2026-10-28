@@ -26,7 +26,8 @@ find_package(JUCE CONFIG REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(AUDIO_CODECS REQUIRED IMPORTED_TARGET flac vorbisenc vorbisfile vorbis ogg)
 pkg_check_modules(JACK REQUIRED IMPORTED_TARGET jack)
-# Key lock: Rubber Band's real-time stretcher (librubberband-dev; at run time librubberband3).
+# Key lock: Rubber Band's real-time stretcher (librubberband-dev; at run time librubberband3 on
+# forky, librubberband2 on trixie -- the package names it through shlibs).
 pkg_check_modules(RUBBERBAND REQUIRED IMPORTED_TARGET rubberband)
 
 # The engine's IEM nodes (spatial audio), compiled into this binary by its own

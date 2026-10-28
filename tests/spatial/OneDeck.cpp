@@ -559,6 +559,30 @@ TEST_F (OneDeck, AuxPotAfterALoadKeepsItsLastPlaceAsGhostAndDoesNotJump)
 	EXPECT_FALSE (view.column (0).hasAuxGhost());
 }
 
+// While another program held the panel, the pots were its controls: the last
+// reading StemDeck heard is stale and must not count as a side.
+TEST_F (OneDeck, AuxPotAfterAPanelHandOverForgetsTheStaleReading)
+{
+	OneDeckView view (audio, formats, 0);
+	view.setSize (screenWidth, viewHeight);
+	AuxPots pots ([&view] (int stem) -> StemColumn& { return view.column (stem); });
+	auto& knob = view.column (0).aux();
+	knob.setValue (0.2, juce::sendNotificationSync);
+	pots.rearm();
+	pots.reading (0, 0.1);   // the last reading before the panel went away
+
+	pots.panelGained();
+	EXPECT_FALSE (view.column (0).hasAuxGhost()) << "no ghost from a stale place";
+	pots.reading (0, 0.9);
+	EXPECT_DOUBLE_EQ (knob.getValue(), 0.2) << "the first fresh reading does not count as a crossing";
+	ASSERT_TRUE (view.column (0).hasAuxGhost());
+	EXPECT_DOUBLE_EQ (view.column (0).auxGhost().value(), 0.9);
+	pots.reading (0, 0.25);
+	EXPECT_DOUBLE_EQ (knob.getValue(), 0.2) << "not crossed yet";
+	pots.reading (0, 0.15);
+	EXPECT_DOUBLE_EQ (knob.getValue(), 0.15) << "crossed: picked up";
+}
+
 TEST_F (OneDeck, WatchRearmsAPickedUpPotWhenTheKnobIsMovedAway)
 {
 	OneDeckView view (audio, formats, 0);

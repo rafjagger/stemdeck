@@ -28,6 +28,12 @@ void AuxPots::rearm()
 		rearm (s);
 }
 
+void AuxPots::panelGained()
+{
+	lastReading.fill (std::nullopt);
+	rearm();
+}
+
 void AuxPots::watch()
 {
 	for (int s = 0; s < count; ++s)

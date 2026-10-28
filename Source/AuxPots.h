@@ -20,8 +20,10 @@ public:
 
 	// A pot's reading, 0..1.
 	void reading (int stem, double value);
-	// Every knob's value was replaced (session, set, restore) or the panel was gained.
+	// Every knob's value was replaced (session, set, restore).
 	void rearm();
+	// The panel came back from another program: the last readings were its, not this deck's.
+	void panelGained();
 	// Once a pot has picked up, a touch on the knob or a load moving the value
 	// away from it re-arms that pot, so its next move cannot jump the value.
 	void watch();

@@ -118,7 +118,7 @@ private:
 	std::optional<PanelFollowsWorkspace> panelFollow;   // set: the panel follows the i3 workspace
 	std::unique_ptr<PanelWorkspacePoller> workspacePoller;
 	unsigned seenWorkspaceChanges = 0;
-	panel::PanelGain panelGain { [this] { rearmPotPickups(); } };   // R13: the pots find their values when the panel is gained
+	panel::PanelGain panelGain { [this] { auxPots.panelGained(); } };   // R13: the pots find their values when the panel is gained
 	AuxPots auxPots { [this] (int stem) -> StemColumn& { return view.column (stem); } };
 
 	OneDeckView view { deckAudio, formatManager, instance.letter - 'A' };

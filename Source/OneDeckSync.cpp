@@ -61,8 +61,10 @@ bool OneDeckSync::update (double seconds)
 	in.multiple = multiple;
 	// The link's phase is for now; the deck's position is from its last audio
 	// block -- carried forward, as the two-deck app does under SYNC: LINK.
-	const auto position = positionAt (player.getPosition(), player.getPositionStamp(), seconds,
-									  player.getEffectiveRate(), player.isPlaying() && ! player.isScratching());
+	const auto moving = player.isPlaying() && ! player.isScratching();
+	const auto rate = player.getEffectiveRate();
+	const auto position = audiblePosition (positionAt (player.getPosition(), player.getPositionStamp(), seconds, rate, moving),
+										   pathLatency, moving ? rate : 0.0);
 	multiple = deckfollow::apply (panel, player, bent, in, position);
 	return yielded;
 }

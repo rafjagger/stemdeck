@@ -10,6 +10,7 @@
 #include "ProLinkPackets.h"
 #include "ProLinkReceiver.h"
 #include "ProLinkSender.h"
+#include "TwoDeckFixture.h"
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -207,6 +208,40 @@ TEST_F (OneDeckSyncTest, SyncFollowsTheOtherInstancesMaster)
 	sync.update (10.05);
 	EXPECT_NEAR (player().getSpeed(), 126.0 / 120.0, 1e-6);
 	EXPECT_TRUE (view.deckPanel().isSyncEnabled()) << "a tempo set by sync is not a hand on the fader";
+}
+
+// The deck's audio is heard `pathLatency` after its read head, so its beats
+// must line up as heard: a read head 18 ms past a beat is exactly on the
+// leader's beat when 18 ms are still in flight.
+TEST_F (OneDeckSyncTest, FollowerAlignsItsAudiblePosition)
+{
+	ASSERT_TRUE (folder.createDirectory().wasOk());
+	formats.registerBasicFormats();
+	StemSet set;
+	set.name = "noise";
+	for (int s = 0; s < StemDeckPlayer::numStems; ++s)
+	{
+		set.files[(size_t) s] = folder.getChildFile ("stem" + juce::String (s) + ".wav");
+		twodeck::writeNoiseStem (set.files[(size_t) s], 3 + s);
+	}
+	ASSERT_EQ (player().load (set), juce::String());
+	player().setBeatGrid ({ 120.0, 0.0 });   // load() clears the grid
+	player().setPosition (1.018);   // 2 beats at 120 BPM, plus 18 ms
+	player().play();
+
+	view.deckPanel().setSyncAvailable (true);
+	view.deckPanel().setSyncEnabled (true);
+	sync.setSynced (true);
+	sync.setPathLatency (0.018);
+
+	hearMaster (120.0, 10.0);   // the leader is on a beat now
+	sync.update (10.0);
+	EXPECT_NEAR (player().getEffectiveRate(), 1.0, 1e-3) << "audibly on the beat: no nudge";
+	EXPECT_NEAR (player().getPosition(), 1.018, 1e-3) << "and no jump";
+
+	sync.setPathLatency (0.0);
+	sync.update (10.0);
+	EXPECT_LT (player().getEffectiveRate(), 0.99) << "without the offset the read head runs ahead and is held back";
 }
 
 TEST_F (OneDeckSyncTest, WithNoMasterAnywhereTheDeckKeepsItsOwnGrid)

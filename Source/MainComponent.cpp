@@ -1,6 +1,7 @@
 #include "MainComponent.h"
 #include "AppSettings.h"
 #include "CoreTruth.h"
+#include "LinkInterface.h"
 #include "AudioCpu.h"
 #include "StemJob.h"
 #include "GridEdit.h"
@@ -960,7 +961,10 @@ void MainComponent::updateNetwork()
 	}
 
 	if (! proLink.isRunning())
+	{
+		pinLinkToControlLan (proLink);
 		proLink.start (device, proLinkPorts);
+	}
 
 	if (masterDeck >= 0 && proLink.isRunning() && ! pioSender.isRunning())
 		pioSender.start (device, proLink.broadcastAddress(), proLinkPorts);

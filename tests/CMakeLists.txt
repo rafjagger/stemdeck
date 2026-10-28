@@ -96,6 +96,8 @@ add_executable(stemdeck-tests
     ${CMAKE_SOURCE_DIR}/Source/Session.cpp
     LaunchOptions.cpp
     ${CMAKE_SOURCE_DIR}/Source/LaunchOptions.cpp
+    LinkInterface.cpp
+    ${CMAKE_SOURCE_DIR}/Source/LinkInterface.cpp
     DeckInstance.cpp
     ${CMAKE_SOURCE_DIR}/Source/DeckInstance.cpp
     SpatialLaw.cpp

@@ -3,6 +3,7 @@
 #include "OneDeckComponent.h"
 
 #include "AppSettings.h"
+#include "LinkInterface.h"
 #include "KnobSetup.h"
 #include "OscTruthFile.h"
 #include "SettingsPanel.h"
@@ -25,11 +26,13 @@ constexpr int refreshHz = 60;   // the rolling waveform's
 constexpr float topBarShare = 0.035f, libraryShare = 0.24f;
 }
 
-OneDeckComponent::OneDeckComponent (DeckInstance deck)
+OneDeckComponent::OneDeckComponent (DeckInstance deck, double pathLatencySeconds)
 	: instance (deck), truth (coretruth::choose()),
 	  panelOwnership (appsettings::panelLockFile().getFullPathName().toStdString(), deck.letter)
 {
 	setLookAndFeel (&lookAndFeel);
+	sync.setPathLatency (pathLatencySeconds);
+	linkSender.setPathLatency (pathLatencySeconds);
 	appProperties.setStorageParameters (appsettings::options());
 	instanceProperties.setStorageParameters (appsettings::instanceOptions (deck.letter));
 	formatManager.registerBasicFormats();
@@ -278,6 +281,8 @@ void OneDeckComponent::updateLink()
 	}
 
 	const auto device = instance.proLinkDevice();
+	if (! link.isRunning())
+		pinLinkToControlLan (link);
 	if (! link.isRunning() && link.start (device, linkPorts, instance.title()))
 		sync.joined (nowSeconds());
 

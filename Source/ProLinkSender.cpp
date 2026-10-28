@@ -97,7 +97,8 @@ void ProLinkSender::run()
 		const auto moving = player->isPlaying() && ! player->isScratching();
 		const auto rate = player->getEffectiveRate();
 		const auto t = now();
-		const auto position = positionAt (player->getPosition(), player->getPositionStamp(), t, rate, moving);
+		const auto position = audiblePosition (positionAt (player->getPosition(), player->getPositionStamp(), t, rate, moving),
+											   pathLatency.load(), moving ? rate : 0.0);
 
 		if (t - lastStatus >= statusEvery)
 		{

@@ -32,12 +32,16 @@ public:
 	// The deck whose beat goes out, or nullptr for none.
 	void setMaster (const StemDeckPlayer* player) { master = player; }
 
+	// Beats go out when they are heard, not when the read head crosses them.
+	void setPathLatency (double seconds) { pathLatency = seconds; }
+
 private:
 	void run();
 	void send (const std::vector<uint8_t>& packet, int port);
 
 	std::atomic<bool> running { false };
 	std::atomic<const StemDeckPlayer*> master { nullptr };
+	std::atomic<double> pathLatency { 0.0 };
 	std::thread thread;
 	int socketFd = -1;
 	osctruth::ProLinkPorts ports;

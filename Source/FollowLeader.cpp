@@ -68,6 +68,11 @@ double positionAt (double position, double stampSeconds, double nowSeconds, doub
 	return position + age * rate;
 }
 
+double audiblePosition (double position, double pathLatencySeconds, double rate)
+{
+	return position - pathLatencySeconds * rate;
+}
+
 namespace
 {
 	int beatInBarOf (long long index)

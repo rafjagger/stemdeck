@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "BeatScheduler.h"
+#include "FollowLeader.h"
 
 #include <vector>
 
@@ -112,4 +113,29 @@ TEST (BeatScheduler, TheLeadInIsCountedIntoTheBar)
 		t += 0.0001;
 	}
 	EXPECT_EQ (bar, (std::vector<int> { 3, 4, 1, 2 })) << "beats at 0.5, 1.0, 1.5, 2.0";
+}
+
+// ProLinkSender feeds the scheduler audiblePosition(); a deck whose audio is
+// 18 ms late on the way to the Core sends each beat 18 ms later.
+TEST (ProLinkSenderSchedule, BeatGoesOutWhenAudible)
+{
+	const auto firstBeatSentAt = [] (double latency)
+	{
+		BeatScheduler scheduler;
+		double t = 0.05;
+		while (t < 1.0)
+		{
+			const auto s = scheduler.step (t, audiblePosition (t, latency, 1.0), 1.0, 0.0, 120.0, true);
+			t += s.sleepBefore;
+			if (s.send)
+				return t;
+			t += 0.0001;
+		}
+		return -1.0;
+	};
+
+	const auto now = firstBeatSentAt (0.0);
+	const auto later = firstBeatSentAt (0.018);
+	ASSERT_GT (now, 0.0);
+	EXPECT_NEAR (later - now, 0.018, 0.002);
 }

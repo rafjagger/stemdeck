@@ -42,7 +42,8 @@ class OneDeckComponent : public juce::Component,
 						 private juce::Timer
 {
 public:
-	explicit OneDeckComponent (DeckInstance);
+	// `pathLatencySeconds`: audio in flight to the ears (STEMDECK_PATH_LATENCY_MS).
+	explicit OneDeckComponent (DeckInstance, double pathLatencySeconds = 0.0);
 	~OneDeckComponent() override;
 
 	juce::PropertiesFile& settings() { return *appProperties.getUserSettings(); }

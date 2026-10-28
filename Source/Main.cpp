@@ -28,7 +28,7 @@ public:
     //==============================================================================
     void initialise (const juce::String& commandLine) override
     {
-        const auto parsed = parseLaunch (toStdStrings (getCommandLineParameterArray()));
+        const auto parsed = parseLaunch (toStdStrings (getCommandLineParameterArray()), pathLatencyFromEnvironment());
 
         if (const auto* why = std::get_if<std::string> (&parsed))
         {
@@ -45,7 +45,7 @@ public:
         if (options.oneDeck)
         {
             const DeckInstance instance { options.deck };
-            auto content = std::make_unique<OneDeckComponent> (instance);
+            auto content = std::make_unique<OneDeckComponent> (instance, options.pathLatencyMs / 1000.0);
             auto& settings = content->instanceSettings();
             mainWindow.reset (new MainWindow (juce::String (instance.title()), std::move (content), settings, "windowState"));
         }
@@ -146,6 +146,12 @@ public:
     };
 
 private:
+    static std::optional<std::string> pathLatencyFromEnvironment()
+    {
+        const auto* value = std::getenv ("STEMDECK_PATH_LATENCY_MS");
+        return value != nullptr ? std::optional<std::string> (value) : std::nullopt;
+    }
+
     static std::vector<std::string> toStdStrings (const juce::StringArray& words)
     {
         std::vector<std::string> out;

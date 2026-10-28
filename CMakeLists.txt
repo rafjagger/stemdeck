@@ -135,7 +135,9 @@ target_sources(StemDeck PRIVATE
     Source/FollowLeader.cpp
     Source/DeckFollow.cpp
     Source/OneDeckSync.cpp
+    Source/ProLinkAnnouncer.cpp
     Source/ProLinkReceiver.cpp
+    Source/LinkInterface.cpp
     Source/MasterDeck.cpp
     Source/SyncLabels.cpp
     Source/ProLinkSender.cpp
@@ -155,6 +157,7 @@ target_sources(StemDeck PRIVATE
     Source/StemHandover.cpp
     Source/StemLevels.cpp
     Source/Recorder.cpp
+    Source/RecordTarget.cpp
     Source/DataPaths.cpp
     Source/Scs3d.cpp
     Source/Scs3dDevice.cpp
@@ -164,7 +167,11 @@ target_sources(StemDeck PRIVATE
     Source/PanelProtocol.cpp
     Source/PanelMap.cpp
     Source/PanelMapOneDeck.cpp
+    Source/PotPickup.cpp
+    Source/AuxPots.cpp
     Source/PanelOwnership.cpp
+    Source/PanelFollowsWorkspace.cpp
+    Source/PanelWorkspacePoller.cpp
     Source/PanelLink.cpp
     Source/PanelDevice.cpp
     Source/SpatialLaw.cpp
@@ -187,7 +194,11 @@ target_sources(StemDeck PRIVATE
     Source/DeckMotion.cpp
     Source/StemViewer.cpp
     third_party/a3-core/src/a3-engine/Laws.cpp
-    third_party/a3-core/src/a3-engine/PurestGain.cpp)
+    third_party/a3-core/src/a3-engine/PurestGain.cpp
+    Source/DeckLinks.cpp
+    third_party/a3-core/src/a3-links/LinkMap.cpp
+    third_party/a3-core/src/a3-links/LinkPlan.cpp
+    third_party/a3-core/src/a3-links/JackLinker.cpp)
 target_include_directories(StemDeck PRIVATE third_party/a3-core/src)
 
 target_compile_definitions(StemDeck PRIVATE

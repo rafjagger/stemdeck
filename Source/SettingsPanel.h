@@ -28,6 +28,7 @@ public:
 		std::optional<spatial::PhonesMode> phonesMode;
 		// A -bformat instance: whether this deck holds the A³ Motion panel (one instance does).
 		std::optional<bool> panelHere;
+		bool panelFollowsWorkspace = false;   // R9: the workspace decides, the toggle only shows
 	};
 
 	struct Actions

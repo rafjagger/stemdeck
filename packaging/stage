@@ -9,7 +9,12 @@
 # (the builder adds DEBIAN/). Neither writes anywhere else.
 set -euo pipefail
 
-TOOLS=(a3-wait-for-the-screen rig-keep-the-screen.sh setup-separator.sh stemdeck-seed)
+TOOLS=(a3-wait-for-the-screen rig-keep-the-screen.sh setup-separator.sh stemdeck-seed
+       stemdeck-aes67-deck)
+# A deck host's AES67: the templates stemdeck-aes67-deck renders, its units.
+AES67_TEMPLATES=(pipewire-aes67-deck.conf.in pipewire-stemdeck-aes67.conf.in)
+AES67_UNITS=(a3-aes67-deck@.service stemdeck-aes67.service)
+EEE=etc/systemd/network/99-default.link.d/stemdeck-eee.conf
 
 usage() {
     echo "usage: $0 build <src> <build> <juce> <jobs> [--test] | files <src> <build> <stage>" >&2
@@ -43,6 +48,20 @@ files() {
         "$stage/usr/lib/systemd/user/stemdeck.service"
     install -D -m 644 "$src/.config/systemd/user/stemdeck@.service" \
         "$stage/usr/lib/systemd/user/stemdeck@.service"
+    for unit in "${AES67_UNITS[@]}"; do
+        install -D -m 644 "$src/.config/systemd/user/$unit" "$stage/usr/lib/systemd/user/$unit"
+    done
+    for template in "${AES67_TEMPLATES[@]}"; do
+        install -D -m 644 "$src/tools/$template" "$stage/usr/share/stemdeck/$template"
+    done
+    install -D -m 644 "$src/data/links-aes67.json" "$stage/usr/share/stemdeck/links-aes67.json"
+    # The recorder's links on the Core (P39), read when STEMDECK_LINK_MAP is unset.
+    install -D -m 644 "$src/data/links-core.json" "$stage/usr/share/stemdeck/links-core.json"
+    # The deck host's server rate; the deck-host role installs it into the user's PipeWire.
+    install -D -m 644 "$src/data/10-stemdeck-rate.conf" "$stage/usr/share/stemdeck/10-stemdeck-rate.conf"
+    install -D -m 644 "$src/packaging/$EEE" "$stage/$EEE"
+    install -D -m 644 "$src/packaging/lib/udev/rules.d/90-stemdeck-usb.rules" \
+        "$stage/usr/lib/udev/rules.d/90-stemdeck-usb.rules"
     # .reuse/dep5 is already in Debian's machine-readable copyright format.
     install -D -m 644 "$src/.reuse/dep5" "$stage/usr/share/doc/stemdeck/copyright"
 }

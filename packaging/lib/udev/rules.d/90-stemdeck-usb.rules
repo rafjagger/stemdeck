@@ -1,0 +1,18 @@
+# SPDX-FileCopyrightText: 2026 Raphael Eismann
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# A USB stick or disk with a filesystem is mounted at /media/a3-usb, where
+# StemDeck's recorder looks for it (A3-recordings/). systemd-mount creates
+# the mount and an automount that lets go a few seconds after the last
+# write; --collect removes the units again when the device is pulled.
+# vfat/exfat/ntfs have no owners, so they are mounted as uid 1000, the rig's user;
+# other filesystems keep their own ownership.
+#
+# Only on `add`: a `change` would mount a mounted stick again. A USB disk that
+# /etc/fstab names is the machine's own (system or library disk), not a stick:
+# findmnt answers 0 for a device fstab lists by path, LABEL=, UUID= or PART*=
+# (it resolves the tags), and the rules below are skipped.
+ACTION=="add", SUBSYSTEM=="block", ENV{ID_BUS}=="usb", ENV{ID_FS_USAGE}=="filesystem", PROGRAM=="/usr/bin/findmnt --fstab --source $devnode", GOTO="stemdeck_usb_end"
+ACTION=="add", SUBSYSTEM=="block", ENV{ID_BUS}=="usb", ENV{ID_FS_USAGE}=="filesystem", ENV{ID_FS_TYPE}=="vfat|exfat|ntfs|ntfs3", RUN+="/usr/bin/systemd-mount --no-block --automount=yes --collect --timeout-idle-sec=5 -o uid=1000,gid=1000 $devnode /media/a3-usb"
+ACTION=="add", SUBSYSTEM=="block", ENV{ID_BUS}=="usb", ENV{ID_FS_USAGE}=="filesystem", ENV{ID_FS_TYPE}!="vfat|exfat|ntfs|ntfs3", RUN+="/usr/bin/systemd-mount --no-block --automount=yes --collect --timeout-idle-sec=5 $devnode /media/a3-usb"
+LABEL="stemdeck_usb_end"

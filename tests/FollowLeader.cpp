@@ -285,3 +285,10 @@ TEST (FollowLeader, FollowsAnotherInstancesBeat)
 	EXPECT_FALSE (leaderInputAt (clock, 10.0 + PioneerClock::silence + 0.1).leaderPlaying)
 		<< "a silent master: its tempo held, the phase left alone";
 }
+
+TEST (FollowLeader, AudiblePositionLagsByTheLatency)
+{
+	EXPECT_NEAR (audiblePosition (10.0, 0.018, 1.0), 9.982, 1e-9);
+	EXPECT_DOUBLE_EQ (audiblePosition (10.0, 0.018, 0.0), 10.0) << "paused: nothing is in flight";
+	EXPECT_NEAR (audiblePosition (10.0, 0.018, 1.05), 10.0 - 0.018 * 1.05, 1e-9);
+}

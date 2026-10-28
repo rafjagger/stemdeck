@@ -1,0 +1,21 @@
+[Unit]
+Description=AES67 sender of deck %i
+# Its config is rendered from the truth before every start. It has no PTP
+# driver of its own: its rtp-sink joins pipewire.ptp0, which the host's base
+# instance drives (plan ruling R4). Shipped, not enabled: the deck-host role's
+# drop-in on stemdeck@<X> pulls it in.
+Requires=stemdeck-aes67.service
+After=stemdeck-aes67.service
+
+[Service]
+# Never beside a3-core's AES67 (a3nuc1): a base skipped by its condition still
+# satisfies Requires=, so the sender checks for itself.
+ExecCondition=/usr/lib/stemdeck/stemdeck-aes67-deck base-wanted
+# A render that would refuse (no audio socket, no group for the letter) skips
+# the unit: systemd retries a failing ExecStartPre whatever its exit status.
+ExecCondition=/usr/lib/stemdeck/stemdeck-aes67-deck can-render %i
+# STEMDECK_AUDIO_PORT, the host's audio socket, comes from the deck-host role's drop-in.
+ExecStartPre=/usr/lib/stemdeck/stemdeck-aes67-deck render %i
+ExecStart=/usr/bin/pipewire -c %h/.config/pipewire/pipewire-aes67-deck-%i.conf
+Restart=always
+RestartSec=2

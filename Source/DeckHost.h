@@ -47,7 +47,7 @@ public:
 	//==============================================================================
 	// Audio: allocates the deck's stem pairs, then fills them each block and
 	// writes the layout's channels from `firstChannel` on in `spatialOutputs`.
-	void prepare (double sampleRate, int samplesPerBlockExpected);
+	bool prepare (double sampleRate, int samplesPerBlockExpected);   // false, nothing done, for a block of 0
 	const juce::AudioBuffer<float>& render (juce::AudioBuffer<float>& spatialOutputs, int firstChannel, int numSamples);
 	void releaseResources() { deckPlayer.releaseResources(); }
 

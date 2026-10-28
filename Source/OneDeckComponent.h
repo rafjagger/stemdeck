@@ -13,7 +13,10 @@
 #include "OneDeckView.h"
 #include "PanelDevice.h"
 #include "PanelMapOneDeck.h"
+#include "PanelFollowsWorkspace.h"
 #include "PanelOwnership.h"
+#include "PanelWorkspacePoller.h"
+#include "AuxPots.h"
 #include "ProLinkReceiver.h"
 #include "ProLinkSender.h"
 #include "RecorderControls.h"
@@ -24,7 +27,7 @@
 #include "WorkspaceSwitch.h"
 
 // The content of a -bformat instance (ruling R10): one deck, its JACK client
-// StemDeck-<X> with the 22 one-deck ports and rec_L/R, its own session
+// StemDeck-<X> with the 43 one-deck ports and rec_L/R, its own session
 // (~/.config/StemDeck/<X>/session.xml, imported once from the two-deck one),
 // the library, the stem creator and the recorder as the two-deck screen has
 // them. No buses, no Auto DJ (B15). SYNC and MASTER meet the other
@@ -41,7 +44,9 @@ class OneDeckComponent : public juce::Component,
 						 private juce::Timer
 {
 public:
-	explicit OneDeckComponent (DeckInstance);
+	// `pathLatencySeconds`: audio in flight to the ears (STEMDECK_PATH_LATENCY_MS).
+	// `panelWorkspace` (STEMDECK_PANEL_WORKSPACE): the panel is held while that i3 workspace is in front (R9).
+	explicit OneDeckComponent (DeckInstance, double pathLatencySeconds = 0.0, std::optional<std::string> panelWorkspace = std::nullopt);
 	~OneDeckComponent() override;
 
 	juce::PropertiesFile& settings() { return *appProperties.getUserSettings(); }
@@ -61,12 +66,16 @@ private:
 	void saveSession();
 	OneDeckSession gatherSession() const;
 	void updateDeviceStatus();
+	void keepLinks();   // the JACK links of this deck's map (DeckLinks)
 	// The A³ Motion panel: held by one instance (panel.lock). Looked at every half second.
 	juce::String panelPreferenceKey() const;
 	void startPanel();
 	void updatePanelOwner();
+	void followWorkspace();   // R9: one step of the rule, then the lock follows
 	void handlePanel (const panel1::Event&);
 	void showPanel();
+	// R13: the pots find their values again. After a session, a set load and a restore, and when the panel is gained.
+	void rearmPotPickups();
 	void showSettings();
 	// The link (S4.7): joined while SYNC or MASTER is on; the MASTER deck publishes.
 	void startSync();
@@ -106,6 +115,11 @@ private:
 	panel::Ownership panelOwnership;
 	std::unique_ptr<PanelDevice> panelDevice;
 	int panelCountdown = 0;
+	std::optional<PanelFollowsWorkspace> panelFollow;   // set: the panel follows the i3 workspace
+	std::unique_ptr<PanelWorkspacePoller> workspacePoller;
+	unsigned seenWorkspaceChanges = 0;
+	panel::PanelGain panelGain { [this] { auxPots.panelGained(); } };   // R13: the pots find their values when the panel is gained
+	AuxPots auxPots { [this] (int stem) -> StemColumn& { return view.column (stem); } };
 
 	OneDeckView view { deckAudio, formatManager, instance.letter - 'A' };
 	juce::Label deckLabel, deviceStatus;

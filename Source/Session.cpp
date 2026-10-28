@@ -49,6 +49,8 @@ namespace
 			stem->setAttribute ("elevation", mix.elevation);
 			stem->setAttribute ("width", mix.width);
 			stem->setAttribute ("lengthBars", mix.lengthBars);
+			if (! withRouting)
+				stem->setAttribute ("aux", mix.aux);
 		}
 	}
 
@@ -106,6 +108,7 @@ namespace
 			deck.stems[s].elevation = juce::jlimit (-90.0, 90.0, stem->getDoubleAttribute ("elevation", defaults.elevation));
 			deck.stems[s].width = juce::jlimit (0.0, 360.0, stem->getDoubleAttribute ("width", defaults.width));
 			deck.stems[s].lengthBars = motionlite::validLength (stem->getDoubleAttribute ("lengthBars", defaults.lengthBars));
+			deck.stems[s].aux = juce::jlimit (0.0, 1.0, stem->getDoubleAttribute ("aux", defaults.aux));
 			if (withRouting)
 				deck.stems[s].buses = buses::fromStored ((unsigned) stem->getIntAttribute ("buses", (int) buses::defaultMask ((int) s)));
 			++s;

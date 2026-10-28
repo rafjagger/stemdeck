@@ -399,3 +399,46 @@ TEST (OneDeckSession, ACorruptOneDeckFileFallsBackToTheImport)
 	}
 	dir.deleteRecursively();
 }
+
+// The stem's AUX send exists in a one-deck session only; the two-deck file
+// stays as it was.
+TEST (OneDeckSession, AuxRoundTrips)
+{
+	OneDeckSession session;
+	session.deck.stems[2].aux = 0.37;
+
+	const auto back = OneDeckSession::fromXml (*session.toXml());
+	EXPECT_DOUBLE_EQ (back.deck.stems[2].aux, 0.37);
+	EXPECT_DOUBLE_EQ (back.deck.stems[0].aux, 0.0);
+}
+
+TEST (OneDeckSession, OldOneDeckSessionHasAuxZero)
+{
+	auto xml = OneDeckSession().toXml();
+	for (auto* deck : xml->getChildWithTagNameIterator ("Deck"))
+		for (auto* stem : deck->getChildWithTagNameIterator ("Stem"))
+			stem->removeAttribute ("aux");
+
+	for (const auto& stem : OneDeckSession::fromXml (*xml).deck.stems)
+		EXPECT_DOUBLE_EQ (stem.aux, 0.0);
+}
+
+TEST (OneDeckSession, AStoredAuxOutsideZeroToOneIsClamped)
+{
+	auto xml = OneDeckSession().toXml();
+	auto* stem = xml->getChildByName ("Deck")->getChildByName ("Stem");
+	stem->setAttribute ("aux", 7.5);
+	EXPECT_DOUBLE_EQ (OneDeckSession::fromXml (*xml).deck.stems[0].aux, 1.0);
+	stem->setAttribute ("aux", -3.0);
+	EXPECT_DOUBLE_EQ (OneDeckSession::fromXml (*xml).deck.stems[0].aux, 0.0);
+}
+
+TEST (Session, TwoDeckXmlWritesNoAux)
+{
+	Session session;
+	session.decks[0].stems[0].aux = 0.5;
+	const auto xml = session.toXml();
+	for (auto* deck : xml->getChildWithTagNameIterator ("Deck"))
+		for (auto* stem : deck->getChildWithTagNameIterator ("Stem"))
+			EXPECT_FALSE (stem->hasAttribute ("aux"));
+}

@@ -24,16 +24,18 @@ juce::String DeckSpatialPorts::create()
 	return {};
 }
 
-void DeckSpatialPorts::prepare (double newSampleRate, int blockSize)
+bool DeckSpatialPorts::prepare (double newSampleRate, int blockSize)
 {
+	if (blockSize <= 0)
+		return false;
 	sampleRate = newSampleRate;
 	stemMotion.dropPendingPresses();   // a press from before the stop must not fire now
 	silence.setSize (StemDeckPlayer::numOutputChannels, juce::jmax (blockSize, maxSilenceBlock));
 	silence.clear();
 	if (spatial == nullptr)
-		return;
+		return true;
 	copySettings (true);   // a fresh deck starts at the session's poses
-	spatial->prepare (sampleRate, blockSize);
+	return spatial->prepare (sampleRate, blockSize);
 }
 
 // The pose is the one-shots' to write, block by block; only prepare, before
@@ -52,6 +54,7 @@ void DeckSpatialPorts::copySettings (bool withPose)
 	for (size_t s = 0; s < (size_t) DeckSpatial::stems; ++s)
 	{
 		copy (userSettings.threeD[s], controls.threeD[s]);
+		copy (userSettings.aux[s], controls.aux[s]);
 		if (! withPose)
 			continue;
 		copy (userSettings.azimuth[s], controls.azimuth[s]);
@@ -105,12 +108,16 @@ void DeckSpatialPorts::process (const float* const* stems, juce::AudioBuffer<flo
 	DeckSpatial::Outputs ports;
 	for (int c = 0; c < outputs::bformatChannels; ++c)
 		ports.bformat[(size_t) c] = at (layout.bformat + c);
+	if (layout.aux >= 0)
+		for (int c = 0; c < outputs::bformatChannels; ++c)
+			ports.aux[(size_t) c] = at (layout.aux + c);
+	if (layout.binauralCue)
+		for (int side = 0; side < 2; ++side)
+			ports.binauralCue[(size_t) side] = at (layout.cue + side);
+	else
+		for (int c = 0; c < DeckSpatial::cueChannels; ++c)
+			ports.cue[(size_t) c] = at (layout.cue + c);
 	for (int side = 0; side < 2; ++side)
-	{
-		ports.cue[(size_t) side] = at (layout.cue + side);
 		ports.phones[(size_t) side] = at (layout.phones + side);
-		if (layout.aux >= 0)
-			ports.aux[(size_t) side] = at (layout.aux + side);
-	}
 	spatial->process (stems, ports, count);
 }

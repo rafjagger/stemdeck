@@ -37,6 +37,10 @@ public:
 	// put on the link's master while synced and not master itself.
 	bool update (double seconds);
 
+	// Audio in flight between the read head and the ears; a synced deck lines
+	// up as heard.
+	void setPathLatency (double seconds) { pathLatency = seconds; }
+
 	const PioneerClock& clock() const { return linkClock; }
 
 private:
@@ -46,4 +50,5 @@ private:
 	InstanceMaster master;
 	bool synced = false, bent = false;
 	double multiple = 0.0;
+	double pathLatency = 0.0;
 };

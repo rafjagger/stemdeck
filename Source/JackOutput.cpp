@@ -1,6 +1,8 @@
 #include "JackOutput.h"
 #include "JackFormat.h"
 
+#include <cstdio>
+
 JackOutput::~JackOutput()
 {
 	close();
@@ -27,6 +29,7 @@ juce::String JackOutput::open (const juce::String& name, const juce::StringArray
 	jack_set_sample_rate_callback (client, sampleRateCallback, this);
 	jack_set_xrun_callback (client, xrunCallback, this);
 	jack_on_shutdown (client, shutdownCallback, this);
+	jack_set_port_registration_callback (client, portRegistrationCallback, this);
 
 	for (const auto& portName : portNames)
 	{
@@ -54,6 +57,7 @@ juce::String JackOutput::open (const juce::String& name, const juce::StringArray
 		}
 
 		inputs.push_back (port);
+		inputPortNames.push_back (portName.toStdString());
 	}
 
 	inputPointers.resize (inputs.size());
@@ -62,7 +66,9 @@ juce::String JackOutput::open (const juce::String& name, const juce::StringArray
 	sampleRate = (double) jack_get_sample_rate (client);
 	bufferSize = jack_get_buffer_size (client);
 	renderBuffer.setSize ((int) ports.size(), (int) bufferSize.load());
-	source->prepareToPlay ((int) bufferSize.load(), sampleRate.load());
+	// PipeWire may not know the block size yet; the buffer-size callback prepares then.
+	if (jackformat::complete (bufferSize.load(), sampleRate.load()))
+		source->prepareToPlay ((int) bufferSize.load(), sampleRate.load());
 
 	if (jack_activate (client) != 0)
 	{
@@ -78,6 +84,13 @@ void JackOutput::close()
 	if (client == nullptr)
 		return;
 
+	stopTimer();
+	cancelPendingUpdate();
+	if (linker != nullptr && ! serverShutDown.load())
+		linker->removeOwned();
+	linker.reset();
+	reportedMissing.clear();
+
 	if (! serverShutDown.load())
 		jack_deactivate (client);
 
@@ -85,6 +98,7 @@ void JackOutput::close()
 	client = nullptr;
 	ports.clear();
 	inputs.clear();
+	inputPortNames.clear();
 	sink = nullptr;
 
 	if (source != nullptr)
@@ -110,6 +124,53 @@ int JackOutput::getNumConnectedPorts() const
 			++connected;
 
 	return connected;
+}
+
+void JackOutput::keepLinks (a3::links::LinkMap map)
+{
+	if (! isRunning() || (map.jack.empty() && map.directLinks.empty()))
+		return;
+
+	linkMap = std::move (map);
+	linker = std::make_unique<a3::links::JackLinker> (client, clientName.toStdString(), inputPortNames);
+	applyLinks();
+	startTimer (1000);
+}
+
+void JackOutput::applyLinks()
+{
+	if (linker == nullptr || ! isRunning())
+		return;
+
+	linker->apply (linkMap);
+	reportMissingPeers();
+}
+
+// Once per change, not every second: a peer that is not there yet (no AES67
+// stream) is a state, not news.
+void JackOutput::reportMissingPeers()
+{
+	const auto& missing = linker->missingPeers();
+	if (missing == reportedMissing)
+		return;
+
+	reportedMissing = missing;
+	if (missing.empty())
+	{
+		std::fprintf (stderr, "%s: every link peer is there\n", clientName.toRawUTF8());
+		return;
+	}
+	std::string clients;
+	for (const auto& name : a3::links::clientNamesOf (missing))
+		clients += (clients.empty() ? "" : ", ") + name;
+	std::fprintf (stderr, "%s: %zu link peer ports missing (%s); linking them when they appear\n",
+				  clientName.toRawUTF8(), missing.size(), clients.c_str());
+}
+
+void JackOutput::portRegistrationCallback (jack_port_id_t, int registered, void* arg)
+{
+	if (registered != 0)
+		static_cast<JackOutput*> (arg)->triggerAsyncUpdate();
 }
 
 //==============================================================================

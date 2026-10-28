@@ -4,6 +4,7 @@
 
 #include "LaunchOptions.h"
 
+#include <optional>
 #include <string>
 #include <variant>
 #include <vector>
@@ -91,4 +92,28 @@ TEST (LaunchOptions, DashBformatIsNotABundleOfShortOptions)
 	EXPECT_TRUE (refused ({ "-b" }));
 	EXPECT_TRUE (refused ({ "-bf" }));
 	EXPECT_TRUE (refused ({ "-fullscreen" }));
+}
+
+TEST (LaunchOptions, PathLatencyFromEnvironment)
+{
+	EXPECT_DOUBLE_EQ (ok (parseLaunch ({}, std::string ("18"))).pathLatencyMs, 18.0);
+	EXPECT_DOUBLE_EQ (ok (parseLaunch ({}, std::string ("0"))).pathLatencyMs, 0.0);
+	EXPECT_DOUBLE_EQ (ok (parseLaunch ({}, std::string ("200"))).pathLatencyMs, 200.0);
+	EXPECT_DOUBLE_EQ (ok (parseLaunch ({}, std::string ("18.5"))).pathLatencyMs, 18.5);
+	EXPECT_DOUBLE_EQ (ok (parseLaunch ({}, std::nullopt)).pathLatencyMs, 0.0) << "unset: no offset";
+
+	for (const char* bad : { "-1", "x", "500", "", "18ms", "nan", " 5", "5 ", "0x10", "1e1", "+5", ".", "1.2.3" })
+	{
+		const auto r = parseLaunch ({}, std::string (bad));
+		ASSERT_TRUE (std::holds_alternative<std::string> (r)) << bad;
+		EXPECT_NE (std::get<std::string> (r).find ("STEMDECK_PATH_LATENCY_MS"), std::string::npos) << bad;
+	}
+}
+
+TEST (LaunchOptions, PanelWorkspaceComesFromTheVariable)
+{
+	EXPECT_FALSE (ok (parseLaunch ({ "-bformat" })).panelWorkspace.has_value());
+	EXPECT_FALSE (ok (parseLaunch ({ "-bformat" }, std::nullopt, std::string())).panelWorkspace.has_value());
+	EXPECT_EQ (ok (parseLaunch ({ "-bformat" }, std::nullopt, std::string ("2:STEMDECK"))).panelWorkspace,
+			   std::optional<std::string> ("2:STEMDECK"));
 }

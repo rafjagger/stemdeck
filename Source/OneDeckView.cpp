@@ -12,7 +12,7 @@ namespace
 	// The outputs row's boxes, shares of its width: B-format (16 bars), cue, AUX, phones.
 	constexpr std::array<float, 4> boxShares { 0.34f, 0.19f, 0.19f, 0.28f };
 	// A box's title and caption lines, shares of its height; a meter bar, a share of its box's width.
-	constexpr float titleShare = 0.22f, captionShare = 0.2f, stereoBarShare = 0.09f, fontShare = 0.8f;
+	constexpr float titleShare = 0.22f, captionShare = 0.2f, singleBarShare = 0.14f, fontShare = 0.8f;
 
 	// The view, top to bottom, shares of its height: the rolling waveform, the
 	// overview, the outputs row; the deck panel and the stem columns take the rest.
@@ -67,12 +67,15 @@ OneDeckOutputs::OneDeckOutputs (OneDeckAudio& a) : audio (a)
 		}
 	};
 	addMeters (bformatMeters, outputs::bformatChannels, false);
-	addMeters (cueMeters, 2, true);
-	addMeters (auxMeters, 2, true);
+	for (auto* bar : { &cueBar, &auxBar })
+	{
+		bar->setShowsClip (true);
+		addAndMakeVisible (*bar);
+	}
 
 	boxes[0].title = "OUT " + juce::String::fromUTF8 ("\xc2\xb7") + " B-format";
-	boxes[1].title = "CUE " + juce::String::fromUTF8 ("\xc2\xb7") + " binaural";
-	boxes[2].title = "AUX " + juce::String::fromUTF8 ("\xc2\xb7") + " stereo";
+	boxes[1].title = "CUE " + juce::String::fromUTF8 ("\xc2\xb7") + " B-format";
+	boxes[2].title = "AUX " + juce::String::fromUTF8 ("\xc2\xb7") + " send";
 	boxes[3].title = "PHONES";
 	captions[0] = juce::String (outputs::bformatChannels) + " ch " + juce::String::fromUTF8 ("\xe2\x86\x92") + " Core";
 	captions[2] = juce::String::fromUTF8 ("\xe2\x86\x92") + " Core aux";
@@ -94,9 +97,10 @@ OneDeckOutputs::OneDeckOutputs (OneDeckAudio& a) : audio (a)
 
 void OneDeckOutputs::setMeterParameters (MeterParameters parameters)
 {
-	for (auto* meters : { &bformatMeters, &cueMeters, &auxMeters })
-		for (auto* meter : *meters)
-			meter->setParameters (parameters);
+	for (auto* meter : bformatMeters)
+		meter->setParameters (parameters);
+	cueBar.setParameters (parameters);
+	auxBar.setParameters (parameters);
 }
 
 void OneDeckOutputs::setPhones (float level, float mix)
@@ -124,11 +128,9 @@ void OneDeckOutputs::refresh()
 	const auto layout = outputs::oneDeck::layout();
 	for (int ch = 0; ch < bformatMeters.size(); ++ch)
 		bformatMeters[ch]->setLevel (audio.popPeak (layout.bformat + ch));
-	for (int side = 0; side < 2; ++side)
-	{
-		cueMeters[side]->setLevel (audio.popPeak (layout.cue + side));
-		auxMeters[side]->setLevel (audio.popPeak (layout.aux + side));
-	}
+	// The cue and the AUX are 9 and 16 ambisonic channels, not a stereo pair: each bar is its bus's W (ACN 0).
+	cueBar.setLevel (audio.popPeak (layout.cue));
+	auxBar.setLevel (audio.popPeak (layout.aux));
 
 	// Which stems are in the cue, by name; and whether StemDeck's own phones run (R12).
 	const auto& player = audio.host().player();
@@ -187,10 +189,10 @@ void OneDeckOutputs::resized()
 		box.meters = inside;
 	}
 
-	const auto stereoBar = juce::jmax (2, juce::roundToInt ((float) boxes[1].area.getWidth() * stereoBarShare));
+	const auto singleBar = juce::jmax (2, juce::roundToInt ((float) boxes[1].area.getWidth() * singleBarShare));
 	placeBars (bformatMeters, boxes[0].meters, juce::jmax (2, boxes[0].meters.getWidth() * 3 / (outputs::bformatChannels * 4)));
-	placeBars (cueMeters, boxes[1].meters, stereoBar);
-	placeBars (auxMeters, boxes[2].meters, stereoBar);
+	cueBar.setBounds (boxes[1].meters.withSizeKeepingCentre (singleBar, boxes[1].meters.getHeight()));
+	auxBar.setBounds (boxes[2].meters.withSizeKeepingCentre (singleBar, boxes[2].meters.getHeight()));
 
 	// The phones: two knobs, their names under them where the meters' caption stands.
 	auto knobs = boxes[3].meters;

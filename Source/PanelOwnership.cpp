@@ -158,4 +158,28 @@ namespace panel
 			return ownership.claimByDefault();
 		return *storedPreference && ownership.claimIfFree();
 	}
+
+	bool applyFollow (Ownership& ownership, PanelFollow::Action action)
+	{
+		using Action = PanelFollow::Action;
+		if (action == Action::release)
+			ownership.release();
+		else if (action == Action::takeAfterDelay)
+			ownership.take();
+		return ownership.holds();
+	}
+
+	void PanelGain::update (bool holds)
+	{
+		if (holds && ! wasHolding)
+			onGained();
+		wasHolding = holds;
+	}
+
+	ToggleFace toggleFace (bool followsWorkspace, bool holds)
+	{
+		if (followsWorkspace)
+			return { "Panel follows workspace", false, holds };
+		return { "Panel: this deck", true, holds };
+	}
 }

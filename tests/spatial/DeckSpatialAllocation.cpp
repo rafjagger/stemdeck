@@ -108,9 +108,12 @@ TEST (DeckSpatialAllocation, ProcessDoesNotAllocate)
 	for (int stem = 0; stem < DeckSpatial::stems; ++stem)
 		in.playNoise (stem, stem + 1);
 	Rendered out;
-	for (auto& channel : out.bformat)
+	for (auto* bus : { &out.bformat, &out.aux })
+		for (auto& channel : *bus)
+			channel = silence (blocks * block);
+	for (auto& channel : out.cue)
 		channel = silence (blocks * block);
-	for (auto* pair : { &out.cue, &out.aux, &out.phones })
+	for (auto* pair : { &out.binauralCue, &out.phones })
 		for (auto& channel : *pair)
 			channel = silence (blocks * block);
 	auto deck = preparedDeck (block);
@@ -143,11 +146,16 @@ TEST (DeckSpatialAllocation, ProcessDoesNotAllocate)
 				stems[ch] = in.channels[ch].data() + offset;
 			DeckSpatial::Outputs outputs;
 			for (size_t ch = 0; ch < outputs.bformat.size(); ++ch)
+			{
 				outputs.bformat[ch] = out.bformat[ch].data() + offset;
+				outputs.aux[ch] = out.aux[ch].data() + offset;
+			}
+			for (size_t ch = 0; ch < outputs.cue.size(); ++ch)
+				outputs.cue[ch] = out.cue[ch].data() + offset;
 			for (size_t side = 0; side < 2; ++side)
 			{
-				outputs.cue[side] = out.cue[side].data() + offset;
-				outputs.aux[side] = out.aux[side].data() + offset;
+				if (b >= blocks / 2)   // the second half in two-deck mode (R2)
+					outputs.binauralCue[side] = out.binauralCue[side].data() + offset;
 				outputs.phones[side] = out.phones[side].data() + offset;
 			}
 			// calls shorter and longer than the prepared block, too
@@ -158,7 +166,6 @@ TEST (DeckSpatialAllocation, ProcessDoesNotAllocate)
 	});
 	EXPECT_EQ (count.allocated, 0);
 	EXPECT_EQ (count.released, 0);
-	EXPECT_GT (deck->decoderRuns().cue, 0) << "the cue decoder ran in the counted blocks";
 	EXPECT_GT (deck->decoderRuns().phones, 0) << "the phones decoder ran in the counted blocks";
 }
 
@@ -168,20 +175,21 @@ TEST (DeckSpatialAllocation, StandingAndResumingDoNotAllocate)
 	juce::ScopedJuceInitialiser_GUI juceInitialiser;
 	constexpr int blocks = 120, longestCall = 4096;
 	const Signal quiet = silence (longestCall);
-	std::array<Signal, spatial::bformatChannels + 6> ports;
+	std::array<Signal, 2 * spatial::bformatChannels + DeckSpatial::cueChannels + 2> ports;
 	for (auto& port : ports)
 		port = silence (longestCall);
 	std::array<const float*, 8> stems {};
 	stems.fill (quiet.data());
 	DeckSpatial::Outputs outputs;
 	for (size_t ch = 0; ch < outputs.bformat.size(); ++ch)
-		outputs.bformat[ch] = ports[ch].data();
-	for (size_t side = 0; side < 2; ++side)
 	{
-		outputs.cue[side] = ports[16 + side].data();
-		outputs.aux[side] = ports[18 + side].data();
-		outputs.phones[side] = ports[20 + side].data();
+		outputs.bformat[ch] = ports[ch].data();
+		outputs.aux[ch] = ports[16 + ch].data();
 	}
+	for (size_t ch = 0; ch < outputs.cue.size(); ++ch)
+		outputs.cue[ch] = ports[32 + ch].data();
+	for (size_t side = 0; side < 2; ++side)
+		outputs.phones[side] = ports[32 + outputs.cue.size() + side].data();
 	auto deck = preparedDeck (block, [] (DeckSpatial::Controls& c) { c.playing = false; c.cued[0] = true; });
 	auto& c = deck->controls();
 
@@ -241,4 +249,49 @@ TEST_F (DeckSpatialMotion, APressDoesNotAllocateOnTheAudioThread)
 	EXPECT_EQ (total.allocated, 0);
 	EXPECT_EQ (total.released, 0);
 	EXPECT_TRUE (moved) << "the counted blocks ran shots";
+}
+
+// B1: the aux send moves, mutes and stops under the counter, the aux bed with it.
+TEST (DeckSpatialAllocation, AuxDoesNotAllocate)
+{
+	juce::ScopedJuceInitialiser_GUI juceInitialiser;
+	constexpr int blocks = 200;
+	StemInputs in (blocks * block);
+	for (int stem = 0; stem < DeckSpatial::stems; ++stem)
+		in.playNoise (stem, stem + 1);
+	Rendered out;
+	for (auto* bus : { &out.bformat, &out.aux })
+		for (auto& channel : *bus)
+			channel = silence (blocks * block);
+	auto deck = preparedDeck (block);
+	auto& c = deck->controls();
+
+	const auto count = countDuring ([&]
+	{
+		for (int b = 0; b < blocks; ++b)
+		{
+			if (b % 10 == 0)
+				for (int s = 0; s < DeckSpatial::stems; ++s)
+				{
+					c.aux[(size_t) s] = (float) ((b / 10 + s) % 4) * 0.4f;   // 0, 0.4, 0.8, 1.0 (clamped)
+					c.muted[(size_t) s] = (b / 10 + s) % 5 == 0;
+					c.threeD[(size_t) s] = (float) ((b / 10 + s) % 3) * 0.5f;
+				}
+			const int offset = b * block;
+			std::array<const float*, 8> stems {};
+			for (size_t ch = 0; ch < stems.size(); ++ch)
+				stems[ch] = in.channels[ch].data() + offset;
+			DeckSpatial::Outputs outputs;
+			for (size_t ch = 0; ch < outputs.bformat.size(); ++ch)
+			{
+				outputs.bformat[ch] = out.bformat[ch].data() + offset;
+				outputs.aux[ch] = out.aux[ch].data() + offset;
+			}
+			const int callSizes[] = { block, 1, 7, 300, 4096, block };
+			deck->process (stems.data(), outputs, juce::jmin (callSizes[b % 6], blocks * block - offset));
+		}
+	});
+	EXPECT_EQ (count.allocated, 0);
+	EXPECT_EQ (count.released, 0);
+	EXPECT_GT (deck->decoderRuns().auxBed, 0) << "the aux bed ran in the counted blocks";
 }

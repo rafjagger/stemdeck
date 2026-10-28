@@ -41,27 +41,38 @@ namespace outputs
 	}
 
 	// Where a deck's spatial ports lie among its own channels; aux -1: not rendered.
-	struct SpatialLayout { int channels, bformat, cue, aux, phones; };
+	// binauralCue: the cue at `cue` is the binaural pair (two-deck, ruling R2);
+	// otherwise it is the 9-channel B-format cue and `aux` the 16-channel AUX bus.
+	struct SpatialLayout { int channels, bformat, cue, aux, phones; bool binauralCue; };
 	inline SpatialLayout twoDeckSpatialLayout()
 	{
-		return { spatialChannelsPerDeck(), bformatOffset, binauralCueOffset, -1, phonesOffset };
+		return { spatialChannelsPerDeck(), bformatOffset, binauralCueOffset, -1, phonesOffset, true };
 	}
 
-	// A -bformat instance (spec section 8): one deck, its own JACK client
-	// StemDeck-<X>, and only these 22 -- no bus ports.
+	// A -bformat instance (spec M1/P10): one deck, its own JACK client
+	// StemDeck-<X>, and only these 43 -- no bus ports. The cue leaves as
+	// 2nd-order B-format (9 channels) so that Core decodes it once.
 	namespace oneDeck
 	{
-		inline constexpr int channels = bformatChannels + 6;   // B-format, cue, AUX, phones
-		inline SpatialLayout layout() { return { channels, 0, bformatChannels, bformatChannels + 2, bformatChannels + 4 }; }
+		constexpr int auxChannels = bformatChannels;
+		constexpr int cueChannels = 9;
+		constexpr int channels = bformatChannels + auxChannels + cueChannels + 2;   // B-format, AUX, cue, phones
+		inline SpatialLayout layout()
+		{
+			return { channels, 0, bformatChannels + auxChannels, bformatChannels, bformatChannels + auxChannels + cueChannels, false };
+		}
 		inline int channelCount() { return layout().channels; }
 
 		inline std::string portName (int channel)
 		{
 			const auto l = layout();
+			if (channel < l.aux)
+				return "bformat_" + std::to_string (channel - l.bformat + 1);
 			if (channel < l.cue)
-				return "bformat_" + std::to_string (channel + 1);
-			const auto side = (channel - l.cue) % 2 == 0 ? "_L" : "_R";
-			return std::string (channel < l.aux ? "cue" : channel < l.phones ? "aux" : "phones") + side;
+				return "aux_" + std::to_string (channel - l.aux + 1);
+			if (channel < l.phones)
+				return "cue_" + std::to_string (channel - l.cue + 1);
+			return channel == l.phones ? "phones_L" : "phones_R";
 		}
 
 		// Without JACK: every channel to its own output when the device has

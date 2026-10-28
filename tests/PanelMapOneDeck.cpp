@@ -179,14 +179,43 @@ TEST (PanelMapOneDeck, EncodersTurnGainAnd3DAndPushMutesOnlyFromTheUpperOne)
 	EXPECT_TRUE (decoder.feed (frame).empty());
 }
 
-TEST (PanelMapOneDeck, PotsAreUnused)
+TEST (PanelMapOneDeck, PotsAreStemAux)
 {
 	InputDecoder decoder;
 	auto frame = idleFrame();
-	frame.pots = std::array<int, panel::potCount> { 0, 0, 0, 0 };
+	frame.pots = std::array<int, panel::potCount> { 0, 1000, 2000, 4095 };
+	const auto events = decoder.feed (frame);
+	ASSERT_EQ (events.size(), 4u);
+	for (int pot = 0; pot < panel::potCount; ++pot)
+	{
+		EXPECT_EQ (events[(size_t) pot].type, Event::Type::aux);
+		EXPECT_EQ (events[(size_t) pot].stem, pot);
+	}
+	EXPECT_DOUBLE_EQ (events[0].value, 0.0);
+	EXPECT_DOUBLE_EQ (events[1].value, 1000 / 4095.0);
+	EXPECT_DOUBLE_EQ (events[3].value, 1.0);
+}
+
+TEST (PanelMapOneDeck, PotsOnlyReportChanges)
+{
+	InputDecoder decoder;
+	auto frame = idleFrame();
+	frame.pots = std::array<int, panel::potCount> { 100, 100, 100, 100 };
 	decoder.feed (frame);
-	frame.pots = std::array<int, panel::potCount> { 4000, 3000, 2000, 1000 };
+
 	EXPECT_TRUE (decoder.feed (frame).empty());
+	frame.pots = std::array<int, panel::potCount> { 104, 100, 100, 100 };
+	EXPECT_TRUE (decoder.feed (frame).empty()) << "noise";
+	EXPECT_TRUE (decoder.feed (idleFrame()).empty()) << "a cycle without pots";
+
+	frame.pots = std::array<int, panel::potCount> { 104, 100, 900, 100 };
+	const auto events = decoder.feed (frame);
+	ASSERT_EQ (events.size(), 1u);
+	EXPECT_EQ (events[0].stem, 2);
+
+	decoder.reset();
+	frame.pots = std::array<int, panel::potCount> { 104, 100, 900, 100 };
+	EXPECT_EQ (decoder.feed (frame).size(), 4u) << "a reconnected panel reports every pot again";
 }
 
 //==============================================================================

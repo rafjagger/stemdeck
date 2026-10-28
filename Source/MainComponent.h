@@ -90,6 +90,7 @@ private:
 	void updatePioneerStatus();
 	void loadDroppedSet (const juce::String& setId, int deckIndex);
 	void initialiseAudio();
+	void keepRecorderLinks();   // rec_L/R from the engine's REC bus (DeckLinks)
 	void timerCallback() override;
 
 	// The session (Session.h): gathered from the decks, the mixer, the library

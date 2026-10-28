@@ -3,6 +3,7 @@
 #include "OneDeckComponent.h"
 
 #include "AppSettings.h"
+#include "DeckLinks.h"
 #include "KnobSetup.h"
 #include "OscTruthFile.h"
 #include "SettingsPanel.h"
@@ -25,11 +26,15 @@ constexpr int refreshHz = 60;   // the rolling waveform's
 constexpr float topBarShare = 0.035f, libraryShare = 0.24f;
 }
 
-OneDeckComponent::OneDeckComponent (DeckInstance deck)
+OneDeckComponent::OneDeckComponent (DeckInstance deck, double pathLatencySeconds, std::optional<std::string> panelWorkspace)
 	: instance (deck), truth (coretruth::choose()),
 	  panelOwnership (appsettings::panelLockFile().getFullPathName().toStdString(), deck.letter)
 {
+	if (panelWorkspace)
+		panelFollow.emplace (*panelWorkspace);
 	setLookAndFeel (&lookAndFeel);
+	sync.setPathLatency (pathLatencySeconds);
+	linkSender.setPathLatency (pathLatencySeconds);
 	appProperties.setStorageParameters (appsettings::options());
 	instanceProperties.setStorageParameters (appsettings::instanceOptions (deck.letter));
 	formatManager.registerBasicFormats();
@@ -101,6 +106,7 @@ OneDeckComponent::OneDeckComponent (DeckInstance deck)
 	audio->onDeviceChanged = [this] { updateDeviceStatus(); };
 	audio->open (juce::String (instance.jackClientName()), portNames, deckAudio, { "rec_L", "rec_R" }, &recorder);
 	rec.button.setEnabled (audio->usingJack());
+	keepLinks();
 
 	truthKeeper = coretruth::follow (truth);
 	deckLink = std::make_unique<DeckLink> (instance.oscDeck(), host.spatialPorts().settings().deckThreeD);
@@ -118,6 +124,7 @@ OneDeckComponent::OneDeckComponent (DeckInstance deck)
 OneDeckComponent::~OneDeckComponent()
 {
 	stopTimer();
+	workspacePoller.reset();
 	linkSender.stop();   // before the player it reads
 	link.stop();
 	deckLink.reset();   // before the deck whose 3D it writes
@@ -131,6 +138,19 @@ OneDeckComponent::~OneDeckComponent()
 	setLookAndFeel (nullptr);
 }
 
+// Deck B on a3nuc2 links itself to its AES67 sender (ruling R8); a deck on
+// the Core links only its recorder, from the engine's REC bus (P39), and the
+// engine links its sends.
+void OneDeckComponent::keepLinks()
+{
+	juce::String error;
+	const auto home = juce::File::getSpecialLocation (juce::File::userHomeDirectory).getFullPathName().toStdString();
+	if (auto map = deckLinkMap (instance.letter, home, std::getenv ("STEMDECK_LINK_MAP"), juce::File (decklinks::installedCoreMap), error))
+		audio->keepLinks (std::move (*map));
+	else
+		std::cerr << "StemDeck: no links: " << error << std::endl;
+}
+
 //==============================================================================
 void OneDeckComponent::loadSet (const StemSet& set)
 {
@@ -141,6 +161,7 @@ void OneDeckComponent::loadSet (const StemSet& set)
 	}
 	view.setSet (set);
 	findSteps();
+	rearmPotPickups();
 }
 
 void OneDeckComponent::loadById (const juce::String& setId)
@@ -205,6 +226,7 @@ void OneDeckComponent::restoreSession()
 	}
 
 	creatorLink->restore (restored.stemJobs);
+	rearmPotPickups();
 
 	if (restored.imported)
 		saveSession();
@@ -280,7 +302,8 @@ void OneDeckComponent::updateLink()
 		sync.joined (nowSeconds());
 
 	if (sync.isMaster() && link.isRunning() && ! linkSender.isRunning())
-		linkSender.start (device, link.broadcastAddress(), linkPorts, instance.title());
+		linkSender.start (device, link.broadcastAddress(), linkPorts, instance.title(),
+						  [this] { return link.isOnline(); });
 	else if (! sync.isMaster())
 		linkSender.stop();
 }
@@ -307,7 +330,7 @@ void OneDeckComponent::showSyncStatus()
 	const auto now = nowSeconds();
 	const auto& clock = sync.clock();
 	const auto text = ! sync.wantsLink()   ? syncLabels::sourceButton (true)
-					: ! link.isRunning() ? syncLabels::error (link.error())
+					: ! link.isRunning() || ! link.error().empty() ? syncLabels::error (link.error())
 					: sync.isMaster()    ? syncLabels::sendingMaster (instance.letter - 'A')
 					: clock.bpm() <= 0.0 ? syncLabels::nothingHeard()
 										 : syncLabels::following (clock.bpm(), clock.isLive (now) ? clock.leader (now) : 0);
@@ -317,7 +340,7 @@ void OneDeckComponent::showSyncStatus()
 //==============================================================================
 void OneDeckComponent::updateDeviceStatus()
 {
-	// Without JACK only the phones play on a device short of all 22 outputs.
+	// Without JACK only the phones play on a device short of all 43 outputs.
 	const auto status = audio->status (outputs::oneDeck::channelCount());
 	deviceStatus.setText (AudioOutput::withSpatialError (status.text, spatialError), juce::dontSendNotification);
 	deviceStatus.setColour (juce::Label::textColourId, AudioOutput::colourOf (status.health));
@@ -331,6 +354,13 @@ juce::String OneDeckComponent::panelPreferenceKey() const
 
 void OneDeckComponent::startPanel()
 {
+	if (panelFollow)
+	{
+		// Released at start: the tty is touched only once this workspace has been in front.
+		workspacePoller = std::make_unique<PanelWorkspacePoller>();
+		updatePanelOwner();
+		return;
+	}
 	const auto key = panelPreferenceKey();
 	std::optional<bool> stored;
 	if (instanceSettings().containsKey (key))
@@ -341,9 +371,22 @@ void OneDeckComponent::startPanel()
 
 // The lock names the instance with the panel; another instance taking it
 // (its toggle) takes it from here: this one lets the port go.
+void OneDeckComponent::followWorkspace()
+{
+	if (! panelFollow || workspacePoller == nullptr)
+		return;
+	seenWorkspaceChanges = workspacePoller->generation();
+	const auto focused = workspacePoller->focused();
+	if (focused.empty())
+		return;   // no answer from i3: leave everything as it is
+	panel::applyFollow (panelOwnership, panelFollow->update (focused, nowSeconds(), panelOwnership.holds()));
+}
+
 void OneDeckComponent::updatePanelOwner()
 {
+	followWorkspace();
 	const auto holds = panelOwnership.holds();
+	panelGain.update (holds);
 	if (! holds)
 	{
 		panelDevice.reset();
@@ -386,8 +429,14 @@ void OneDeckComponent::handlePanel (const panel1::Event& e)
 		case Type::lengthUp:   column.oneShots().lengthUp().triggerClick(); break;
 		case Type::gain:       knobsetup::nudge (column.gain(), e.value); break;
 		case Type::threeD:     knobsetup::nudge (column.threeD(), e.value); break;
+		case Type::aux:        auxPots.reading (e.stem, e.value); break;
 		default: break;
 	}
+}
+
+void OneDeckComponent::rearmPotPickups()
+{
+	auxPots.rearm();
 }
 
 void OneDeckComponent::showPanel()
@@ -431,6 +480,7 @@ void OneDeckComponent::showSettings()
 	values.tipsShown = tips::shown (settings().getValue (tips::settingKey).toStdString());
 	values.phonesMode = phonesMode;
 	values.panelHere = panelOwnership.holds();
+	values.panelFollowsWorkspace = panelFollow.has_value();
 
 	SettingsPanel::Actions actions;
 	actions.onLibraryFolder = [this] (const juce::File& folder) { library.setFolder (folder); };
@@ -445,6 +495,8 @@ void OneDeckComponent::showSettings()
 
 	actions.onPanelHere = [this] (bool here)
 	{
+		if (panelFollow)
+			return;   // the workspace decides
 		instanceSettings().setValue (panelPreferenceKey(), here);
 		if (here)
 			panelOwnership.take();
@@ -476,11 +528,15 @@ void OneDeckComponent::timerCallback()
 	}
 	showSyncStatus();
 	updatePhonesDecoder();
+	// A change of workspace is looked at at once, so a release comes within the poll plus this tick.
+	if (workspacePoller != nullptr && workspacePoller->generation() != seenWorkspaceChanges)
+		updatePanelOwner();
 	if (--panelCountdown <= 0)
 	{
 		panelCountdown = refreshHz / 2;
 		updatePanelOwner();
 	}
+	auxPots.watch();
 	showPanel();
 	creatorLink->showStatus();
 	rec.update (audio->usingJack() ? audio->jackClient().getClientName() : juce::String());

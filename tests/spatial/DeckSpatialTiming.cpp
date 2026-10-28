@@ -6,7 +6,7 @@
 
 #include <iostream>
 
-TEST (DeckSpatialTiming, FourConfigurations)
+TEST (DeckSpatialTiming, OneStemAndFourStems)
 {
 	juce::ScopedJuceInitialiser_GUI juceInitialiser;
 	const auto table = sdtest::spatialTiming (2000);
@@ -20,15 +20,16 @@ TEST (DeckSpatialTiming, FourConfigurations)
 	EXPECT_LT (table[3].totalMean, 3000.0);
 }
 
-TEST (DeckSpatialTiming, IdleDecodersCostNothing)
+// The rig's configurations decode nothing; only the standalone phones do.
+TEST (DeckSpatialTiming, OnlyThePhonesDecode)
 {
 	juce::ScopedJuceInitialiser_GUI juceInitialiser;
 	const auto table = sdtest::spatialTiming (500);
-	EXPECT_EQ (table[1].nodes.cueDecoder, 0.0);
-	EXPECT_EQ (table[1].nodes.phonesDecoder, 0.0);
-	EXPECT_GT (table[2].nodes.cueDecoder, 0.0);
-	EXPECT_EQ (table[2].nodes.phonesDecoder, 0.0);
+	for (const auto rig : { 1, 2, 4 })
+		EXPECT_EQ (table[(size_t) rig].nodes.phonesDecoder, 0.0) << table[(size_t) rig].name;
+	EXPECT_GT (table[2].nodes.cueBed, 0.0);
 	EXPECT_GT (table[3].nodes.phonesDecoder, 0.0);
+	EXPECT_GT (table[5].nodes.phonesDecoder, 0.0);
 }
 
 // R14: config (0) runs no node at all.
@@ -39,6 +40,5 @@ TEST (DeckSpatialTiming, AStandingDeckRunsNoNode)
 	EXPECT_EQ (standing.nodes.encoders, 0.0);
 	EXPECT_EQ (standing.nodes.bed, 0.0);
 	EXPECT_EQ (standing.nodes.cueBed, 0.0);
-	EXPECT_EQ (standing.nodes.cueDecoder, 0.0);
 	EXPECT_EQ (standing.nodes.phonesDecoder, 0.0);
 }

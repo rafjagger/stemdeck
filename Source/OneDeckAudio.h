@@ -39,6 +39,6 @@ public:
 
 private:
 	DeckHost deck;
-	juce::AudioBuffer<float> rendered;   // the 22 channels
+	juce::AudioBuffer<float> rendered;   // the 43 channels
 	std::array<std::atomic<float>, outputs::oneDeck::channels> peaks {};
 };

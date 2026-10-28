@@ -47,6 +47,11 @@ FollowResult followLeader (const FollowInput& in);
 // longer than any audio block, so it is from before a pause or a stall.
 double positionAt (double position, double stampSeconds, double nowSeconds, double rate, bool moving);
 
+// Where the deck is as heard: its audio reaches the ears `pathLatencySeconds`
+// after the read head (AES67 to the Core), so the head is that far ahead of
+// what is audible. Paused, nothing is in flight.
+double audiblePosition (double position, double pathLatencySeconds, double rate);
+
 // Part 2, StemDeck as the tempo master: the next beat of a deck's grid after
 // `position` (track seconds) -- when it falls, and where in the bar. The bar
 // counts from the grid's first beat: that beat is 1, and the beats before it

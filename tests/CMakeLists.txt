@@ -18,12 +18,16 @@ add_executable(stemdeck-tests
     StemHandover.cpp
     ${CMAKE_SOURCE_DIR}/Source/StemHandover.cpp
     RecordingName.cpp
+    RecordTarget.cpp
+    ${CMAKE_SOURCE_DIR}/Source/RecordTarget.cpp
     Scs3d.cpp
     ${CMAKE_SOURCE_DIR}/Source/Scs3d.cpp
     ${CMAKE_SOURCE_DIR}/Source/AutoDj.cpp
     ${CMAKE_SOURCE_DIR}/Source/GridEdit.cpp
     ProLinkPackets.cpp
     ${CMAKE_SOURCE_DIR}/Source/ProLinkPackets.cpp
+    ProLinkAnnouncer.cpp
+    ${CMAKE_SOURCE_DIR}/Source/ProLinkAnnouncer.cpp
     OscTruth.cpp
     ${CMAKE_SOURCE_DIR}/Source/OscTruth.cpp
     Remote.cpp
@@ -80,7 +84,11 @@ add_executable(stemdeck-tests
     ${CMAKE_SOURCE_DIR}/Source/PanelLink.cpp
     PanelMapOneDeck.cpp
     ${CMAKE_SOURCE_DIR}/Source/PanelMapOneDeck.cpp
+    PotPickup.cpp
+    ${CMAKE_SOURCE_DIR}/Source/PotPickup.cpp
     PanelOwnership.cpp
+    PanelFollowsWorkspace.cpp
+    ${CMAKE_SOURCE_DIR}/Source/PanelFollowsWorkspace.cpp
     AppSettings.cpp
     ${CMAKE_SOURCE_DIR}/Source/AppSettings.cpp
     ${CMAKE_SOURCE_DIR}/Source/PanelOwnership.cpp
@@ -94,13 +102,20 @@ add_executable(stemdeck-tests
     ${CMAKE_SOURCE_DIR}/Source/Session.cpp
     LaunchOptions.cpp
     ${CMAKE_SOURCE_DIR}/Source/LaunchOptions.cpp
+    LinkInterface.cpp
+    ${CMAKE_SOURCE_DIR}/Source/LinkInterface.cpp
     DeckInstance.cpp
     ${CMAKE_SOURCE_DIR}/Source/DeckInstance.cpp
     SpatialLaw.cpp
     ${CMAKE_SOURCE_DIR}/Source/SpatialLaw.cpp
     ${CMAKE_SOURCE_DIR}/third_party/a3-core/src/a3-engine/Laws.cpp
-    ${CMAKE_SOURCE_DIR}/third_party/a3-core/src/a3-engine/PurestGain.cpp)
+    ${CMAKE_SOURCE_DIR}/third_party/a3-core/src/a3-engine/PurestGain.cpp
+    DeckLinks.cpp
+    ${CMAKE_SOURCE_DIR}/Source/DeckLinks.cpp
+    ${CMAKE_SOURCE_DIR}/third_party/a3-core/src/a3-links/LinkMap.cpp
+    ${CMAKE_SOURCE_DIR}/third_party/a3-core/src/a3-links/LinkPlan.cpp)
 target_include_directories(stemdeck-tests PRIVATE ${CMAKE_SOURCE_DIR}/Source ${CMAKE_SOURCE_DIR}/third_party/a3-core/src)
+target_compile_definitions(stemdeck-tests PRIVATE STEMDECK_DATA_DIR="${CMAKE_SOURCE_DIR}/data")
 
 # The session is XML: juce_core, and nothing else of JUCE, comes into the
 # tests -- as a library of its own, JUCE's way for module code outside an app.
@@ -183,6 +198,12 @@ add_executable(stemdeck-spatial-tests
     spatial/OneDeckSync.cpp
     spatial/StemCreatorLock.cpp
     spatial/AnalysisCache.cpp
+    spatial/Recorder.cpp
+    spatial/RecorderControls.cpp
+    ${CMAKE_SOURCE_DIR}/Source/Recorder.cpp
+    ${CMAKE_SOURCE_DIR}/Source/RecorderControls.cpp
+    ${CMAKE_SOURCE_DIR}/Source/RecordTarget.cpp
+    ${CMAKE_SOURCE_DIR}/Source/DataPaths.cpp
     ${CMAKE_SOURCE_DIR}/Source/SteadyBed.cpp
     ${CMAKE_SOURCE_DIR}/Source/DeckSpatial.cpp
     ${CMAKE_SOURCE_DIR}/Source/DeckSpatialPorts.cpp
@@ -205,7 +226,9 @@ add_executable(stemdeck-spatial-tests
     ${CMAKE_SOURCE_DIR}/Source/MasterDeck.cpp
     ${CMAKE_SOURCE_DIR}/Source/PioneerClock.cpp
     ${CMAKE_SOURCE_DIR}/Source/ProLinkPackets.cpp
+    ${CMAKE_SOURCE_DIR}/Source/ProLinkAnnouncer.cpp
     ${CMAKE_SOURCE_DIR}/Source/ProLinkReceiver.cpp
+    ${CMAKE_SOURCE_DIR}/Source/LinkInterface.cpp
     ${CMAKE_SOURCE_DIR}/Source/ProLinkSender.cpp
     ${CMAKE_SOURCE_DIR}/Source/BeatScheduler.cpp
     ${CMAKE_SOURCE_DIR}/Source/DeckInstance.cpp
@@ -222,6 +245,8 @@ add_executable(stemdeck-spatial-tests
     ${CMAKE_SOURCE_DIR}/Source/SpatialLaw.cpp
     ${CMAKE_SOURCE_DIR}/Source/OneDeckView.cpp
     ${CMAKE_SOURCE_DIR}/Source/StemColumn.cpp
+    ${CMAKE_SOURCE_DIR}/Source/AuxPots.cpp
+    ${CMAKE_SOURCE_DIR}/Source/PotPickup.cpp
     ${CMAKE_SOURCE_DIR}/Source/OneShotKeys.cpp
     ${CMAKE_SOURCE_DIR}/Source/StemViewer.cpp
     ${CMAKE_SOURCE_DIR}/Source/LevelMeter.cpp

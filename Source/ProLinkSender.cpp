@@ -31,13 +31,15 @@ ProLinkSender::~ProLinkSender()
 }
 
 bool ProLinkSender::start (int number, uint32_t broadcastIpNetworkOrder,
-						   const osctruth::ProLinkPorts& truthPorts, const std::string& deviceName)
+						   const osctruth::ProLinkPorts& truthPorts, const std::string& deviceName,
+						   std::function<bool()> isOnline)
 {
 	stop();
 	deviceNumber = number;
 	broadcastIp = broadcastIpNetworkOrder;
 	ports = truthPorts;
 	name = deviceName;
+	online = std::move (isOnline);
 
 	if (! ports.complete())
 		return false;
@@ -87,7 +89,8 @@ void ProLinkSender::run()
 
 		// Nothing without a master deck with a tempo -- not even a status: a
 		// "master" with no beats would take master from a device that has them.
-		if (player == nullptr || ! grid.isValid())
+		// Nothing either before the player number is ours.
+		if (player == nullptr || ! grid.isValid() || (online && ! online()))
 		{
 			scheduler.step (now(), 0.0, 0.0, 0.0, 0.0, false);
 			sleepFor (BeatScheduler::wakeEvery);
@@ -97,7 +100,8 @@ void ProLinkSender::run()
 		const auto moving = player->isPlaying() && ! player->isScratching();
 		const auto rate = player->getEffectiveRate();
 		const auto t = now();
-		const auto position = positionAt (player->getPosition(), player->getPositionStamp(), t, rate, moving);
+		const auto position = audiblePosition (positionAt (player->getPosition(), player->getPositionStamp(), t, rate, moving),
+											   pathLatency.load(), moving ? rate : 0.0);
 
 		if (t - lastStatus >= statusEvery)
 		{

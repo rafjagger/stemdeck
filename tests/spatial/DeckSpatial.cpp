@@ -21,25 +21,27 @@ void expectBformatNear (const Rendered& out, const std::array<Signal, spatial::b
 void expectAllNear (const Rendered& a, const Rendered& b, float tolerance, const std::string& what)
 {
 	for (int c = 0; c < spatial::bformatChannels; ++c)
-		EXPECT_LE (maxDifference (a.bformat[(size_t) c], b.bformat[(size_t) c]), tolerance) << what << ", bformat " << c;
-	for (int side = 0; side < 2; ++side)
 	{
-		EXPECT_LE (maxDifference (a.cue[(size_t) side], b.cue[(size_t) side]), tolerance) << what << ", cue " << side;
-		EXPECT_LE (maxDifference (a.aux[(size_t) side], b.aux[(size_t) side]), tolerance) << what << ", aux " << side;
-		EXPECT_LE (maxDifference (a.phones[(size_t) side], b.phones[(size_t) side]), tolerance) << what << ", phones " << side;
+		EXPECT_LE (maxDifference (a.bformat[(size_t) c], b.bformat[(size_t) c]), tolerance) << what << ", bformat " << c;
+		EXPECT_LE (maxDifference (a.aux[(size_t) c], b.aux[(size_t) c]), tolerance) << what << ", aux " << c;
 	}
+	for (size_t c = 0; c < a.cue.size(); ++c)
+		EXPECT_LE (maxDifference (a.cue[c], b.cue[c]), tolerance) << what << ", cue " << c;
+	for (int side = 0; side < 2; ++side)
+		EXPECT_LE (maxDifference (a.phones[(size_t) side], b.phones[(size_t) side]), tolerance) << what << ", phones " << side;
 }
 
 void expectEverythingSilent (const Rendered& out, int from, const std::string& what)
 {
 	for (int c = 0; c < spatial::bformatChannels; ++c)
-		EXPECT_TRUE (exactlySilent (out.bformat[(size_t) c], from)) << what << ", bformat " << c;
-	for (int side = 0; side < 2; ++side)
 	{
-		EXPECT_TRUE (exactlySilent (out.cue[(size_t) side], from)) << what << ", cue " << side;
-		EXPECT_TRUE (exactlySilent (out.aux[(size_t) side], from)) << what << ", aux " << side;
-		EXPECT_TRUE (exactlySilent (out.phones[(size_t) side], from)) << what << ", phones " << side;
+		EXPECT_TRUE (exactlySilent (out.bformat[(size_t) c], from)) << what << ", bformat " << c;
+		EXPECT_TRUE (exactlySilent (out.aux[(size_t) c], from)) << what << ", aux " << c;
 	}
+	for (size_t c = 0; c < out.cue.size(); ++c)
+		EXPECT_TRUE (exactlySilent (out.cue[c], from)) << what << ", cue " << c;
+	for (int side = 0; side < 2; ++side)
+		EXPECT_TRUE (exactlySilent (out.phones[(size_t) side], from)) << what << ", phones " << side;
 }
 
 StemInputs noiseOnStem (int stem, int seed = 1)
@@ -132,7 +134,7 @@ TEST (DeckSpatial, DeckThreeDMultiplies)
 	expectBformatNear (a, b.bformat, 1e-6f, 0);
 }
 
-TEST (DeckSpatial, MuteSilencesMainAndAuxButNotCue)
+TEST (DeckSpatial, MuteSilencesMainButNotCue)
 {
 	juce::ScopedJuceInitialiser_GUI juceInitialiser;
 	const auto in = noiseOnStem (0);
@@ -148,12 +150,7 @@ TEST (DeckSpatial, MuteSilencesMainAndAuxButNotCue)
 	const int afterRamp = oneSecond / 4 + block + rampSamples;
 	for (int c = 0; c < spatial::bformatChannels; ++c)
 		EXPECT_TRUE (exactlySilent (out.bformat[(size_t) c], afterRamp)) << "bformat " << c;
-	for (int side = 0; side < 2; ++side)
-	{
-		EXPECT_FALSE (exactlySilent (out.aux[(size_t) side], 0, oneSecond / 4)) << "aux before the mute";
-		EXPECT_TRUE (exactlySilent (out.aux[(size_t) side], afterRamp)) << "aux " << side;
-		EXPECT_GE (rmsDb (out.cue[(size_t) side], afterRamp), -30.0) << "cue " << side;
-	}
+	EXPECT_GE (rmsDb (out.cue[0], afterRamp), -30.0) << "the cue's W";
 }
 
 TEST (DeckSpatial, VolumeMinimaAreExactSilence)
@@ -187,12 +184,43 @@ TEST (DeckSpatial, VolumeMinimaAreExactSilence)
 			EXPECT_EQ (maxDifference (a.phones[(size_t) side], b.phones[(size_t) side]), 0.0f) << "mix 1 carries no cue";
 	}
 	{
-		// mix 0: phones are the cue alone
-		auto deck = preparedDeck (block, [] (DeckSpatial::Controls& c) { busyDeck (c); c.phonesMix = 0.0f; c.phonesLevel = 1.0f; });
+		// mix 0 with nothing cued: the phones carry nothing, and decode nothing
+		auto deck = preparedDeck (block, [] (DeckSpatial::Controls& c)
+		{
+			busyDeck (c);
+			c.phonesMix = 0.0f;
+			c.phonesLevel = 1.0f;
+			c.cued[1] = c.cued[2] = false;
+		});
 		const auto out = render (*deck, in);
-		for (int side = 0; side < 2; ++side)
-			EXPECT_EQ (maxDifference (out.phones[(size_t) side], out.cue[(size_t) side]), 0.0f) << "mix 0 carries no mix";
+		EXPECT_TRUE (exactlySilent (out.phones[0])) << "mix 0 carries no mix";
+		EXPECT_TRUE (exactlySilent (out.phones[1])) << "mix 0 carries no mix";
+		EXPECT_EQ (deck->decoderRuns().phones, 0);
 	}
+}
+
+TEST (DeckSpatial, PhonesAtMixZeroCarryNoMainBus)
+{
+	juce::ScopedJuceInitialiser_GUI juceInitialiser;
+	const auto in = noiseOnAllStems();
+	// cue is pre-mute and the main bus post-mute, so muting every stem removes the main bus alone
+	auto phonesWith = [&] (bool muted)
+	{
+		auto deck = preparedDeck (block, [muted] (DeckSpatial::Controls& c)
+		{
+			busyDeck (c);
+			c.phonesMix = 0.0f;
+			c.phonesLevel = 1.0f;
+			for (int s = 0; s < DeckSpatial::stems; ++s)
+				c.muted[(size_t) s] = muted;
+		});
+		return render (*deck, in);
+	};
+	const auto playing = phonesWith (false), muted = phonesWith (true);
+	EXPECT_FALSE (exactlySilent (playing.bformat[0], settled)) << "a main bus to keep out";
+	EXPECT_FALSE (exactlySilent (playing.phones[0], settled)) << "the cue in the phones";
+	for (int side = 0; side < 2; ++side)
+		EXPECT_EQ (maxDifference (playing.phones[(size_t) side], muted.phones[(size_t) side], settled), 0.0f) << "mix 0 carries no main bus, side " << side;
 }
 
 TEST (DeckSpatial, CueIsTheCuedStemsInIsolation)
@@ -211,40 +239,9 @@ TEST (DeckSpatial, CueIsTheCuedStemsInIsolation)
 	second.playNoise (1, 2);
 	auto a = preparedDeck (block, setUp), b = preparedDeck (block, setUp);
 	const auto withBoth = render (*a, both), alone = render (*b, second);
-	for (int side = 0; side < 2; ++side)
-	{
-		EXPECT_GT (rmsDb (alone.cue[(size_t) side], settled), -40.0);
-		EXPECT_LE (maxDifference (withBoth.cue[(size_t) side], alone.cue[(size_t) side]), 1e-5f) << "cue " << side;
-	}
-}
-
-TEST (DeckSpatial, NothingCuedIsExactSilence)
-{
-	juce::ScopedJuceInitialiser_GUI juceInitialiser;
-	auto deck = preparedDeck (block, [] (DeckSpatial::Controls& c) { busyDeck (c); c.cued[1] = c.cued[2] = false; });
-	const auto out = render (*deck, noiseOnAllStems());
-	EXPECT_TRUE (exactlySilent (out.cue[0]));
-	EXPECT_TRUE (exactlySilent (out.cue[1]));
-	EXPECT_EQ (deck->decoderRuns().cue, 0);
-}
-
-TEST (DeckSpatial, AuxIsTheStereoSum)
-{
-	juce::ScopedJuceInitialiser_GUI juceInitialiser;
-	const auto in = noiseOnAllStems();
-	auto deck = preparedDeck (block, busyDeck);
-	const auto out = render (*deck, in);
-	for (int side = 0; side < 2; ++side)
-	{
-		Signal sum = silence (oneSecond);
-		for (int stem = 0; stem < DeckSpatial::stems; ++stem)
-		{
-			const auto& x = side == 0 ? in.left (stem) : in.right (stem);
-			for (int i = 0; i < oneSecond; ++i)
-				sum[(size_t) i] += x[(size_t) i] * spatial::trim;
-		}
-		EXPECT_LE (maxDifference (out.aux[(size_t) side], sum), 1e-6f) << "aux " << side;
-	}
+	EXPECT_GT (rmsDb (alone.cue[0], settled), -40.0);
+	for (size_t c = 0; c < alone.cue.size(); ++c)
+		EXPECT_LE (maxDifference (withBoth.cue[c], alone.cue[c]), 1e-6f) << "cue " << c;
 }
 
 TEST (DeckSpatial, EnergyIsKeptAcross3D)
@@ -282,48 +279,29 @@ TEST (DeckSpatial, AnyBlockSizeRendersTheSame)
 	}
 }
 
-TEST (DeckSpatial, PhonesAtMixZeroAreTheCue)
-{
-	juce::ScopedJuceInitialiser_GUI juceInitialiser;
-	auto deck = preparedDeck (block, [] (DeckSpatial::Controls& c) { busyDeck (c); c.phonesMix = 0.0f; c.phonesLevel = 1.0f; });
-	const auto out = render (*deck, noiseOnAllStems());
-	for (int side = 0; side < 2; ++side)
-	{
-		EXPECT_FALSE (exactlySilent (out.cue[(size_t) side]));
-		EXPECT_LE (maxDifference (out.phones[(size_t) side], out.cue[(size_t) side]), 1e-6f);
-	}
-	EXPECT_EQ (deck->decoderRuns().phones, 0) << "no mix share, no phones decoder";
-}
-
 TEST (DeckSpatial, PhonesDecoderOffWhenNotConnected)
 {
 	juce::ScopedJuceInitialiser_GUI juceInitialiser;
 	auto deck = preparedDeck (block, [] (DeckSpatial::Controls& c) { busyDeck (c); c.phonesMix = 1.0f; });
-	render (*deck, noiseOnAllStems(), { block, false, {} });
+	const auto out = render (*deck, noiseOnAllStems(), { block, false, {} });
+	EXPECT_FALSE (exactlySilent (out.cue[0])) << "the cue leaves anyway";
 	EXPECT_EQ (deck->timing().phonesDecoder, 0.0);
 	EXPECT_EQ (deck->decoderRuns().phones, 0);
-	EXPECT_GT (deck->timing().cueDecoder, 0.0) << "the cue decoder still runs";
 }
 
 TEST (DeckSpatial, PhonesDecoderOffWhenNotEnabled)
 {
 	juce::ScopedJuceInitialiser_GUI juceInitialiser;
 	const auto in = noiseOnAllStems();
-	for (const float mix : { 1.0f, 0.5f })   // at 1 the cue's share is 0: silence; at 0.5 the cue at its weight
+	for (const float mix : { 1.0f, 0.5f, 0.0f })   // the rig: no decoder, so no phones, cue or mix
 	{
 		auto deck = preparedDeck (block, [mix] (DeckSpatial::Controls& c) { busyDeck (c); c.phonesDecoderOn = false; c.phonesMix = mix; c.phonesLevel = 1.0f; });
 		const auto out = render (*deck, in);
 		EXPECT_EQ (deck->timing().phonesDecoder, 0.0) << "mix " << mix;
 		EXPECT_EQ (deck->decoderRuns().phones, 0) << "mix " << mix;
-		const float cueWeight = spatial::phonesWeights (1.0f, mix).cue;
+		EXPECT_FALSE (exactlySilent (out.cue[0])) << "the cue leaves as B-format, mix " << mix;
 		for (int side = 0; side < 2; ++side)
-		{
-			Signal cueShare (out.cue[(size_t) side]);
-			for (auto& sample : cueShare)
-				sample *= cueWeight;
-			EXPECT_EQ (exactlySilent (cueShare), mix == 1.0f) << "mix " << mix;
-			EXPECT_LE (maxDifference (out.phones[(size_t) side], cueShare), 1e-6f) << "only the cue weight's share, mix " << mix;
-		}
+			EXPECT_TRUE (exactlySilent (out.phones[(size_t) side])) << "mix " << mix;
 	}
 }
 
@@ -360,14 +338,8 @@ TEST (DeckSpatial, PhonesDecoderHoldsOverWhenTurnedOff)
 	const auto after = render (*deck, in);
 	EXPECT_EQ (deck->decoderRuns().phones, 0);
 	EXPECT_EQ (deck->timing().phonesDecoder, 0.0);
-	const float cueWeight = spatial::phonesWeights (0.8f, 0.5f).cue;
 	for (int side = 0; side < 2; ++side)
-	{
-		Signal cueShare (after.cue[(size_t) side]);
-		for (auto& sample : cueShare)
-			sample *= cueWeight;
-		EXPECT_EQ (maxDifference (after.phones[(size_t) side], cueShare), 0.0f) << "no mix share, phones " << side;
-	}
+		EXPECT_TRUE (exactlySilent (after.phones[(size_t) side])) << "off, the phones carry nothing, phones " << side;
 }
 
 TEST (DeckSpatial, PhonesDecoderReconnectsClean)
@@ -455,7 +427,7 @@ TEST (DeckSpatial, AnEmptyCallIsNoBlock)
 	EXPECT_GT (deck->timing().encoders, 0.0);
 }
 
-TEST (DeckSpatial, CueDecoderStopsAfterTheHoldOver)
+TEST (DeckSpatial, CueBedStopsWithTheLastCue)
 {
 	juce::ScopedJuceInitialiser_GUI juceInitialiser;
 	const auto in = noiseOnAllStems();
@@ -464,25 +436,16 @@ TEST (DeckSpatial, CueDecoderStopsAfterTheHoldOver)
 	render (*deck, in, { block, true, [&] (int first)
 	{
 		if (first == cueOff)
-		{
 			deck->controls().cued[1] = deck->controls().cued[2] = false;
-			deck->resetTiming();
-		}
 	} });
-	// the ramp out, in whole blocks, then the hold-over
-	const int rampBlocks = (rampSamples + block - 1) / block;
-	EXPECT_EQ (deck->decoderRuns().cue, (std::int64_t) (rampBlocks * block + DecoderGate::holdOverSamples));
-
 	deck->resetTiming();
 	const auto after = render (*deck, in);
-	EXPECT_EQ (deck->timing().cueDecoder, 0.0);
 	EXPECT_EQ (deck->timing().cueBed, 0.0);
-	EXPECT_EQ (deck->decoderRuns().cue, 0);
-	EXPECT_TRUE (exactlySilent (after.cue[0]));
-	EXPECT_TRUE (exactlySilent (after.cue[1]));
+	for (size_t c = 0; c < after.cue.size(); ++c)
+		EXPECT_TRUE (exactlySilent (after.cue[c])) << "cue " << c;
 }
 
-TEST (DeckSpatial, CueDecoderRestartsClean)
+TEST (DeckSpatial, CueRestartsClean)
 {
 	juce::ScopedJuceInitialiser_GUI juceInitialiser;
 	const auto in = noiseOnAllStems();
@@ -500,11 +463,11 @@ TEST (DeckSpatial, CueDecoderRestartsClean)
 		std::copy (in.channels[c].begin() + restart, in.channels[c].begin() + restart + block, oneBlock.channels[c].begin());
 	auto fresh = preparedDeck (block, busyDeck);
 	const auto first = render (*fresh, oneBlock);
-	for (int side = 0; side < 2; ++side)
+	EXPECT_FALSE (exactlySilent (first.cue[0]));
+	for (size_t c = 0; c < first.cue.size(); ++c)
 	{
-		Signal restarted (out.cue[(size_t) side].begin() + restart, out.cue[(size_t) side].begin() + restart + block);
-		EXPECT_FALSE (exactlySilent (first.cue[(size_t) side]));
-		EXPECT_LE (maxDifference (restarted, first.cue[(size_t) side]), 1e-5f) << "cue " << side;
+		Signal restarted (out.cue[c].begin() + restart, out.cue[c].begin() + restart + block);
+		EXPECT_LE (maxDifference (restarted, first.cue[c]), 1e-5f) << "cue " << c;
 	}
 }
 
@@ -527,17 +490,18 @@ StemInputs playStandPlay()
 void expectBformatNearFrom (const Rendered& a, const Rendered& b, int from, float tolerance, const std::string& what)
 {
 	for (int c = 0; c < spatial::bformatChannels; ++c)
+	{
 		EXPECT_LE (maxDifference (a.bformat[(size_t) c], b.bformat[(size_t) c], from), tolerance) << what << ", bformat " << c;
+		EXPECT_LE (maxDifference (a.aux[(size_t) c], b.aux[(size_t) c], from), tolerance) << what << ", aux " << c;
+	}
 }
 
 void expectStereoNearFrom (const Rendered& a, const Rendered& b, int from, float tolerance, const std::string& what)
 {
+	for (size_t c = 0; c < a.cue.size(); ++c)
+		EXPECT_LE (maxDifference (a.cue[c], b.cue[c], from), tolerance) << what << ", cue " << c;
 	for (int side = 0; side < 2; ++side)
-	{
-		EXPECT_LE (maxDifference (a.cue[(size_t) side], b.cue[(size_t) side], from), tolerance) << what << ", cue " << side;
-		EXPECT_LE (maxDifference (a.aux[(size_t) side], b.aux[(size_t) side], from), tolerance) << what << ", aux " << side;
 		EXPECT_LE (maxDifference (a.phones[(size_t) side], b.phones[(size_t) side], from), tolerance) << what << ", phones " << side;
-	}
 }
 
 void movePose (DeckSpatial::Controls& c)
@@ -575,15 +539,15 @@ TEST (DeckSpatial, AStandingDeckCostsNothingAndIsSilent)
 	EXPECT_EQ (t.bed, 0.0);
 	EXPECT_EQ (t.cueBed, 0.0);
 	for (int c = 0; c < spatial::bformatChannels; ++c)
+	{
 		EXPECT_TRUE (exactlySilent (out.bformat[(size_t) c], measureFrom)) << "bformat " << c;
-	for (int side = 0; side < 2; ++side)
-		EXPECT_TRUE (exactlySilent (out.aux[(size_t) side], measureFrom)) << "aux " << side;
+		EXPECT_TRUE (exactlySilent (out.aux[(size_t) c], measureFrom)) << "aux " << c;
+	}
 	EXPECT_GT (deck->decoderRuns().phones, 0) << "the phones follow R12 unchanged";
 
-	// The cue decoder finished its hold-over on silence and stopped.
 	deck->resetTiming();
 	render (*deck, StemInputs (8 * block));
-	EXPECT_EQ (deck->decoderRuns().cue, 0);
+	EXPECT_EQ (deck->timing().cueBed, 0.0);
 	EXPECT_EQ (deck->timing().encoders, 0.0);
 }
 
@@ -657,4 +621,348 @@ TEST (DeckSpatial, AMovingRampKeepsAStoppedDeckRunning)
 	deck->resetTiming();
 	render (*deck, StemInputs (20 * block));
 	EXPECT_EQ (deck->timing().encoders, 0.0) << "settled, it stands again";
+}
+
+// B1: the per-stem AUX send. The aux bus is the stem's own post-3D, post-MUTE
+// encoder output plus its steady share through a third bed, x trim.
+namespace
+{
+void expectAuxEqualsMain (const Rendered& aux, const Rendered& main, float tolerance, int from = settled)
+{
+	for (int c = 0; c < spatial::bformatChannels; ++c)
+		EXPECT_LE (maxDifference (aux.aux[(size_t) c], main.bformat[(size_t) c], from), tolerance) << "channel " << c;
+}
+
+StemInputs sineOnAllStemsFrom (int startFrame, int frames)
+{
+	StemInputs in (frames);
+	for (int stem = 0; stem < DeckSpatial::stems; ++stem)
+		for (int side = 0; side < 2; ++side)
+			for (int i = startFrame; i < frames; ++i)
+				in.channels[(size_t) (2 * stem + side)][(size_t) i]
+					= 0.25f * std::sin (2.0f * 3.14159265f * 100.0f * (float) (i - startFrame) / (float) rate);
+	return in;
+}
+
+float largestStep (const Signal& signal, int from, int to)
+{
+	float worst = 0.0f;
+	for (int i = from + 1; i < to; ++i)
+		worst = std::max (worst, std::abs (signal[(size_t) i] - signal[(size_t) i - 1]));
+	return worst;
+}
+}
+
+TEST (DeckSpatial, AuxZeroIsExactSilence)
+{
+	juce::ScopedJuceInitialiser_GUI juceInitialiser;
+	auto deck = preparedDeck (block, busyDeck);
+	const auto out = render (*deck, noiseOnAllStems());
+	for (int c = 0; c < spatial::bformatChannels; ++c)
+		EXPECT_TRUE (exactlySilent (out.aux[(size_t) c])) << "aux " << c;
+	EXPECT_EQ (deck->decoderRuns().auxBed, 0) << "no aux, no aux bed";
+}
+
+// D23: a send that goes 1 -> 0 ends in exact 0.0f -- after its 10 ms ramp and
+// the aux bed's 2048-sample hold-over, on every aux channel.
+TEST (DeckSpatial, AuxTurnedToZeroSettlesToExactSilence)
+{
+	juce::ScopedJuceInitialiser_GUI juceInitialiser;
+	auto deck = preparedDeck (block, [] (DeckSpatial::Controls& c) { c.threeD[0] = 0.5f; c.aux[0] = 1.0f; });
+	const int turnedOff = oneSecond / 4;
+	const auto out = render (*deck, noiseOnStem (0), { block, true, [&] (int first)
+	{
+		deck->controls().aux[0] = first >= turnedOff ? 0.0f : 1.0f;
+	} });
+	constexpr int bedHoldOver = 2048;
+	const int settledAt = turnedOff + block + rampSamples + bedHoldOver + block;
+	ASSERT_LT (settledAt, oneSecond);
+	EXPECT_FALSE (exactlySilent (out.aux[0], 0, turnedOff)) << "aux before it is turned off";
+	for (int c = 0; c < spatial::bformatChannels; ++c)
+		EXPECT_TRUE (exactlySilent (out.aux[(size_t) c], settledAt)) << "aux " << c;
+}
+
+// PipeWire calls the sample-rate callback before a block size is known.
+TEST (DeckSpatial, PrepareWithBlockSizeZeroIsRefused)
+{
+	juce::ScopedJuceInitialiser_GUI juceInitialiser;
+	juce::String error;
+	auto deck = DeckSpatial::create (error);
+	ASSERT_NE (deck, nullptr) << error;
+	EXPECT_FALSE (deck->prepare (rate, 0));
+	EXPECT_TRUE (deck->prepare (rate, block));
+	const auto out = render (*deck, noiseOnAllStems());
+	EXPECT_FALSE (exactlySilent (out.bformat[0])) << "a later prepare 128 works";
+}
+
+TEST (DeckSpatial, OneStemSentIsThatStemOnly)
+{
+	juce::ScopedJuceInitialiser_GUI juceInitialiser;
+	const auto setPose = [] (DeckSpatial::Controls& c)
+	{
+		c.threeD[2] = 0.6f;
+		c.azimuth[2] = 40.0f;
+		c.elevation[2] = 15.0f;
+	};
+	auto sent = preparedDeck (block, [&] (DeckSpatial::Controls& c) { setPose (c); c.aux[2] = 1.0f; });
+	auto alone = preparedDeck (block, setPose);
+	const auto aux = render (*sent, noiseOnAllStems());
+	const auto mainOfThatStem = render (*alone, noiseOnStem (2, 30));
+	expectAuxEqualsMain (aux, mainOfThatStem, 1e-5f);
+	EXPECT_GT (rmsDb (aux.aux[0], settled), -60.0);
+}
+
+TEST (DeckSpatial, AuxScalesWithTheSend)
+{
+	juce::ScopedJuceInitialiser_GUI juceInitialiser;
+	const auto in = noiseOnStem (1);
+	const auto configure = [] (float aux)
+	{
+		return [aux] (DeckSpatial::Controls& c) { c.threeD[1] = 0.5f; c.azimuth[1] = -60.0f; c.aux[1] = aux; };
+	};
+	auto full = preparedDeck (block, configure (1.0f)), half = preparedDeck (block, configure (0.5f));
+	const auto a = render (*full, in), b = render (*half, in);
+	for (int c = 0; c < spatial::bformatChannels; ++c)
+		for (int i = settled; i < oneSecond; ++i)
+			ASSERT_NEAR (b.aux[(size_t) c][(size_t) i], 0.5f * a.aux[(size_t) c][(size_t) i], 1e-6f) << "channel " << c;
+}
+
+TEST (DeckSpatial, AuxKeepsTheStemsPosition)
+{
+	juce::ScopedJuceInitialiser_GUI juceInitialiser;
+	const auto in = noiseOnStem (0);
+	auto deck = preparedDeck (block, [] (DeckSpatial::Controls& c) { c.threeD[0] = 1.0f; c.azimuth[0] = 90.0f; c.aux[0] = 1.0f; });
+	const auto out = render (*deck, in);
+	// ACN 1 is Y, ACN 3 is X
+	const double mainRatio = std::pow (10.0, (rmsDb (out.bformat[1], settled) - rmsDb (out.bformat[3], settled)) / 20.0);
+	const double auxRatio = std::pow (10.0, (rmsDb (out.aux[1], settled) - rmsDb (out.aux[3], settled)) / 20.0);
+	EXPECT_GT (mainRatio, 1.0) << "a stem at 90 degrees sits left, so Y dominates";
+	EXPECT_NEAR (auxRatio, mainRatio, 1e-4 * mainRatio);
+}
+
+TEST (DeckSpatial, MutedStemSendsNoAux)
+{
+	juce::ScopedJuceInitialiser_GUI juceInitialiser;
+	auto deck = preparedDeck (block, [] (DeckSpatial::Controls& c) { c.threeD[0] = 0.5f; c.aux[0] = 1.0f; });
+	const auto out = render (*deck, noiseOnStem (0), { block, true, [&] (int first)
+	{
+		deck->controls().muted[0] = first >= oneSecond / 4;
+	} });
+	const int afterRamp = oneSecond / 4 + block + rampSamples;
+	EXPECT_FALSE (exactlySilent (out.aux[0], 0, oneSecond / 4)) << "aux before the mute";
+	for (int c = 0; c < spatial::bformatChannels; ++c)
+		EXPECT_TRUE (exactlySilent (out.aux[(size_t) c], afterRamp)) << "aux " << c;
+}
+
+TEST (DeckSpatial, AuxIsPostThreeD)
+{
+	juce::ScopedJuceInitialiser_GUI juceInitialiser;
+	const auto in = noiseOnStem (0);
+	auto flat = preparedDeck (block, [] (DeckSpatial::Controls& c) { c.threeD[0] = 0.0f; c.aux[0] = 1.0f; });
+	expectAuxEqualsMain (render (*flat, in), Rendered { bedReference (in.left (0), in.right (0)), {}, {}, {}, {} }, 1e-6f);
+
+	auto wide = preparedDeck (block, [] (DeckSpatial::Controls& c)
+	{
+		c.threeD[0] = 1.0f;
+		c.azimuth[0] = 30.0f;
+		c.width[0] = 90.0f;
+		c.aux[0] = 1.0f;
+	});
+	const auto encoded = encoderReference (in.left (0), in.right (0), { 30.0f, 0.0f, 0.0f, 90.0f });
+	const auto aux = render (*wide, in);
+	for (int c = 0; c < spatial::bformatChannels; ++c)
+		EXPECT_LE (maxDifference (aux.aux[(size_t) c], encoded[(size_t) c], settled), 1e-6f) << "no bed share at 3D 1, channel " << c;
+}
+
+TEST (DeckSpatial, StandingDeckRunsNoAuxBed)
+{
+	juce::ScopedJuceInitialiser_GUI juceInitialiser;
+	const auto in = sineOnAllStemsFrom (resumeAt, resumeAt + 4 * block);
+	auto deck = preparedDeck (block, [] (DeckSpatial::Controls& c)
+	{
+		for (int s = 0; s < DeckSpatial::stems; ++s)
+			c.aux[(size_t) s] = 1.0f;
+	});
+	// playing until standFrom (the sine ends there), then standing
+	auto played = in;
+	for (int ch = 0; ch < 8; ++ch)
+		for (int i = 0; i < standFrom; ++i)
+			played.channels[(size_t) ch][(size_t) i] = 0.25f * std::sin (2.0f * 3.14159265f * 100.0f * (float) i / (float) rate);
+	std::int64_t runsWhileStanding = -1;
+	const auto out = render (*deck, played, { block, true, [&] (int first)
+	{
+		deck->controls().playing = first < standFrom || first >= resumeAt;
+		if (first == standFrom + 30 * block)
+			deck->resetTiming();   // the 2048-sample hold-over has run out by now
+		if (first == resumeAt)
+			runsWhileStanding = deck->decoderRuns().auxBed;
+	} });
+	EXPECT_EQ (runsWhileStanding, 0);
+	for (int c = 0; c < spatial::bformatChannels; ++c)
+	{
+		EXPECT_TRUE (exactlySilent (out.aux[(size_t) c], standFrom + 30 * block, resumeAt)) << "standing, aux " << c;
+		EXPECT_LT (largestStep (out.aux[(size_t) c], resumeAt, resumeAt + 4 * block), 0.05f) << "click on resume, aux " << c;
+	}
+	EXPECT_GT (deck->decoderRuns().auxBed, 0);
+}
+
+// B2 (M4): the cue leaves as 2nd-order B-format -- the first 9 ACN channels of
+// the 3rd-order cue sum -- and the deck has one decoder, for the phones.
+namespace
+{
+void expectCueIsFirstNineOf (const Rendered& out, const Bformat& thirdOrder, float tolerance)
+{
+	for (size_t c = 0; c < out.cue.size(); ++c)
+		EXPECT_LE (maxDifference (out.cue[c], thirdOrder[c], settled), tolerance) << "cue " << c;
+}
+
+Bformat sum (const Bformat& a, const Bformat& b)
+{
+	Bformat out = a;
+	for (size_t c = 0; c < out.size(); ++c)
+		for (size_t i = 0; i < out[c].size(); ++i)
+			out[c][i] += b[c][i];
+	return out;
+}
+}
+
+TEST (DeckSpatial, CueIsTheFirstNineChannelsOfTheThirdOrderCue)
+{
+	juce::ScopedJuceInitialiser_GUI juceInitialiser;
+	const auto in = noiseOnStem (0);
+	// 3D 1 with a pose, so the higher orders are busy: the encoder alone
+	auto encoded = preparedDeck (block, [] (DeckSpatial::Controls& c)
+	{
+		c.threeD[0] = 1.0f;
+		c.azimuth[0] = 30.0f;
+		c.elevation[0] = 25.0f;
+		c.width[0] = 90.0f;
+		c.cued[0] = true;
+	});
+	const auto reference = encoderReference (in.left (0), in.right (0), { 30.0f, 25.0f, 0.0f, 90.0f });
+	const auto out = render (*encoded, in);
+	EXPECT_GT (rmsDb (out.cue[8], settled), -60.0) << "ACN 8 carries the pose";
+	expectCueIsFirstNineOf (out, reference, 1e-6f);
+
+	// 3D 0: the cue bed alone
+	auto flat = preparedDeck (block, [] (DeckSpatial::Controls& c) { c.cued[0] = true; });
+	expectCueIsFirstNineOf (render (*flat, in), bedReference (in.left (0), in.right (0)), 1e-6f);
+}
+
+// SD section 5: the cue is taken before MUTE, after GAIN and 3D (stem and deck).
+TEST (DeckSpatial, CueIsPreMutePostThreeD)
+{
+	juce::ScopedJuceInitialiser_GUI juceInitialiser;
+	const auto in = noiseOnStem (0);
+	const auto bed = bedReference (in.left (0), in.right (0));
+	const auto encoded = encoderReference (in.left (0), in.right (0), { -60.0f, 0.0f, 0.0f, 60.0f });
+	const auto scaledBy = [] (const Bformat& from, float gain)
+	{
+		Bformat out = from;
+		for (auto& channel : out)
+			for (auto& sample : channel)
+				sample *= gain;
+		return out;
+	};
+	// Encoder and bed are linear in their input: 3D 0.5 is g of the one plus 1 - g of the other.
+	const float g = spatial::movingGain (0.5f);
+	const auto halfEach = sum (scaledBy (encoded, g), scaledBy (bed, 1.0f - g));
+
+	const auto mutedAndCued = [] (float stemThreeD, float deckThreeD)
+	{
+		return [=] (DeckSpatial::Controls& c)
+		{
+			c.threeD[0] = stemThreeD;
+			c.deckThreeD = deckThreeD;
+			c.azimuth[0] = -60.0f;
+			c.cued[0] = true;
+			c.muted[0] = true;
+		};
+	};
+	auto atHalf = preparedDeck (block, mutedAndCued (0.5f, 1.0f));
+	const auto out = render (*atHalf, in);
+	for (int c = 0; c < spatial::bformatChannels; ++c)
+		EXPECT_TRUE (exactlySilent (out.bformat[(size_t) c])) << "muted, bformat " << c;
+	expectCueIsFirstNineOf (out, halfEach, 1e-5f);
+
+	auto deckFlat = preparedDeck (block, mutedAndCued (1.0f, 0.0f));
+	expectCueIsFirstNineOf (render (*deckFlat, in), bed, 1e-6f);
+}
+
+// Silence at 0 (P4 D23): never cued, or uncued once the 10 ms ramp has
+// settled, every cue channel is exactly 0.0f and the cue bed is not run.
+TEST (DeckSpatial, NoStemCuedIsExactSilenceOnTheCue)
+{
+	juce::ScopedJuceInitialiser_GUI juceInitialiser;
+	const auto in = noiseOnAllStems();
+	auto never = preparedDeck (block, [] (DeckSpatial::Controls& c) { busyDeck (c); c.cued[1] = c.cued[2] = false; });
+	const auto out = render (*never, in);
+	for (size_t c = 0; c < out.cue.size(); ++c)
+		EXPECT_TRUE (exactlySilent (out.cue[c])) << "never cued, cue " << c;
+	EXPECT_EQ (never->timing().cueBed, 0.0);
+
+	const int cueOff = 64 * block;
+	auto deck = preparedDeck (block, busyDeck);
+	const auto uncued = render (*deck, in, { block, true, [&] (int first)
+	{
+		if (first == cueOff)
+			deck->controls().cued[1] = deck->controls().cued[2] = false;
+	} });
+	EXPECT_FALSE (exactlySilent (uncued.cue[0], 0, cueOff));
+	for (size_t c = 0; c < uncued.cue.size(); ++c)
+		EXPECT_TRUE (exactlySilent (uncued.cue[c], cueOff + block + rampSamples)) << "uncued, cue " << c;
+}
+
+TEST (DeckSpatial, OnlyOneDecoderExists)
+{
+	juce::ScopedJuceInitialiser_GUI juceInitialiser;
+	const int before = DeckSpatial::binauralDecodersCreated();
+	auto deck = preparedDeck();
+	EXPECT_EQ (DeckSpatial::binauralDecodersCreated() - before, 1);
+}
+
+// The phones decoder takes mixWeight * main16 + cueWeight * cue9 (ACN 9..15 zero):
+// at either end of CUE<->MIX it is a lone decoder on that one input.
+TEST (DeckSpatial, PhonesMixesMainAndNinthOrderCue)
+{
+	juce::ScopedJuceInitialiser_GUI juceInitialiser;
+	const auto in = noiseOnAllStems();
+	for (const float mix : { 0.0f, 1.0f })
+	{
+		auto deck = preparedDeck (block, [mix] (DeckSpatial::Controls& c) { busyDeck (c); c.phonesMix = mix; c.phonesLevel = 1.0f; });
+		const auto out = render (*deck, in);
+		const auto reference = decoderReference (mix == 0.0f ? padded (out.cue) : out.bformat);
+		for (size_t side = 0; side < 2; ++side)
+		{
+			EXPECT_GT (rmsDb (out.phones[side], settled), -40.0) << "mix " << mix;
+			EXPECT_LE (maxDifference (out.phones[side], reference[side]), 1e-5f) << "mix " << mix << ", phones " << side;
+		}
+	}
+}
+
+// R2: two-deck mode's binaural cue is the phones decoder at cue 1, mix 0 --
+// whatever the phones settings say -- and its phones pair carries the same.
+TEST (DeckSpatial, TwoDeckBinauralCueEqualsPhonesCueOnly)
+{
+	juce::ScopedJuceInitialiser_GUI juceInitialiser;
+	const auto in = noiseOnAllStems();
+	auto twoDeck = preparedDeck (block, [] (DeckSpatial::Controls& c) { busyDeck (c); c.phonesDecoderOn = false; c.phonesMix = 0.7f; c.phonesLevel = 0.5f; });
+	auto cueOnly = preparedDeck (block, [] (DeckSpatial::Controls& c) { busyDeck (c); c.phonesMix = 0.0f; c.phonesLevel = 1.0f; });
+	RenderOptions withBinauralCue;
+	withBinauralCue.binauralCue = true;
+	const auto two = render (*twoDeck, in, withBinauralCue);
+	const auto one = render (*cueOnly, in);
+	for (size_t side = 0; side < 2; ++side)
+	{
+		EXPECT_GT (rmsDb (two.binauralCue[side], settled), -40.0) << side;
+		EXPECT_LE (maxDifference (two.binauralCue[side], one.phones[side], settled), 1e-6f) << "bcue " << side;
+		EXPECT_EQ (maxDifference (two.phones[side], two.binauralCue[side]), 0.0f) << "phones " << side;
+	}
+
+	// Nothing cued: the decoder does not run and the pair is exactly 0.0f.
+	auto idle = preparedDeck (block, [] (DeckSpatial::Controls& c) { busyDeck (c); c.phonesDecoderOn = false; c.cued[1] = c.cued[2] = false; });
+	const auto silent = render (*idle, in, withBinauralCue);
+	EXPECT_EQ (idle->decoderRuns().phones, 0);
+	for (size_t side = 0; side < 2; ++side)
+		EXPECT_TRUE (exactlySilent (silent.binauralCue[side])) << side;
 }

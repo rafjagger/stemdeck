@@ -3,6 +3,7 @@
 #include <gtest/gtest.h>
 
 #include "OneDeckAudio.h"
+#include "AuxPots.h"
 #include "OneDeckView.h"
 #include "Outputs.h"
 #include "StemKnob.h"
@@ -11,7 +12,7 @@
 
 #include <vector>
 
-// A -bformat instance's audio (S4.4a): one DeckHost on the 22 one-deck
+// A -bformat instance's audio (S4.4a): one DeckHost on the 43 one-deck
 // channels, through the AudioSource the JACK client pulls.
 namespace
 {
@@ -92,6 +93,12 @@ protected:
 		}
 	}
 
+	void setAllAux (float aux)
+	{
+		for (auto& send : settings().aux)
+			send.store (aux);
+	}
+
 	void setAllStems (bool muted, bool cued, float gain)
 	{
 		for (int s = 0; s < stems; ++s)
@@ -124,25 +131,28 @@ TEST_F (OneDeck, VolumeMinimaAreExactSilence)
 	setAllStems (false, true, 1.0f);
 	player().play();
 	renderBlocks (blocksFor (0.3));
-	for (const auto ch : { layout.bformat, layout.cue, layout.aux, layout.phones })
+	setAllAux (1.0f);
+	renderBlocks (blocksFor (0.3));
+	for (const auto ch : { layout.bformat, layout.aux, layout.cue, layout.phones })
 		ASSERT_GT (peakOver (ch, 0.05), 0.0f) << "the deck plays: " << outputs::oneDeck::portName (ch);
 
-	// GAIN at the knob's minimum: every one of the 22.
+	// GAIN at the knob's minimum: every one of the 43.
 	setAllStems (false, true, juce::Decibels::decibelsToGain (stemKnobMinimumDb, stemKnobMinimumDb));
 	renderBlocks (blocksFor (0.5));
 	expectExactlySilentFor (0, layout.channels, 0.2, "GAIN at its minimum");
 
-	// MUTE: the B-format and the AUX; the cue is pre-mute and plays on.
+	// MUTE: the B-format and the AUX; the cue is pre-mute and plays on, in its
+	// own 9 channels and in the phones.
 	setAllStems (true, true, 1.0f);
 	renderBlocks (blocksFor (0.5));
 	EXPECT_GT (peakOver (layout.cue, 0.05), 0.0f) << "the cue is pre-mute";
+	EXPECT_GT (peakOver (layout.phones, 0.05), 0.0f) << "the cue is pre-mute";
 	expectExactlySilentFor (layout.bformat, outputs::bformatChannels, 0.2, "MUTE");
-	expectExactlySilentFor (layout.aux, 2, 0.2, "MUTE");
+	expectExactlySilentFor (layout.aux, outputs::bformatChannels, 0.2, "MUTE");
 
 	// CUE<->MIX at MIX: the cue's weight is exactly 0, and the muted deck's mix is silence.
 	audio.setPhones (1.0f, 1.0f);
 	renderBlocks (blocksFor (0.5));
-	ASSERT_GT (peakOver (layout.cue, 0.05), 0.0f);
 	expectExactlySilentFor (layout.phones, 2, 0.2, "CUE<->MIX at MIX");
 
 	// CUE<->MIX at CUE with nothing cued: the deck plays, the phones are silent.
@@ -156,7 +166,15 @@ TEST_F (OneDeck, VolumeMinimaAreExactSilence)
 	setAllStems (false, true, 1.0f);
 	audio.setPhones (0.0f, 0.5f);
 	renderBlocks (blocksFor (0.5));
-	ASSERT_GT (peakOver (layout.cue, 0.05), 0.0f);
+	ASSERT_GT (peakOver (layout.bformat, 0.05), 0.0f);
+	expectExactlySilentFor (layout.phones, 2, 0.2, "LEVEL 0");
+
+	// AUX 0: the send, settled, leaves the aux bus exactly 0.0f.
+	setAllStems (false, true, 1.0f);
+	setAllAux (0.0f);
+	renderBlocks (blocksFor (0.5));
+	expectExactlySilentFor (layout.aux, outputs::bformatChannels, 0.2, "AUX 0");
+	ASSERT_GT (peakOver (layout.bformat, 0.05), 0.0f);
 	expectExactlySilentFor (layout.phones, 2, 0.2, "phones LEVEL 0");
 }
 
@@ -164,6 +182,19 @@ TEST_F (OneDeck, VolumeMinimaAreExactSilence)
 // automatic only while Core is not heard; `on` ignores Core, `off` never runs.
 // With nothing cued and the phones at MIX, the phones carry sound exactly
 // when it runs.
+// PipeWire calls the sample-rate callback before a block size is known: the
+// whole deck (player and engine) refuses a block of 0 and prepares at 128 later.
+TEST_F (OneDeck, PrepareWithBlockSizeZeroIsRefused)
+{
+	EXPECT_FALSE (audio.host().prepare (rate, 0));
+	audio.prepareToPlay (0, rate);   // the JACK path: must not divide by zero
+	EXPECT_TRUE (audio.host().prepare (rate, block));
+	setAllStems (false, false, 1.0f);
+	player().play();
+	renderBlocks (blocksFor (0.3));
+	EXPECT_GT (peakOver (layout.bformat, 0.05), 0.0f);
+}
+
 TEST_F (OneDeck, PhonesDecoderFollowsR12)
 {
 	using spatial::PhonesMode;
@@ -289,6 +320,10 @@ TEST_F (OneDeck, PaintsEveryState)
 	ASSERT_EQ (settings().phonesMix.load(), 1.0f);
 	shoot ("phones mix");
 
+	view.column (0).aux().setValue (0.6, juce::sendNotificationSync);
+	ASSERT_FLOAT_EQ (settings().aux[0].load(), 0.6f);
+	shoot ("aux sent");
+
 	for (size_t i = 0; i < shots.size(); ++i)
 	{
 		const auto& [state, image] = shots[i];
@@ -377,4 +412,208 @@ TEST_F (OneDeck, PitchDrivesTheSpeedAndTheSessionTempoIsRestored)
 	EXPECT_TRUE (saved.stems[2].muted);
 	EXPECT_TRUE (saved.stems[3].cue);
 	EXPECT_FALSE (saved.stems[0].cue);
+}
+
+// The stem's four knobs are a 2 x 2 block of one column width: GAIN, 3D on
+// top in that order, AUX, WIDTH below -- AUX under GAIN, WIDTH under 3D.
+TEST_F (OneDeck, StemColumnKnobsAreTwoByTwo)
+{
+	OneDeckView view (audio, formats, 0);
+	view.setSize (screenWidth, viewHeight);
+	for (int stem = 0; stem < stems; ++stem)
+	{
+		auto& column = view.column (stem);
+		const auto gain = column.gain().getBounds(), threeD = column.threeD().getBounds();
+		const auto aux = column.aux().getBounds(), width = column.width().getBounds();
+
+		EXPECT_EQ (gain.getY(), threeD.getY());
+		EXPECT_EQ (aux.getY(), width.getY());
+		EXPECT_LT (gain.getRight(), threeD.getX() + 1);
+		EXPECT_LT (aux.getRight(), width.getX() + 1);
+		EXPECT_EQ (gain.getX(), aux.getX());
+		EXPECT_EQ (threeD.getX(), width.getX());
+		EXPECT_LT (gain.getBottom(), aux.getY()) << "the lower row, captions between";
+		for (const auto& knob : { threeD, aux, width })
+			EXPECT_EQ (knob.getWidth(), gain.getWidth());
+		for (const auto& knob : { gain, threeD, aux, width })
+			EXPECT_TRUE (column.getLocalBounds().contains (knob)) << "stem " << stem;
+		EXPECT_EQ (column.threeD().getRight() - column.gain().getX(), column.width().getRight() - column.aux().getX());
+		EXPECT_GE (column.viewer().getY(), column.width().getBottom()) << "the block does not cover the viewer";
+	}
+}
+
+// AUX is the stem's send to the deck's AUX bus (0..1), written to the spatial
+// settings; the knob follows what the settings hold when nobody touches it.
+TEST_F (OneDeck, AuxKnobWritesTheStemsAux)
+{
+	OneDeckView view (audio, formats, 0);
+	view.setSize (screenWidth, viewHeight);
+	auto& column = view.column (1);
+	EXPECT_EQ (column.aux().getMinimum(), 0.0);
+	EXPECT_EQ (column.aux().getMaximum(), 1.0);
+
+	column.aux().setValue (0.4, juce::sendNotificationSync);
+	EXPECT_FLOAT_EQ (settings().aux[1].load(), 0.4f);
+	EXPECT_EQ (column.auxCaptionText(), "AUX 40") << "the readout matches 3D's";
+	for (int other : { 0, 2, 3 })
+		EXPECT_EQ (settings().aux[(size_t) other].load(), 0.0f);
+
+	settings().aux[1].store (0.7f);
+	column.refresh();
+	EXPECT_DOUBLE_EQ (column.aux().getValue(), 0.7);
+}
+
+// The state line says it when the stem is sent to AUX, and only then.
+TEST_F (OneDeck, StemColumnStateLineSaysAuxWhenSent)
+{
+	OneDeckView view (audio, formats, 0);
+	view.setSize (screenWidth, viewHeight);
+	auto& column = view.column (2);
+	column.refresh();
+	EXPECT_EQ (column.stateText(), "home");
+
+	column.aux().setValue (0.4, juce::sendNotificationSync);
+	column.refresh();
+	EXPECT_EQ (column.stateText(), "home " + juce::String::fromUTF8 ("\xc2\xb7") + " AUX");
+
+	view.column (3).refresh();
+	EXPECT_EQ (view.column (3).stateText(), "home");
+	column.aux().setValue (0.0, juce::sendNotificationSync);
+	column.refresh();
+	EXPECT_EQ (column.stateText(), "home");
+}
+
+// The AUX meter is the aux bus's W and the cue meter the cue bus's W: cued
+// stems with no send light the cue only, a send lights the AUX.
+TEST_F (OneDeck, AuxMeterReadsTheAuxBus)
+{
+	OneDeckView view (audio, formats, 0);
+	view.setSize (screenWidth, viewHeight);
+	setAllStems (false, true, 1.0f);
+	player().play();
+	const auto settle = [&]
+	{
+		for (int i = 0; i < blocksFor (0.3); ++i)
+		{
+			renderBlock();
+			view.outputs().refresh();
+		}
+	};
+	settle();
+	const auto& cue = view.outputs().cueMeter();
+	const auto& aux = view.outputs().auxMeter();
+	EXPECT_GT (cue.levelDb(), -60.0f) << "cued stems play in the cue";
+	EXPECT_LE (aux.levelDb(), -60.0f) << "nothing is sent yet";
+
+	setAllAux (1.0f);
+	settle();
+	EXPECT_GT (aux.levelDb(), -60.0f) << "the send lights the aux bus's W";
+}
+
+//==============================================================================
+// R13 on the real columns: the pots move AUX only after crossing its value.
+TEST_F (OneDeck, PotsMoveAuxOnlyAfterCrossingAndNeverJump)
+{
+	OneDeckView view (audio, formats, 0);
+	view.setSize (screenWidth, viewHeight);
+	AuxPots pots ([&view] (int stem) -> StemColumn& { return view.column (stem); });
+	auto& knob = view.column (1).aux();
+	knob.setValue (0.5, juce::sendNotificationSync);
+	pots.rearm();   // as after a load
+
+	pots.reading (1, 0.2);
+	pots.reading (1, 0.4);
+	EXPECT_DOUBLE_EQ (knob.getValue(), 0.5) << "a pot that has not crossed does nothing";
+	EXPECT_FLOAT_EQ (settings().aux[1].load(), 0.5f);
+	pots.reading (1, 0.55);
+	EXPECT_DOUBLE_EQ (knob.getValue(), 0.55);
+	EXPECT_FLOAT_EQ (settings().aux[1].load(), 0.55f);
+
+	// A touch moves the knob away from the pot: the pot must find it again.
+	knob.setValue (0.9, juce::sendNotificationSync);
+	pots.reading (1, 0.58);
+	EXPECT_DOUBLE_EQ (knob.getValue(), 0.9) << "no jump to the pot";
+	pots.reading (1, 0.95);
+	EXPECT_DOUBLE_EQ (knob.getValue(), 0.95);
+}
+
+TEST_F (OneDeck, AuxPotAfterALoadKeepsItsLastPlaceAsGhostAndDoesNotJump)
+{
+	OneDeckView view (audio, formats, 0);
+	view.setSize (screenWidth, viewHeight);
+	AuxPots pots ([&view] (int stem) -> StemColumn& { return view.column (stem); });
+	auto& knob = view.column (0).aux();
+	knob.setValue (0.5, juce::sendNotificationSync);
+	pots.rearm();
+	pots.reading (0, 0.5);
+	ASSERT_FALSE (view.column (0).hasAuxGhost());
+
+	knob.setValue (0.8, juce::sendNotificationSync);   // a load
+	pots.rearm();
+	EXPECT_TRUE (view.column (0).hasAuxGhost()) << "the pot's place shows at once, without a new reading";
+	EXPECT_DOUBLE_EQ (view.column (0).auxGhost().value(), 0.5);
+	pots.reading (0, 0.5);
+	EXPECT_DOUBLE_EQ (knob.getValue(), 0.8);
+	pots.reading (0, 0.85);
+	EXPECT_DOUBLE_EQ (knob.getValue(), 0.85);
+	EXPECT_FALSE (view.column (0).hasAuxGhost());
+}
+
+// While another program held the panel, the pots were its controls: the last
+// reading StemDeck heard is stale and must not count as a side.
+TEST_F (OneDeck, AuxPotAfterAPanelHandOverForgetsTheStaleReading)
+{
+	OneDeckView view (audio, formats, 0);
+	view.setSize (screenWidth, viewHeight);
+	AuxPots pots ([&view] (int stem) -> StemColumn& { return view.column (stem); });
+	auto& knob = view.column (0).aux();
+	knob.setValue (0.2, juce::sendNotificationSync);
+	pots.rearm();
+	pots.reading (0, 0.1);   // the last reading before the panel went away
+
+	pots.panelGained();
+	EXPECT_FALSE (view.column (0).hasAuxGhost()) << "no ghost from a stale place";
+	pots.reading (0, 0.9);
+	EXPECT_DOUBLE_EQ (knob.getValue(), 0.2) << "the first fresh reading does not count as a crossing";
+	ASSERT_TRUE (view.column (0).hasAuxGhost());
+	EXPECT_DOUBLE_EQ (view.column (0).auxGhost().value(), 0.9);
+	pots.reading (0, 0.25);
+	EXPECT_DOUBLE_EQ (knob.getValue(), 0.2) << "not crossed yet";
+	pots.reading (0, 0.15);
+	EXPECT_DOUBLE_EQ (knob.getValue(), 0.15) << "crossed: picked up";
+}
+
+TEST_F (OneDeck, WatchRearmsAPickedUpPotWhenTheKnobIsMovedAway)
+{
+	OneDeckView view (audio, formats, 0);
+	view.setSize (screenWidth, viewHeight);
+	AuxPots pots ([&view] (int stem) -> StemColumn& { return view.column (stem); });
+	auto& knob = view.column (2).aux();
+	knob.setValue (0.5, juce::sendNotificationSync);
+	pots.rearm();
+	pots.reading (2, 0.5);
+	knob.setValue (0.1, juce::sendNotificationSync);
+	pots.watch();
+	EXPECT_TRUE (view.column (2).hasAuxGhost());
+	EXPECT_DOUBLE_EQ (view.column (2).auxGhost().value(), 0.5);
+}
+
+// A page test must paint: the ghost mark changes the picture on the knob, and only there.
+TEST_F (OneDeck, PaintsTheAuxGhostMark)
+{
+	DJLookAndFeel look;
+	OneDeckView view (audio, formats, 0);
+	view.setLookAndFeel (&look);
+	view.setSize (screenWidth, viewHeight);
+	view.setSet (set);
+	auto& column = view.column (0);
+	const auto knobArea = view.getLocalArea (&column, column.aux().getBounds());
+	const auto knobOf = [&] { return snapshotOf (view).getClippedImage (knobArea); };
+
+	const auto without = knobOf();
+	column.setAuxGhost (0.75);
+	EXPECT_GT (differingPixels (without, knobOf()), 10) << "the mark is drawn";
+	column.setAuxGhost (std::nullopt);
+	EXPECT_EQ (differingPixels (without, knobOf()), 0) << "and goes again";
+	view.setLookAndFeel (nullptr);
 }

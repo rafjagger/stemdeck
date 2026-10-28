@@ -11,7 +11,7 @@
 namespace
 {
 	// Shares of the column's height, top to bottom; the viewer takes what is left.
-	constexpr float nameShare = 0.06f, stateShare = 0.045f, knobShare = 0.12f, captionShare = 0.04f;
+	constexpr float nameShare = 0.06f, stateShare = 0.045f, knobShare = 0.085f, captionShare = 0.035f;   // one row of the knob block; two rows
 	constexpr float keyRowShare = 0.08f, gapShare = 0.012f;
 	// Text a share of the line it stands in.
 	constexpr float nameFont = 0.8f, lineFont = 0.85f;
@@ -62,14 +62,21 @@ StemColumn::StemColumn (StemDeckPlayer& p, DeckSpatialPorts& spatialPorts, int s
 	threeDKnob.onValueChange = [this, s]
 	{
 		ports.settings().threeD[s].store ((float) threeDKnob.getValue());
-		showThreeD();
+		showShares();
+	};
+	setUpKnob (auxKnob, { 0.0, 1.0 }, 0.01, 0.0, {});
+	auxKnob.setValue (settings.aux[s].load(), juce::dontSendNotification);
+	auxKnob.onValueChange = [this, s]
+	{
+		ports.settings().aux[s].store ((float) auxKnob.getValue());
+		showShares();
 	};
 	setUpKnob (widthKnob, { 0.0, 360.0 }, 1.0, spatial::Pose{}.width, juce::String::fromUTF8 ("\xc2\xb0"));
 	widthKnob.setValue (settings.width[s].load(), juce::dontSendNotification);
 	widthKnob.onValueChange = [this, s] { ports.settings().width[s].store ((float) widthKnob.getValue()); };
 
 	for (auto [knob, caption, text] : { std::tuple { &gainKnob, &gainCaption, "GAIN" }, std::tuple { &threeDKnob, &threeDCaption, "3D" },
-										std::tuple { &widthKnob, &widthCaption, "WIDTH" } })
+										std::tuple { &auxKnob, &auxCaption, "AUX" }, std::tuple { &widthKnob, &widthCaption, "WIDTH" } })
 	{
 		knob->setColour (juce::Slider::rotarySliderFillColourId, colour);
 		caption->setText (text, juce::dontSendNotification);
@@ -79,7 +86,7 @@ StemColumn::StemColumn (StemDeckPlayer& p, DeckSpatialPorts& spatialPorts, int s
 		addAndMakeVisible (knob);
 		addAndMakeVisible (caption);
 	}
-	showThreeD();
+	showShares();
 
 	stemViewer.setColour (StemViewer::stemColourId, colour);
 	stemViewer.onHomeChanged = [this] (spatial::Pose pose) { homeDragged (pose); };
@@ -106,9 +113,14 @@ void StemColumn::setStemName (const juce::String& name)
 	nameLabel.setText (name.toUpperCase(), juce::dontSendNotification);
 }
 
-void StemColumn::showThreeD()
+void StemColumn::showShares()
 {
-	threeDCaption.setText ("3D " + juce::String (juce::roundToInt (threeDKnob.getValue() * 100.0)), juce::dontSendNotification);
+	const auto share = [] (const juce::String& name, const juce::Slider& knob)
+	{
+		return name + " " + juce::String (juce::roundToInt (knob.getValue() * 100.0));
+	};
+	threeDCaption.setText (share ("3D", threeDKnob), juce::dontSendNotification);
+	auxCaption.setText (share ("AUX", auxKnob), juce::dontSendNotification);
 }
 
 void StemColumn::homeDragged (spatial::Pose pose)
@@ -129,15 +141,19 @@ void StemColumn::refresh()
 	const spatial::Pose home { settings.azimuth[s].load(), settings.elevation[s].load(), settings.width[s].load() };
 	const auto state = motion.stemState (stem);
 
-	stateLabel.setText (OneShotKeys::stateLine (motion, stem), juce::dontSendNotification);
+	auto line = OneShotKeys::stateLine (motion, stem);
+	if (settings.aux[s].load() > 0.0f)   // the amount is on the knob's caption
+		line << juce::String::fromUTF8 (" \xc2\xb7 ") << "AUX";
+	stateLabel.setText (line, juce::dontSendNotification);
 	stateLabel.setColour (juce::Label::textColourId, state == motionlite::PadState::running ? colour
 													 : state == motionlite::PadState::armed ? Theme::text : Theme::textDim);
 	stemViewer.setShown (home, motion.posePlayed (stem), state);
 	keys.refresh();
 
 	follow (threeDKnob, settings.threeD[s].load());
+	follow (auxKnob, settings.aux[s].load());
 	follow (widthKnob, settings.width[s].load());
-	showThreeD();
+	showShares();
 	cueKey.setToggleState (player.isStemCued (stem), juce::dontSendNotification);
 	muteKey.setToggleState (player.isStemMuted (stem), juce::dontSendNotification);
 }
@@ -172,6 +188,29 @@ void StemColumn::paint (juce::Graphics& g)
 	g.fillRect (card.withHeight (juce::jmax (2.0f, (float) getHeight() * gapShare / 2.0f)));
 }
 
+void StemColumn::setAuxGhost (std::optional<double> position)
+{
+	if (position == ghost)
+		return;
+	ghost = position;
+	repaint (auxKnob.getBounds());
+}
+
+// A short tick across the knob's ring at the pot's place, in the text colour.
+void StemColumn::paintOverChildren (juce::Graphics& g)
+{
+	if (! ghost)
+		return;
+	const auto bounds = auxKnob.getBounds().toFloat();
+	const auto radius = juce::jmin (bounds.getWidth(), bounds.getHeight()) / 2.0f;
+	const auto& rotary = auxKnob.getRotaryParameters();
+	const auto angle = rotary.startAngleRadians + (float) *ghost * (rotary.endAngleRadians - rotary.startAngleRadians);
+	const auto centre = bounds.getCentre();
+	const auto direction = juce::Point<float> (std::sin (angle), -std::cos (angle));
+	g.setColour (Theme::text);
+	g.drawLine (juce::Line<float> (centre + direction * (radius * 0.55f), centre + direction * radius), juce::jmax (2.0f, radius * 0.12f));
+}
+
 void StemColumn::resized()
 {
 	const auto height = (float) getHeight();
@@ -189,16 +228,20 @@ void StemColumn::resized()
 	placeText (stateLabel, area.removeFromTop (row (stateShare)), lineFont, false);
 	area.removeFromTop (gap);
 
-	// Three knobs side by side, each with its caption under it.
-	auto knobs = area.removeFromTop (row (knobShare));
-	auto captions = area.removeFromTop (row (captionShare));
-	const auto knobWidth = knobs.getWidth() / 3;
-	for (auto [knob, caption] : { std::pair { &gainKnob, &gainCaption }, std::pair { &threeDKnob, &threeDCaption },
-								  std::pair { &widthKnob, &widthCaption } })
+	// Two by two, each knob with its caption under it: GAIN, 3D; AUX, WIDTH.
+	const auto knobWidth = area.getWidth() / 2;
+	const auto placeRow = [&] (juce::Slider& left, juce::Label& leftCaption, juce::Slider& right, juce::Label& rightCaption)
 	{
-		knob->setBounds (knobs.removeFromLeft (knobWidth).reduced (gap / 2, 0));
-		placeText (*caption, captions.removeFromLeft (knobWidth), lineFont, false);
-	}
+		auto knobs = area.removeFromTop (row (knobShare));
+		auto captions = area.removeFromTop (row (captionShare));
+		for (auto [knob, caption] : { std::pair { &left, &leftCaption }, std::pair { &right, &rightCaption } })
+		{
+			knob->setBounds (knobs.removeFromLeft (knobWidth).reduced (gap / 2, 0));
+			placeText (*caption, captions.removeFromLeft (knobWidth), lineFont, false);
+		}
+	};
+	placeRow (gainKnob, gainCaption, threeDKnob, threeDCaption);
+	placeRow (auxKnob, auxCaption, widthKnob, widthCaption);
 	area.removeFromTop (gap);
 
 	// From the foot up: the length, CUE | MUTE, the pads two by two.

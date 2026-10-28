@@ -13,7 +13,9 @@
 #include <vector>
 
 // The CPU gate's measurement, shared by the timing test and the standalone
-// tool: one deck, 4 stems moving, three decoder configurations, and a standing deck.
+// tool: one deck with its stems moving -- one stem or all four playing, the cue
+// leaving as B-format with no decoder (the rig) or the phones decoder on
+// (standalone) -- and a standing deck.
 namespace sdtest
 {
 struct TimingRow
@@ -22,7 +24,7 @@ struct TimingRow
 	double totalMean = 0.0, totalP99 = 0.0;   // µs per 128-block, whole process() call
 	DeckSpatial::Timing nodes {};              // mean µs per node group
 };
-using TimingTable = std::array<TimingRow, 4>;
+using TimingTable = std::array<TimingRow, 6>;
 
 namespace detail
 {
@@ -45,7 +47,7 @@ inline void movePoses (DeckSpatial::Controls& c, int blockIndex)
 
 enum class Deck { standing, playing };
 
-inline TimingRow measure (const char* name, int blocks, bool cued, bool phones, Deck deckState = Deck::playing)
+inline TimingRow measure (const char* name, int blocks, bool cued, bool phones, Deck deckState = Deck::playing, int playingStems = DeckSpatial::stems)
 {
 	const bool standing = deckState == Deck::standing;
 	auto deck = preparedDeck (block, [&] (DeckSpatial::Controls& c)
@@ -53,7 +55,7 @@ inline TimingRow measure (const char* name, int blocks, bool cued, bool phones, 
 		for (int s = 0; s < DeckSpatial::stems; ++s)
 		{
 			c.threeD[(size_t) s] = 1.0f;
-			c.cued[(size_t) s] = cued;
+			c.cued[(size_t) s] = cued && s < playingStems;
 		}
 		c.phonesDecoderOn = phones;
 		c.phonesMix = 0.5f;
@@ -63,25 +65,25 @@ inline TimingRow measure (const char* name, int blocks, bool cued, bool phones, 
 
 	StemInputs in (block);
 	if (! standing)   // standing: silent, poses still (one-shots freeze while paused)
-		for (int s = 0; s < DeckSpatial::stems; ++s)
+		for (int s = 0; s < playingStems; ++s)
 			in.playNoise (s, 10 * (s + 1));
 	std::array<const float*, 8> stems {};
 	for (size_t c = 0; c < stems.size(); ++c)
 		stems[c] = in.channels[c].data();
 
-	std::array<Signal, spatial::bformatChannels> bformat;
-	std::array<Signal, 6> stereo;
+	std::array<Signal, spatial::bformatChannels> bformat, aux;
+	std::array<Signal, DeckSpatial::cueChannels> cue;
+	std::array<Signal, 2> phonesPair;
 	DeckSpatial::Outputs outputs;
 	for (size_t c = 0; c < bformat.size(); ++c)
-		outputs.bformat[c] = (bformat[c] = silence (block)).data();
-	for (size_t i = 0; i < stereo.size(); ++i)
-		stereo[i] = silence (block);
-	for (size_t side = 0; side < 2; ++side)
 	{
-		outputs.cue[side] = stereo[side].data();
-		outputs.aux[side] = stereo[2 + side].data();
-		outputs.phones[side] = phones ? stereo[4 + side].data() : nullptr;
+		outputs.bformat[c] = (bformat[c] = silence (block)).data();
+		outputs.aux[c] = (aux[c] = silence (block)).data();
 	}
+	for (size_t c = 0; c < cue.size(); ++c)
+		outputs.cue[c] = (cue[c] = silence (block)).data();
+	for (size_t side = 0; side < 2; ++side)
+		outputs.phones[side] = phones ? (phonesPair[side] = silence (block)).data() : nullptr;
 
 	auto& controls = deck->controls();
 	const int warmUp = 400;   // ramps settle, decoders prime
@@ -116,28 +118,31 @@ inline TimingRow measure (const char* name, int blocks, bool cued, bool phones, 
 }
 }
 
-// (0) a standing deck (R14); (a) bed + 4 encoders, nothing cued, phones decoder off; (b) all cued, cue
-// decoder on; (c) (b) + phones decoder.
+// (0) a standing deck (R14); (a) bed + 4 encoders, nothing cued, no decoder; (b) all cued, the cue
+// as B-format, no decoder (the rig); (c) (b) + the phones decoder (standalone); (1) and (1c): one
+// stem playing and cued, the other three silent, without and with the phones decoder.
 inline TimingTable spatialTiming (int blocks)
 {
-	return { detail::measure ("(0) standing deck", blocks, false, false, detail::Deck::standing),
-	         detail::measure ("(a) bed + encoders, idle decoders", blocks, false, false),
-	         detail::measure ("(b) + cue decoder (all cued)", blocks, true, false),
-	         detail::measure ("(c) + phones decoder", blocks, true, true) };
+	using detail::Deck;
+	return { detail::measure ("(0) standing deck", blocks, false, false, Deck::standing),
+	         detail::measure ("(a) 4 stems, nothing cued", blocks, false, false),
+	         detail::measure ("(b) 4 stems cued, no decoder (rig)", blocks, true, false),
+	         detail::measure ("(c) (b) + phones decoder", blocks, true, true),
+	         detail::measure ("(1) 1 stem cued, no decoder (rig)", blocks, true, false, Deck::playing, 1),
+	         detail::measure ("(1c) (1) + phones decoder", blocks, true, true, Deck::playing, 1) };
 }
 
 inline void printTable (std::ostream& out, const TimingTable& table)
 {
 	char line[256];
 	out << "mean / p99 us per 128-sample block at 44.1 kHz; nodes: mean us\n";
-	std::snprintf (line, sizeof line, "%-36s %8s %8s | %8s %6s %7s %8s %8s\n", "configuration", "mean", "p99",
-	               "encoders", "bed", "cuebed", "cuedec", "phonedec");
+	std::snprintf (line, sizeof line, "%-36s %8s %8s | %8s %6s %7s %8s\n", "configuration", "mean", "p99",
+	               "encoders", "bed", "cuebed", "phonedec");
 	out << line;
 	for (const auto& r : table)
 	{
-		std::snprintf (line, sizeof line, "%-36s %8.1f %8.1f | %8.1f %6.1f %7.1f %8.1f %8.1f\n", r.name.c_str(),
-		               r.totalMean, r.totalP99, r.nodes.encoders, r.nodes.bed, r.nodes.cueBed, r.nodes.cueDecoder,
-		               r.nodes.phonesDecoder);
+		std::snprintf (line, sizeof line, "%-36s %8.1f %8.1f | %8.1f %6.1f %7.1f %8.1f\n", r.name.c_str(),
+		               r.totalMean, r.totalP99, r.nodes.encoders, r.nodes.bed, r.nodes.cueBed, r.nodes.phonesDecoder);
 		out << line;
 	}
 	out.flush();

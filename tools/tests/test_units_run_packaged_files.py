@@ -125,5 +125,115 @@ class TheTemplateUnit(unittest.TestCase):
         self.assertEqual(committed, self.TWO_DECK.read_bytes())
 
 
+class TheDeckSenderUnit(unittest.TestCase):
+    """a3-aes67-deck@.service: deck %i's AES67 sender on a deck host (R4)."""
+    UNIT = UNITS / "a3-aes67-deck@.service"
+
+    def lines(self):
+        return self.UNIT.read_text().splitlines()
+
+    def test_unit_runs_packaged_files(self):
+        for line in ("Description=AES67 sender of deck %i",
+                     "ExecStartPre=/usr/lib/stemdeck/stemdeck-aes67-deck render %i",
+                     "ExecStart=/usr/bin/pipewire -c %h/.config/pipewire/pipewire-aes67-deck-%i.conf",
+                     "Restart=always",
+                     "RestartSec=2"):
+            with self.subTest(line=line):
+                self.assertIn(line, self.lines())
+        self.assertTrue((REPO / "tools/stemdeck-aes67-deck").is_file())
+
+    def test_it_joins_the_base_instance_s_clock(self):
+        """Its rtp-sink joins pipewire.ptp0, which the base's PTP0-Driver drives."""
+        self.assertIn("Requires=stemdeck-aes67.service", self.lines())
+        self.assertIn("After=stemdeck-aes67.service", self.lines())
+
+    def test_no_conflicts_and_no_install(self):
+        self.assertFalse([l for l in self.lines() if l.startswith("Conflicts=")])
+        self.assertNotIn("[Install]", self.UNIT.read_text())
+
+    def test_it_never_runs_beside_a3_cores_aes67(self):
+        """A condition-skipped base still satisfies Requires=: the sender checks itself."""
+        lines = self.lines()
+        condition = "ExecCondition=/usr/lib/stemdeck/stemdeck-aes67-deck base-wanted"
+        self.assertIn(condition, lines)
+        self.assertLess(lines.index(condition), lines.index(
+            "ExecStartPre=/usr/lib/stemdeck/stemdeck-aes67-deck render %i"))
+
+
+class TheBaseUnit(unittest.TestCase):
+    """stemdeck-aes67.service: the deck host's PTP clock and receiver (P10, P24)."""
+    UNIT = UNITS / "stemdeck-aes67.service"
+
+    def lines(self):
+        return self.UNIT.read_text().splitlines()
+
+    def test_unit_runs_packaged_files(self):
+        for line in ("ExecCondition=/usr/lib/stemdeck/stemdeck-aes67-deck base-wanted",
+                     "ExecStartPre=/usr/lib/stemdeck/stemdeck-aes67-deck render-base",
+                     "ExecStart=/usr/bin/pipewire -c %h/.config/pipewire/pipewire-stemdeck-aes67.conf",
+                     "Restart=always",
+                     "RestartSec=2"):
+            with self.subTest(line=line):
+                self.assertIn(line, self.lines())
+
+    def test_the_condition_runs_before_the_render(self):
+        lines = self.lines()
+        condition = lines.index("ExecCondition=/usr/lib/stemdeck/stemdeck-aes67-deck base-wanted")
+        render = lines.index("ExecStartPre=/usr/lib/stemdeck/stemdeck-aes67-deck render-base")
+        self.assertLess(condition, render)
+
+    def test_it_runs_on_the_audio_server(self):
+        self.assertIn("Requires=pipewire.service", self.lines())
+        self.assertIn("After=pipewire.service wireplumber.service", self.lines())
+
+    def test_no_conflicts_and_no_install(self):
+        """Chosen by ExecCondition=, never by Conflicts= (2026-10-27 boot trap)."""
+        self.assertFalse([l for l in self.lines() if l.startswith("Conflicts=")])
+        self.assertNotIn("[Install]", self.UNIT.read_text())
+
+    def test_it_is_not_a3_cores_unit(self):
+        self.assertFalse((UNITS / "a3-aes67.service").exists())
+
+
+class TheAes67Units(unittest.TestCase):
+    UNITS = ("a3-aes67-deck@.service", "stemdeck-aes67.service")
+
+    CONDITIONS = {
+        "a3-aes67-deck@.service": ("base-wanted", "can-render %i"),
+        "stemdeck-aes67.service": ("base-wanted", "can-render-base"),
+    }
+
+    def test_a_render_that_would_refuse_skips_the_unit(self):
+        """A failed ExecStartPre is restarted whatever RestartPreventExitStatus
+        says (measured, systemd 262): the refusal is a condition instead."""
+        for unit, steps in self.CONDITIONS.items():
+            lines = (UNITS / unit).read_text().splitlines()
+            first_pre = min(i for i, l in enumerate(lines) if l.startswith("ExecStartPre="))
+            for step in steps:
+                line = f"ExecCondition=/usr/lib/stemdeck/stemdeck-aes67-deck {step}"
+                with self.subTest(unit=unit, step=step):
+                    self.assertIn(line, lines)
+                    self.assertLess(lines.index(line), first_pre)
+
+    def test_no_restart_prevention_that_does_nothing(self):
+        for unit in self.UNITS:
+            with self.subTest(unit=unit):
+                self.assertNotIn("RestartPreventExitStatus", (UNITS / unit).read_text())
+
+    def test_they_keep_the_host_s_audio_port(self):
+        """The deck-host role sets it (P28); a unit that set it would override the role."""
+        for unit in self.UNITS:
+            with self.subTest(unit=unit):
+                self.assertNotIn("Environment=STEMDECK_AUDIO_PORT",
+                                 (UNITS / unit).read_text())
+                self.assertNotIn("UnsetEnvironment", (UNITS / unit).read_text())
+
+    def test_they_carry_no_license_header(self):
+        """.reuse/dep5 licenses .config/*, as for the repository's other units."""
+        for unit in self.UNITS:
+            with self.subTest(unit=unit):
+                self.assertNotIn("SPDX", (UNITS / unit).read_text())
+
+
 if __name__ == "__main__":
     unittest.main()

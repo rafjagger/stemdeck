@@ -26,11 +26,13 @@ DeckHost::DeckHost (juce::AudioFormatManager& formatManager, juce::ThreadPool& a
 DeckHost::~DeckHost() = default;
 
 //==============================================================================
-void DeckHost::prepare (double sampleRate, int samplesPerBlockExpected)
+bool DeckHost::prepare (double sampleRate, int samplesPerBlockExpected)
 {
+	if (samplesPerBlockExpected <= 0)
+		return false;
 	stemPairs.setSize (StemDeckPlayer::numOutputChannels, juce::jmax (samplesPerBlockExpected, 4096));
 	deckPlayer.prepareToPlay (samplesPerBlockExpected, sampleRate);
-	ports.prepare (sampleRate, samplesPerBlockExpected);
+	return ports.prepare (sampleRate, samplesPerBlockExpected);
 }
 
 const juce::AudioBuffer<float>& DeckHost::render (juce::AudioBuffer<float>& spatialOutputs, int firstChannel, int numSamples)
@@ -274,6 +276,7 @@ void DeckHost::gather (DeckSession& deck) const
 			deck.stems[s].azimuth = restoredSpatial[s].azimuth;
 			deck.stems[s].elevation = restoredSpatial[s].elevation;
 			deck.stems[s].width = restoredSpatial[s].width;
+			deck.stems[s].aux = restoredSpatial[s].aux;
 			continue;
 		}
 		const auto& controls = ports.settings();
@@ -281,6 +284,7 @@ void DeckHost::gather (DeckSession& deck) const
 		deck.stems[s].azimuth = controls.azimuth[s].load();
 		deck.stems[s].elevation = controls.elevation[s].load();
 		deck.stems[s].width = controls.width[s].load();
+		deck.stems[s].aux = controls.aux[s].load();
 	}
 }
 
@@ -300,6 +304,7 @@ void DeckHost::restoreSpatial (const DeckSession& deck)
 		controls.azimuth[s].store ((float) deck.stems[s].azimuth);
 		controls.elevation[s].store ((float) deck.stems[s].elevation);
 		controls.width[s].store ((float) deck.stems[s].width);
+		controls.aux[s].store ((float) deck.stems[s].aux);
 	}
 }
 

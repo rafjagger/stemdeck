@@ -1,0 +1,90 @@
+# SPDX-FileCopyrightText: 2026 Raphael Eismann
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# A deck host's own AES67 instance (stemdeck-aes67.service): the PTP clock its
+# deck senders join, and the receiver of the Core's stream ("AES67 <core> out",
+# CH1/2 feed the deck's recorder). Taken from a3-core's pipewire-aes67.conf.in
+# and 10-a3-rate.conf, without the Core's sender: aes67.stream's group is the
+# Core's, and a second sender there collides with it.
+#
+# A template: stemdeck-aes67-deck render-base renders it into
+# ~/.config/pipewire/pipewire-stemdeck-aes67.conf from the truth. Never beside
+# a3-core's a3-aes67.service (the unit's ExecCondition): one PTP0 driver a graph.
+# ptp4l runs as a client here and follows the Core's grandmaster.
+
+context.properties = {
+    # Errors only, as a3-core's instance: harmless warnings would bury the real ones.
+    log.level = 1
+
+    # As a3-core's own AES67 instance carries them. This process joins the
+    # user's server: the graph's rate and smallest block are the server's,
+    # from 10-stemdeck-rate.conf, which the deck-host role installs.
+    default.clock.rate          = 44100
+    default.clock.allowed-rates = [ 44100 ]
+    default.clock.quantum       = 128
+    default.clock.min-quantum   = 128
+}
+
+context.spa-libs = {
+    support.*       = support/libspa-support
+}
+
+context.objects = [
+    { factory = spa-node-factory
+        args = {
+            factory.name    = support.node.driver
+            node.name       = PTP0-Driver
+            node.group      = pipewire.ptp0
+            priority.driver = 1000
+            clock.name      = "clock.system.ptp0"
+            # The audio socket's hardware clock, which ptp4l keeps on the Core's.
+            clock.interface = "@AUDIO_PORT@"
+            resync.ms       = 1.5
+            object.export   = true
+        }
+    }
+]
+
+context.modules = [
+    { name = libpipewire-module-rt
+        args = {
+            nice.level   = -11
+        }
+        flags = [ ifexists nofail ]
+    }
+    { name = libpipewire-module-protocol-native }
+    { name = libpipewire-module-client-node }
+    { name = libpipewire-module-spa-node-factory }
+    { name = libpipewire-module-adapter }
+    { name = libpipewire-module-rtp-sap
+        args = {
+            local.ifname = "@AUDIO_PORT@"
+            sap.ip = "@SAP_IP@"
+            sap.port = @SAP_PORT@
+            net.ttl = 32
+            net.loop = false
+            ptp.management-socket = "/var/run/ptp4lro"
+
+            stream.rules = [
+                {
+                    # Every A³ host sender is named "AES67 <host> out"; the decks'
+                    # streams are the Core's to receive, not this host's.
+                    matches = [
+                        {
+                            rtp.session = "~ out$"
+                        }
+                    ]
+                    actions = {
+                        create-stream = {
+                            node.virtual = false
+                            media.class = "Audio/Source"
+                            device.api = aes67
+                            sess.latency.msec = 12
+                            node.group = pipewire.ptp0
+                        }
+                    }
+                }
+            ]
+        }
+    }
+]

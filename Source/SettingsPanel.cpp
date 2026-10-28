@@ -1,4 +1,6 @@
 #include "SettingsPanel.h"
+
+#include "PanelOwnership.h"
 #include "Theme.h"
 
 namespace
@@ -84,7 +86,10 @@ SettingsPanel::SettingsPanel (const Values& values, Actions a)
 	panelShown = values.panelHere;
 	if (panelShown)
 	{
-		panelButton.setToggleState (*panelShown, juce::dontSendNotification);
+		const auto face = panel::toggleFace (values.panelFollowsWorkspace, *panelShown);
+		panelButton.setButtonText (face.text);
+		panelButton.setToggleState (face.on, juce::dontSendNotification);
+		panelButton.setEnabled (face.enabled);
 		panelButton.setTooltip ("This deck's StemDeck holds the A3 Motion panel. Only one instance does: switching it on here "
 								"takes it from the other.");
 		addAndMakeVisible (panelButton);

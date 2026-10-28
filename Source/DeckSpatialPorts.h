@@ -13,8 +13,9 @@ class StemDeckPlayer;
 // One deck's spatial ports: its DeckSpatial fed from the player's pre-mute
 // block, written to the deck's output channels as the layout places them
 // (Outputs.h). In two-deck mode (stage S2) 20 of them -- B-format, the
-// binaural cue, and phones carrying that cue -- and no AUX: the AUX bus stays
-// the AUX. A -bformat instance has 22, its AUX among them.
+// binaural cue, and phones carrying that cue, both from the deck's one
+// decoder (R2) -- and no AUX: the AUX bus stays the AUX. A -bformat instance
+// has 43: B-format, the 16-channel AUX bus, the 9-channel cue and phones.
 // Mute, cue and transport follow the player each block. Each stem's 3D, home
 // and width, the deck 3D and the phones (level, CUE<->MIX, decoder on) are the
 // settings, copied each block: nobody changes the deck-wide ones in two-deck
@@ -29,7 +30,7 @@ public:
 
 	// Builds the IEM nodes; returns an error and renders silence if IEM refuses.
 	juce::String create();
-	void prepare (double sampleRate, int blockSize);   // allocates
+	bool prepare (double sampleRate, int blockSize);   // allocates; false and nothing done for a block of 0
 	// Audio thread: writes the layout's channels, from firstChannel on, of `outputs`.
 	void render (const StemDeckPlayer&, juce::AudioBuffer<float>& outputs, int firstChannel, int numSamples);
 	DeckSpatial* deckSpatial() const { return spatial.get(); }

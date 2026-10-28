@@ -15,6 +15,7 @@ class LevelMeter : public juce::Component
 public:
 	void setLevel (float newPeak);
 	void setParameters (MeterParameters parameters) { ballistics.setParameters (parameters); }
+	float levelDb() const { return ballistics.levelDb(); }
 	void setShowsClip (bool shows) { showsClip = shows; repaint(); }
 	// The bar's normal range in this colour (a stem's) instead of the LEDs' green.
 	void setBarColour (juce::Colour colour) { barColour = colour; repaint(); }

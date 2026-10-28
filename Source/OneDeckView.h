@@ -16,7 +16,7 @@
 
 // The one-deck screen's outputs row (v4): the B-format meter (16 channels to
 // Core), the binaural cue's, the AUX's, and the phones' LEVEL and CUE<->MIX.
-// Meters only for what StemDeck sends; the phones' knobs write the deck.
+// A bar for the cue bus and one for the AUX bus (each its W); meters only for what StemDeck sends; the phones' knobs write the deck.
 class OneDeckOutputs : public juce::Component
 {
 public:
@@ -28,6 +28,8 @@ public:
 	void setStemNames (const std::array<juce::String, StemDeckPlayer::numStems>&);   // for the cue's caption
 	std::function<void (float level, float mix)> onPhonesChanged;
 
+	const LevelMeter& cueMeter() const { return cueBar; }
+	const LevelMeter& auxMeter() const { return auxBar; }
 	juce::Slider& phonesLevel() { return levelKnob; }
 	juce::Slider& phonesMix() { return mixKnob; }
 
@@ -44,7 +46,8 @@ private:
 	void phonesMoved();
 
 	OneDeckAudio& audio;
-	juce::OwnedArray<LevelMeter> bformatMeters, cueMeters, auxMeters;
+	juce::OwnedArray<LevelMeter> bformatMeters;
+	LevelMeter cueBar, auxBar;   // one bar each: the cue bus's W, the aux bus's W
 	juce::Slider levelKnob, mixKnob;
 	juce::Label levelCaption, mixCaption;
 	std::array<Box, 4> boxes;   // B-format, cue, AUX, phones

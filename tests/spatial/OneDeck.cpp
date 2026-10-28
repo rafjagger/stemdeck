@@ -319,6 +319,10 @@ TEST_F (OneDeck, PaintsEveryState)
 	ASSERT_EQ (settings().phonesMix.load(), 1.0f);
 	shoot ("phones mix");
 
+	view.column (0).aux().setValue (0.6, juce::sendNotificationSync);
+	ASSERT_FLOAT_EQ (settings().aux[0].load(), 0.6f);
+	shoot ("aux sent");
+
 	for (size_t i = 0; i < shots.size(); ++i)
 	{
 		const auto& [state, image] = shots[i];
@@ -407,4 +411,99 @@ TEST_F (OneDeck, PitchDrivesTheSpeedAndTheSessionTempoIsRestored)
 	EXPECT_TRUE (saved.stems[2].muted);
 	EXPECT_TRUE (saved.stems[3].cue);
 	EXPECT_FALSE (saved.stems[0].cue);
+}
+
+// The stem's four knobs are a 2 x 2 block of one column width: GAIN, 3D on
+// top in that order, AUX, WIDTH below -- AUX under GAIN, WIDTH under 3D.
+TEST_F (OneDeck, StemColumnKnobsAreTwoByTwo)
+{
+	OneDeckView view (audio, formats, 0);
+	view.setSize (screenWidth, viewHeight);
+	for (int stem = 0; stem < stems; ++stem)
+	{
+		auto& column = view.column (stem);
+		const auto gain = column.gain().getBounds(), threeD = column.threeD().getBounds();
+		const auto aux = column.aux().getBounds(), width = column.width().getBounds();
+
+		EXPECT_EQ (gain.getY(), threeD.getY());
+		EXPECT_EQ (aux.getY(), width.getY());
+		EXPECT_LT (gain.getRight(), threeD.getX() + 1);
+		EXPECT_LT (aux.getRight(), width.getX() + 1);
+		EXPECT_EQ (gain.getX(), aux.getX());
+		EXPECT_EQ (threeD.getX(), width.getX());
+		EXPECT_LT (gain.getBottom(), aux.getY()) << "the lower row, captions between";
+		for (const auto& knob : { threeD, aux, width })
+			EXPECT_EQ (knob.getWidth(), gain.getWidth());
+		for (const auto& knob : { gain, threeD, aux, width })
+			EXPECT_TRUE (column.getLocalBounds().contains (knob)) << "stem " << stem;
+		EXPECT_EQ (column.threeD().getRight() - column.gain().getX(), column.width().getRight() - column.aux().getX());
+		EXPECT_GE (column.viewer().getY(), column.width().getBottom()) << "the block does not cover the viewer";
+	}
+}
+
+// AUX is the stem's send to the deck's AUX bus (0..1), written to the spatial
+// settings; the knob follows what the settings hold when nobody touches it.
+TEST_F (OneDeck, AuxKnobWritesTheStemsAux)
+{
+	OneDeckView view (audio, formats, 0);
+	view.setSize (screenWidth, viewHeight);
+	auto& column = view.column (1);
+	EXPECT_EQ (column.aux().getMinimum(), 0.0);
+	EXPECT_EQ (column.aux().getMaximum(), 1.0);
+
+	column.aux().setValue (0.4, juce::sendNotificationSync);
+	EXPECT_FLOAT_EQ (settings().aux[1].load(), 0.4f);
+	for (int other : { 0, 2, 3 })
+		EXPECT_EQ (settings().aux[(size_t) other].load(), 0.0f);
+
+	settings().aux[1].store (0.7f);
+	column.refresh();
+	EXPECT_DOUBLE_EQ (column.aux().getValue(), 0.7);
+}
+
+// The state line says it when the stem is sent to AUX, and only then.
+TEST_F (OneDeck, StemColumnStateLineSaysAuxWhenSent)
+{
+	OneDeckView view (audio, formats, 0);
+	view.setSize (screenWidth, viewHeight);
+	auto& column = view.column (2);
+	column.refresh();
+	EXPECT_EQ (column.stateText(), "home");
+
+	column.aux().setValue (0.4, juce::sendNotificationSync);
+	column.refresh();
+	EXPECT_EQ (column.stateText(), "home " + juce::String::fromUTF8 ("\xc2\xb7") + " AUX 40");
+
+	view.column (3).refresh();
+	EXPECT_EQ (view.column (3).stateText(), "home");
+	column.aux().setValue (0.0, juce::sendNotificationSync);
+	column.refresh();
+	EXPECT_EQ (column.stateText(), "home");
+}
+
+// The AUX meter is the aux bus's W and the cue meter the cue bus's W: cued
+// stems with no send light the cue only, a send lights the AUX.
+TEST_F (OneDeck, AuxMeterReadsTheAuxBus)
+{
+	OneDeckView view (audio, formats, 0);
+	view.setSize (screenWidth, viewHeight);
+	setAllStems (false, true, 1.0f);
+	player().play();
+	const auto settle = [&]
+	{
+		for (int i = 0; i < blocksFor (0.3); ++i)
+		{
+			renderBlock();
+			view.outputs().refresh();
+		}
+	};
+	settle();
+	const auto& cue = view.outputs().cueMeter();
+	const auto& aux = view.outputs().auxMeter();
+	EXPECT_GT (cue.levelDb(), -60.0f) << "cued stems play in the cue";
+	EXPECT_LE (aux.levelDb(), -60.0f) << "nothing is sent yet";
+
+	setAllAux (1.0f);
+	settle();
+	EXPECT_GT (aux.levelDb(), -60.0f) << "the send lights the aux bus's W";
 }

@@ -204,6 +204,35 @@ TEST (KeyLockStretcher, ARestartPlaysAtOnceFromThere)
 	EXPECT_NEAR (positions[3], 88200.0 + 4 * block * 1.08, 1e-6);
 }
 
+// Primed ahead of time a few hundred frames at a call, a stretcher plays the
+// same as one restarted in one go -- and its first render does no more work
+// than any later one: the start's work is all in the priming.
+TEST (KeyLockStretcher, PrimedInStepsPlaysAsARestartAndStartsAtNoExtraCost)
+{
+	Sine sine { 441.0 };
+	KeyLockStretcher whole { channels, sampleRate }, stepped { channels, sampleRate };
+	whole.restart (88200, 1.08, sine);
+	const auto reference = render (whole, sine, 1.08, 4);
+
+	stepped.beginRestart (88200, 1.08);
+	EXPECT_FALSE (stepped.isPrimed());
+	int calls = 0;
+	for (auto before = stepped.framesProcessed(); ! stepped.prime (sine, 256); before = stepped.framesProcessed())
+	{
+		EXPECT_LE (stepped.framesProcessed() - before, 256 + 1024) << "one call, one budget (and one chunk over at most)";
+		++calls;
+	}
+	EXPECT_GT (calls, 2) << "spread over calls";
+	EXPECT_DOUBLE_EQ (stepped.position(), 88200.0);
+
+	const auto before = stepped.framesProcessed();
+	const auto out = render (stepped, sine, 1.08, 4);
+	EXPECT_LE (stepped.framesProcessed() - before, 4 * block * 1.08 + 2 * 1024) << "no start's work left for the first render";
+	ASSERT_EQ (out.size(), reference.size());
+	for (size_t i = 0; i < out.size(); ++i)
+		ASSERT_NEAR (out[i], reference[i], 1e-6) << i;
+}
+
 // In a loop the reader wraps ahead of the ear; the playhead wraps when the
 // wrap is heard, and stays inside the loop.
 TEST (KeyLockStretcher, InALoopThePlayheadStaysInTheLoop)
@@ -235,3 +264,4 @@ TEST (KeyLockStretcher, TheEndOfTheTrackIsSilence)
 	EXPECT_TRUE (stretcher.hasEnded());
 	EXPECT_GT (stretcher.position(), 20000.0) << "the playhead runs on past the end; the player stops there";
 }
+

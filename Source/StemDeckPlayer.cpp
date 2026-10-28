@@ -3,6 +3,8 @@
 #include "GridEdit.h"
 #include "Buses.h"
 
+#include <limits>
+
 // The session keeps one mix state per stem (Session.h counts them as the buses do).
 static_assert (StemDeckPlayer::numStems == buses::stemsPerDeck);
 
@@ -228,8 +230,9 @@ void StemDeckPlayer::setKeyLock (bool on)
 StemDeckPlayer::Stretchers::Stretchers (double fileRate) : sampleRate (fileRate)
 {
 	const auto alignment = KeyLockStretcher::measureAlignment (fileRate);
-	for (auto& stem : stems)
-		stem = std::make_unique<KeyLockStretcher> (2, fileRate, alignment);
+	for (auto* set : { &stems, &standby })
+		for (auto& stem : *set)
+			stem = std::make_unique<KeyLockStretcher> (2, fileRate, alignment);
 }
 
 // Builds (and measures) the stretchers for the loaded file's sample rate,
@@ -624,6 +627,7 @@ void StemDeckPlayer::renderPlayback (const juce::AudioSourceChannelInfo& info)
 	{
 		stretchersInUse = stretchers.get();
 		restartPending = true;
+		standbyAt = -1;
 	}
 
 	if (stretching && ! ready)
@@ -717,12 +721,15 @@ void StemDeckPlayer::renderPath (bool stretched, const juce::AudioSourceChannelI
 // read: Rubber Band's window straddling a jump in its input blurs the two
 // sides into each other, which was heard as a fade with a dip of 3-4 dB at
 // every seam. The stretchers read on straight past the loop's end; where the
-// ear reaches it, the stretchers start again at the loop's start (as a seek
-// does, the first block already music), and what they made of the track
-// behind the end fades out under it.
+// ear reaches it, the standby stretchers -- made ready at the loop's start
+// a step a block while the loop played -- take over, and what the others
+// made of the track behind the end fades out under them. Starting them in
+// the seam's block instead cost about 3 ms: on the rig, at 128 frames
+// (2.9 ms), every seam was an xrun.
 void StemDeckPlayer::renderStretched (const juce::AudioSourceChannelInfo& info)
 {
 	const auto rate = getEffectiveRate();
+	primeStandby (rate);
 	std::array<float*, numOutputChannels> dest;
 	int done = 0;
 
@@ -771,7 +778,9 @@ void StemDeckPlayer::renderStretchedRun (float* const* dest, int count, double r
 }
 
 // The ear is at the loop's end: keep what follows it as the seam's tail,
-// and start the stretchers again at the loop's start.
+// and hand over to the standby stretchers at the loop's start. Ready by
+// now unless the loop is shorter than their making (a few tens of
+// milliseconds); then the rest of it is done here.
 void StemDeckPlayer::cutStretchersAtSeam (double rate)
 {
 	std::array<float*, numOutputChannels> tail;
@@ -781,8 +790,51 @@ void StemDeckPlayer::cutStretchersAtSeam (double rate)
 	stretchedTailDone = 0;
 
 	const auto start = loopStart.load();
+	if (standbyAt != start)
+		for (auto& stem : stretchers->standby)
+			stem->beginRestart (start, rate);
+
 	for (int s = 0; s < numStems; ++s)
-		stretchers->stems[(size_t) s]->restart (start, rate, keyLockInputs[(size_t) s]);
+	{
+		auto& standby = stretchers->standby[(size_t) s];
+		standby->prime (keyLockInputs[(size_t) s], std::numeric_limits<int>::max());
+		std::swap (stretchers->stems[(size_t) s], standby);
+	}
+	standbyAt = -1;   // the ones just left are made ready again from the next block
+}
+
+// While a loop is set: the standby stretchers made ready at its start, one
+// step of one stretcher a block (at most a chunk, ~0.15 ms) -- spread, so no
+// block carries a start. About 20 blocks for the four, 60 ms at 128 frames.
+void StemDeckPlayer::primeStandby (double rate)
+{
+	const auto start = loopStart.load(), end = loopEnd.load();
+	if (end <= start)
+		return;
+
+	if (standbyAt != start)
+	{
+		for (auto& stem : stretchers->standby)
+			stem->beginRestart (start, rate);
+		standbyAt = start;
+	}
+
+	for (int s = 0; s < numStems; ++s)
+		if (! stretchers->standby[(size_t) s]->isPrimed())
+		{
+			stretchers->standby[(size_t) s]->prime (keyLockInputs[(size_t) s], 1);
+			return;
+		}
+}
+
+std::int64_t StemDeckPlayer::stretcherWork() const
+{
+	std::int64_t work = 0;
+	if (stretchers != nullptr)
+		for (const auto* set : { &stretchers->stems, &stretchers->standby })
+			for (const auto& stem : *set)
+				work += stem->framesProcessed();
+	return work;
 }
 
 void StemDeckPlayer::restartStretchers (juce::int64 position)

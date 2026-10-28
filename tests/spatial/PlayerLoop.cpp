@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <stdexcept>
 #include <vector>
 
@@ -86,7 +87,7 @@ protected:
 		{
 			set.files[(size_t) s] = folder.getChildFile ("stem" + juce::String (s) + ".wav");
 			set.stemNames[(size_t) s] = "stem" + juce::String (s);
-			writeStem (set.files[(size_t) s], s == 0);
+			writeStem (set.files[(size_t) s], true);   // four stems with music, as a track has
 		}
 		ASSERT_EQ (player.load (set), juce::String());
 		player.prepareToPlay (block, rate);
@@ -221,3 +222,63 @@ TEST_P (PlayerLoopSeek, AJumpPastTheEndStaysInTheLoop)
 INSTANTIATE_TEST_SUITE_P (KeyLockOnAndOff, PlayerLoopSeek,
 	::testing::Values (Case { 0.5, 1.0, false }, Case { 0.5, 1.03, true }));
 
+
+namespace
+{
+// What each block of `blocks` cost: the stretchers' frames and the time.
+struct BlockCost
+{
+	std::int64_t mostWork = 0;
+	double slowest = 0.0, median = 0.0;
+};
+
+BlockCost measureBlocks (StemDeckPlayer& player, int blocks, int size)
+{
+	juce::AudioBuffer<float> buffer (StemDeckPlayer::numOutputChannels, size);
+	BlockCost cost;
+	std::vector<double> times;
+	for (int b = 0; b < blocks; ++b)
+	{
+		const auto workBefore = player.stretcherWork();
+		const auto start = juce::Time::getMillisecondCounterHiRes();
+		player.getNextAudioBlock ({ &buffer, 0, size });
+		times.push_back (juce::Time::getMillisecondCounterHiRes() - start);
+		cost.mostWork = std::max (cost.mostWork, player.stretcherWork() - workBefore);
+	}
+	std::sort (times.begin(), times.end());
+	cost.slowest = times.back();
+	cost.median = times[times.size() / 2];
+	return cost;
+}
+}
+
+// The rig runs 128 frames a block (2.9 ms at 44.1 kHz). A seam must cost no
+// more than the blocks around it: with key lock, starting the stretchers
+// at the loop's start inside the seam's block took ~3 ms and every seam was
+// an xrun. The work is counted (the stretchers' frames, robust on a busy
+// machine), the time only bounded loosely.
+TEST_F (PlayerLoopSeek, ASeamCostsNoMoreThanTheBlocksAroundIt)
+{
+	constexpr int rigBlock = 128;
+	player.prepareToPlay (rigBlock, rate);
+	player.setSpeed (1.03);
+	player.setKeyLock (true);
+	player.setPosition (3.0);
+	player.play();
+	measureBlocks (player, 1, rigBlock);   // the seek's own block: a whole start, as ever
+	// From there on, as after every start, the four stems feed their
+	// stretchers in the same blocks: the steady state to hold the seams to.
+	const auto steady = measureBlocks (player, 2000, rigBlock);
+
+	player.setLoop (3.0, 3.5);
+	measureBlocks (player, 50, rigBlock);    // the loop's own setting is a seek
+	const auto looping = measureBlocks (player, (int) (24 * 0.5 / 1.03 * rate / rigBlock), rigBlock);
+
+	std::printf ("steady: %lld frames, %.3f ms slowest, %.3f ms median; looping: %lld frames, %.3f ms slowest, %.3f ms median\n",
+			(long long) steady.mostWork, steady.slowest, steady.median, (long long) looping.mostWork, looping.slowest, looping.median);
+	// One priming step of one stem on top of the steady state at most: a
+	// chunk, and a second when the step had only output to throw away
+	// first. A whole start is four stems' worth of several.
+	EXPECT_LE (looping.mostWork, steady.mostWork + 2 * 1024) << "no block does a stretcher's whole start";
+	EXPECT_LT (looping.slowest, 2.0 * steady.slowest + 0.2) << "ms";
+}

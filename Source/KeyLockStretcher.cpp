@@ -50,39 +50,88 @@ KeyLockStretcher::KeyLockStretcher (int channels, double fileRate, const keylock
 
 void KeyLockStretcher::restart (std::int64_t position, double playbackRate, Input& input)
 {
+	beginRestart (position, playbackRate);
+	while (padding)
+		padStep (input);
+}
+
+void KeyLockStretcher::beginRestart (std::int64_t position, double playbackRate)
+{
 	stretcher.reset();
 	runs.clear();
 	setRate (playbackRate);
 	startRate = playbackRate;
 	ended = false;
+	toDiscard = 0;
 
 	// Rubber Band asks for silence before the input and its start delay
 	// thrown away, for the output to line up with the input (exactly at
 	// rate 1; startDiscard() moves it for the others). The audio before
 	// `position` instead of the silence lines up the same, and the first
 	// block is already music, not a fade-in.
-	auto padStart = position - (std::int64_t) stretcher.getPreferredStartPad();
+	padAt = position - (std::int64_t) stretcher.getPreferredStartPad();
+	padTo = position;
+	padding = true;
+}
 
-	while (padStart < position)
+bool KeyLockStretcher::prime (Input& input, int budget)
+{
+	int spent = 0;
+	do
 	{
-		const auto count = (int) std::min<std::int64_t> (chunk, position - padStart);
+		if (padding)
+			spent += padStep (input);
+		else if (toDiscard > 0)
+			spent += discardStep (input);
+	} while (! isPrimed() && spent < budget);
+	return isPrimed();
+}
+
+// One chunk of the audio before the start; the last one sets the start up.
+int KeyLockStretcher::padStep (Input& input)
+{
+	int count = 0;
+	if (padAt < padTo)
+	{
+		count = (int) std::min<std::int64_t> (chunk, padTo - padAt);
 		for (auto& channel : inputStore)
 			std::fill (channel.begin(), channel.begin() + count, 0.0f);
 
-		// Before the track's start, or across a loop's end, it stays silent.
-		const auto skip = (int) std::clamp<std::int64_t> (-padStart, 0, count);
+		// Before the track's start it stays silent.
+		const auto skip = (int) std::clamp<std::int64_t> (-padAt, 0, count);
 		for (size_t ch = 0; ch < offsetPointers.size(); ++ch)
 			offsetPointers[ch] = inputs[ch] + skip;
 		if (skip < count)
-			input.read (offsetPointers.data(), count - skip, padStart + skip);
+			input.read (offsetPointers.data(), count - skip, padAt + skip);
 
 		process (count);
-		padStart += count;
+		padAt += count;
 	}
 
-	toDiscard = (std::size_t) keylock::startDiscard (stretcher.getStartDelay(), rate, alignment);
-	cursor = position;
-	map.restart (position);
+	if (padAt >= padTo)
+	{
+		toDiscard = (std::size_t) keylock::startDiscard (stretcher.getStartDelay(), rate, alignment);
+		cursor = padTo;
+		map.restart (padTo);
+		padding = false;
+	}
+	return count;
+}
+
+// One step of throwing the start delay away: take what is there, or feed.
+int KeyLockStretcher::discardStep (Input& input)
+{
+	if (const auto available = stretcher.available(); available > 0)
+	{
+		const auto take = std::min ({ (std::size_t) available, toDiscard, (std::size_t) chunk });
+		stretcher.retrieve (scratch.data(), take);
+		runs.consume ((int) take, rate);
+		toDiscard -= take;
+		return 0;
+	}
+	const auto before = processed;
+	feed (input);
+	return (int) (processed - before);
 }
 
 void KeyLockStretcher::render (float* const* out, int numSamples, double playbackRate, Input& input)
@@ -120,19 +169,7 @@ void KeyLockStretcher::render (float* const* out, int numSamples, double playbac
 void KeyLockStretcher::discardStartDelay (Input& input)
 {
 	for (int round = 0; toDiscard > 0 && round < maxRounds; ++round)
-	{
-		if (const auto available = stretcher.available(); available > 0)
-		{
-			const auto take = std::min ({ (std::size_t) available, toDiscard, (std::size_t) chunk });
-			stretcher.retrieve (scratch.data(), take);
-			runs.consume ((int) take, rate);
-			toDiscard -= take;
-		}
-		else
-		{
-			feed (input);
-		}
-	}
+		discardStep (input);
 }
 
 void KeyLockStretcher::feed (Input& input)
@@ -149,6 +186,7 @@ void KeyLockStretcher::process (int count)
 {
 	const auto before = stretcher.available();
 	stretcher.process (inputs.data(), (size_t) count, false);
+	processed += count;
 	runs.produced (stretcher.available() - before, rate);
 }
 

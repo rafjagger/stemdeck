@@ -133,6 +133,10 @@ public:
 
 	// AudioSource: the buffer must have at least numOutputChannels channels.
 	void prepareToPlay (int samplesPerBlockExpected, double sampleRate) override;
+
+	// Frames the key lock stretchers have processed so far, standby included:
+	// their work, for the tests. Audio thread, or a test's own.
+	std::int64_t stretcherWork() const;
 	void getNextAudioBlock (const juce::AudioSourceChannelInfo& bufferToFill) override;
 	void releaseResources() override;
 
@@ -165,12 +169,14 @@ private:
 		const int stem;
 	};
 
-	// A deck's stretchers, one per stem, built and swapped as one.
+	// A deck's stretchers, one per stem, built and swapped as one; and as
+	// many on standby, made ready at a loop's start while the loop plays,
+	// that take over at the seam.
 	struct Stretchers
 	{
 		explicit Stretchers (double fileRate);
 		double sampleRate;
-		std::array<std::unique_ptr<KeyLockStretcher>, numStems> stems;
+		std::array<std::unique_ptr<KeyLockStretcher>, numStems> stems, standby;
 	};
 
 	// What the key lock path's resampler pulls from: the stretchers' output.
@@ -188,6 +194,7 @@ private:
 	void crossfadeSeam (const juce::AudioBuffer<float>& tail, int& tailDone, float* const* dest, int count);
 	void renderStretchedRun (float* const* dest, int count, double rate);
 	void cutStretchersAtSeam (double rate);
+	void primeStandby (double rate);
 	void readRun (float* const* dest, int count, juce::int64 position);
 	void readStemRun (int stem, float* const* dest, int count, juce::int64 position);
 	void renderPreMute (int stem, const juce::AudioSourceChannelInfo& info);
@@ -271,6 +278,8 @@ private:
 	static constexpr int seamLength = 64;
 	juce::AudioBuffer<float> plainTail { numOutputChannels, seamLength }, stretchedTail { numOutputChannels, seamLength };
 	int plainTailDone = seamLength, stretchedTailDone = seamLength;
+	// The loop start the standby stretchers are made ready at; -1: none yet.
+	juce::int64 standbyAt = -1;
 	std::array<KeyLockInput, numStems> keyLockInputs { { { *this, 0 }, { *this, 1 }, { *this, 2 }, { *this, 3 } } };
 	KeyLockSource keyLockSource { *this };
 	juce::ResamplingAudioSource keyLockResampler { &keyLockSource, false, numOutputChannels };

@@ -184,6 +184,10 @@ private:
 	};
 
 	void readStems (const juce::AudioSourceChannelInfo& info);
+	juce::int64 inLoop (juce::int64 position) const;
+	void crossfadeSeam (const juce::AudioBuffer<float>& tail, int& tailDone, float* const* dest, int count);
+	void renderStretchedRun (float* const* dest, int count, double rate);
+	void cutStretchersAtSeam (double rate);
 	void readRun (float* const* dest, int count, juce::int64 position);
 	void readStemRun (int stem, float* const* dest, int count, juce::int64 position);
 	void renderPreMute (int stem, const juce::AudioSourceChannelInfo& info);
@@ -213,7 +217,9 @@ private:
 	std::atomic<bool> playing { false }, repeat { false };
 	std::atomic<juce::int64> readPosition { 0 };
 	std::atomic<double> positionStamp { 0.0 };
-	std::atomic<juce::int64> loopStart { 0 }, loopEnd { 0 }; // loopEnd == 0: no loop
+	// loopEnd == 0: no loop. While there is one the playhead never passes its
+	// end: the audio thread wraps at it, and a jump behind it lands in it.
+	std::atomic<juce::int64> loopStart { 0 }, loopEnd { 0 };
 	std::atomic<double> fileSampleRate { 44100.0 }, deviceSampleRate { 44100.0 }, speed { 1.0 };
 	std::atomic<double> pitchBend { 1.0 }, syncNudge { 1.0 };
 	std::atomic<double> gridBpm { 0.0 }, gridFirstBeat { 0.0 };
@@ -256,6 +262,15 @@ private:
 	const Stretchers* stretchersInUse = nullptr;
 	int fadeRemaining = 0, fadeLength = 1;
 	juce::AudioBuffer<float> fadeBuffer;
+
+	// The loop's seam: a cut at the sample, with the track as it would go on
+	// behind the loop's end faded out under the loop's start over
+	// seamLength (equal power, 64 samples: 1.5 ms at 44.1 kHz) -- both sides
+	// playing, no dip. Audio thread only, one tail per path; tailDone ==
+	// seamLength: no seam fading.
+	static constexpr int seamLength = 64;
+	juce::AudioBuffer<float> plainTail { numOutputChannels, seamLength }, stretchedTail { numOutputChannels, seamLength };
+	int plainTailDone = seamLength, stretchedTailDone = seamLength;
 	std::array<KeyLockInput, numStems> keyLockInputs { { { *this, 0 }, { *this, 1 }, { *this, 2 }, { *this, 3 } } };
 	KeyLockSource keyLockSource { *this };
 	juce::ResamplingAudioSource keyLockResampler { &keyLockSource, false, numOutputChannels };

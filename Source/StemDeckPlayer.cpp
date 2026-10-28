@@ -128,10 +128,24 @@ void StemDeckPlayer::setPosition (double seconds)
 
 // Written here for the views, and handed to the audio thread so the key
 // lock path starts again from there; the plain path reads readPosition.
+// While looping, a jump behind the loop's end -- the sync's phase jump, a
+// jog search -- lands in the loop: the loop the screen shows is the one
+// that plays.
 void StemDeckPlayer::seekTo (juce::int64 position)
 {
+	position = inLoop (position);
 	readPosition = position;
 	pendingSeek = position;
+}
+
+// `position` as the loop plays it: at or behind its end, folded back by
+// whole loops; anywhere else, as it is (before the loop the deck plays into it).
+juce::int64 StemDeckPlayer::inLoop (juce::int64 position) const
+{
+	const auto start = loopStart.load(), end = loopEnd.load();
+	if (end <= start || position < end)
+		return position;
+	return start + (position - start) % (end - start);
 }
 
 double StemDeckPlayer::getPosition() const
@@ -494,28 +508,23 @@ void StemDeckPlayer::renderScratch (const juce::AudioSourceChannelInfo& info)
 }
 
 // Called by the resampler from within getNextAudioBlock, with setLock held.
+// The loop's end is checked at every run, not only where a run ends: a
+// playhead that came to stand at or behind it by any way is folded back.
 void StemDeckPlayer::readStems (const juce::AudioSourceChannelInfo& info)
 {
 	auto* buffer = info.buffer;
 	const auto startPos = readPosition.load();
-	auto pos = startPos;
+	auto pos = inLoop (startPos);
 	int done = 0;
 
 	while (done < info.numSamples)
 	{
 		const auto lEnd = loopEnd.load();
-		const bool inLoop = lEnd > 0 && pos < lEnd;
-		const auto stopAt = inLoop ? lEnd : loaded->length;
+		const auto stopAt = lEnd > 0 && pos < lEnd ? lEnd : loaded->length;
 		const auto numToRead = (int) juce::jmin ((juce::int64) (info.numSamples - done), stopAt - pos);
 
 		if (numToRead <= 0)
 		{
-			if (inLoop || (lEnd > 0 && pos == lEnd))
-			{
-				pos = loopStart.load();
-				continue;
-			}
-
 			// End of track: start over, or stop.
 			if (repeat.load() && loaded->length > 0)
 			{
@@ -534,17 +543,47 @@ void StemDeckPlayer::readStems (const juce::AudioSourceChannelInfo& info)
 		for (int ch = 0; ch < numOutputChannels; ++ch)
 			dest[(size_t) ch] = buffer->getWritePointer (ch, info.startSample + done);
 		readRun (dest.data(), numToRead, pos);
+		crossfadeSeam (plainTail, plainTailDone, dest.data(), numToRead);
 
 		pos += numToRead;
 		done += numToRead;
 
 		if (lEnd > 0 && pos == lEnd)
-			pos = loopStart.load();
+		{
+			// The seam: what would follow the end fades out under the start.
+			std::array<float*, numOutputChannels> tail;
+			for (int ch = 0; ch < numOutputChannels; ++ch)
+				tail[(size_t) ch] = plainTail.getWritePointer (ch);
+			readRun (tail.data(), seamLength, pos);
+			plainTailDone = 0;
+			pos = inLoop (pos);
+		}
 	}
 
 	// If the UI seeked meanwhile, its position wins.
 	auto expected = startPos;
 	readPosition.compare_exchange_strong (expected, pos);
+}
+
+// Mixes the seam's tail into `count` frames of `dest` from where it stands:
+// the loop's start fades in, the tail out, each on a quarter sine -- equal
+// power, so material that does not line up across the seam keeps its level.
+void StemDeckPlayer::crossfadeSeam (const juce::AudioBuffer<float>& tail, int& tailDone, float* const* dest, int count)
+{
+	const auto n = juce::jmin (count, seamLength - tailDone);
+	if (n <= 0)
+		return;
+
+	for (int ch = 0; ch < numOutputChannels; ++ch)
+	{
+		const auto* from = tail.getReadPointer (ch, tailDone);
+		for (int i = 0; i < n; ++i)
+		{
+			const auto t = juce::MathConstants<float>::halfPi * ((float) (tailDone + i) + 0.5f) / (float) seamLength;
+			dest[ch][i] = dest[ch][i] * std::sin (t) + from[i] * std::cos (t);
+		}
+	}
+	tailDone += n;
 }
 
 // Every stem's `count` frames from `position` on, stem N into dest[2N], dest[2N+1].
@@ -673,16 +712,77 @@ void StemDeckPlayer::renderPath (bool stretched, const juce::AudioSourceChannelI
 }
 
 // Called by keyLockResampler from within renderPath, with setLock held.
+//
+// The loop's seam is cut here, behind the stretchers, not in what they
+// read: Rubber Band's window straddling a jump in its input blurs the two
+// sides into each other, which was heard as a fade with a dip of 3-4 dB at
+// every seam. The stretchers read on straight past the loop's end; where the
+// ear reaches it, the stretchers start again at the loop's start (as a seek
+// does, the first block already music), and what they made of the track
+// behind the end fades out under it.
 void StemDeckPlayer::renderStretched (const juce::AudioSourceChannelInfo& info)
 {
 	const auto rate = getEffectiveRate();
+	std::array<float*, numOutputChannels> dest;
+	int done = 0;
+
+	// More seams in one block than this: a loop shorter than any the deck
+	// sets; the rest of the block plays on and the next one cuts again.
+	for (int seams = 0; done < info.numSamples; ++seams)
+	{
+		for (int ch = 0; ch < numOutputChannels; ++ch)
+			dest[(size_t) ch] = info.buffer->getWritePointer (ch, info.startSample + done);
+
+		auto count = info.numSamples - done;
+		bool seam = false;
+		const auto end = loopEnd.load();
+
+		if (end > loopStart.load() && seams < 8)
+		{
+			const auto toEnd = ((double) end - stretchedPosition()) / juce::jmax (rate, 1.0e-3);
+			const auto untilSeam = (int) std::ceil (juce::jmax (0.0, toEnd));
+			if (untilSeam <= count)
+			{
+				count = untilSeam;
+				seam = true;
+			}
+		}
+
+		renderStretchedRun (dest.data(), count, rate);
+		crossfadeSeam (stretchedTail, stretchedTailDone, dest.data(), count);
+		done += count;
+
+		if (seam)
+			cutStretchersAtSeam (rate);
+	}
+}
+
+// `count` frames of every stem's stretcher into dest, stem N into dest[2N], dest[2N+1].
+void StemDeckPlayer::renderStretchedRun (float* const* dest, int count, double rate)
+{
+	if (count <= 0)
+		return;
 
 	for (int s = 0; s < numStems; ++s)
 	{
-		float* pair[2] = { info.buffer->getWritePointer (s * 2, info.startSample),
-						   info.buffer->getWritePointer (s * 2 + 1, info.startSample) };
-		stretchers->stems[(size_t) s]->render (pair, info.numSamples, rate, keyLockInputs[(size_t) s]);
+		float* pair[2] = { dest[s * 2], dest[s * 2 + 1] };
+		stretchers->stems[(size_t) s]->render (pair, count, rate, keyLockInputs[(size_t) s]);
 	}
+}
+
+// The ear is at the loop's end: keep what follows it as the seam's tail,
+// and start the stretchers again at the loop's start.
+void StemDeckPlayer::cutStretchersAtSeam (double rate)
+{
+	std::array<float*, numOutputChannels> tail;
+	for (int ch = 0; ch < numOutputChannels; ++ch)
+		tail[(size_t) ch] = stretchedTail.getWritePointer (ch);
+	renderStretchedRun (tail.data(), seamLength, rate);
+	stretchedTailDone = 0;
+
+	const auto start = loopStart.load();
+	for (int s = 0; s < numStems; ++s)
+		stretchers->stems[(size_t) s]->restart (start, rate, keyLockInputs[(size_t) s]);
 }
 
 void StemDeckPlayer::restartStretchers (juce::int64 position)
@@ -692,6 +792,7 @@ void StemDeckPlayer::restartStretchers (juce::int64 position)
 	for (int s = 0; s < numStems; ++s)
 		stretchers->stems[(size_t) s]->restart (position, rate, keyLockInputs[(size_t) s]);
 
+	stretchedTailDone = seamLength;   // a jump is a cut: no seam to fade
 	keyLockResampler.flushBuffers();
 }
 
@@ -703,13 +804,11 @@ double StemDeckPlayer::stretchedPosition() const
 	return stretchers->stems[0]->position();
 }
 
-// As readStems() reads: up to the loop's end while inside the loop, else
-// up to the track's end.
+// Straight on to the track's end, through a loop's end too: renderStretched
+// cuts the loop behind the stretchers.
 int StemDeckPlayer::KeyLockInput::read (float* const* dest, int count, std::int64_t position)
 {
-	const auto loopEnd = owner.loopEnd.load();
-	const auto stopAt = loopEnd > 0 && position < loopEnd ? loopEnd : owner.loaded->length;
-	const auto n = (int) juce::jlimit ((juce::int64) 0, (juce::int64) count, stopAt - position);
+	const auto n = (int) juce::jlimit ((juce::int64) 0, (juce::int64) count, owner.loaded->length - position);
 
 	if (n > 0)
 		owner.readStemRun (stem, dest, n, position);
@@ -718,10 +817,6 @@ int StemDeckPlayer::KeyLockInput::read (float* const* dest, int count, std::int6
 
 std::int64_t StemDeckPlayer::KeyLockInput::jumpFrom (std::int64_t position)
 {
-	const auto loopEnd = owner.loopEnd.load();
-
-	if (loopEnd > 0 && position == loopEnd)
-		return owner.loopStart.load();
 	if (position >= owner.loaded->length && owner.repeat.load() && owner.loaded->length > 0)
 		return 0;
 	return -1;

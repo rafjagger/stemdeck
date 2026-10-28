@@ -4,10 +4,10 @@
 
 #include <cmath>
 
-void PotPickup::rearm (double storedValue)
+void PotPickup::rearm (double storedValue, std::optional<double> potNow)
 {
 	stored = storedValue;
-	lastReading.reset();
+	lastReading = potNow;
 	picked = false;
 }
 

@@ -52,10 +52,18 @@ TEST (PotPickup, RearmDropsThePickup)
 	EXPECT_TRUE (pot.feed (0.85));
 }
 
+TEST (PotPickup, RearmWithTheKnownPotPlaceKeepsItAsASide)
+{
+	PotPickup pot;
+	pot.rearm (0.5, 0.2);
+	EXPECT_DOUBLE_EQ (pot.ghost(), 0.2);
+	EXPECT_FALSE (pot.pickedUp());
+	EXPECT_TRUE (pot.feed (0.6)) << "one report across the value is enough";
+}
+
 TEST (PotPickup, AnUntouchedPotShowsTheStoredValueAsGhost)
 {
 	PotPickup pot;
 	pot.rearm (0.3);
-	EXPECT_FALSE (pot.hasReading());
 	EXPECT_DOUBLE_EQ (pot.ghost(), 0.3);
 }

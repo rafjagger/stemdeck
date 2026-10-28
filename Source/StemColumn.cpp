@@ -190,21 +190,21 @@ void StemColumn::paint (juce::Graphics& g)
 
 void StemColumn::setAuxGhost (std::optional<double> position)
 {
-	if (position == auxGhost)
+	if (position == ghost)
 		return;
-	auxGhost = position;
+	ghost = position;
 	repaint (auxKnob.getBounds());
 }
 
 // A short tick across the knob's ring at the pot's place, in the text colour.
 void StemColumn::paintOverChildren (juce::Graphics& g)
 {
-	if (! auxGhost)
+	if (! ghost)
 		return;
 	const auto bounds = auxKnob.getBounds().toFloat();
 	const auto radius = juce::jmin (bounds.getWidth(), bounds.getHeight()) / 2.0f;
 	const auto& rotary = auxKnob.getRotaryParameters();
-	const auto angle = rotary.startAngleRadians + (float) *auxGhost * (rotary.endAngleRadians - rotary.startAngleRadians);
+	const auto angle = rotary.startAngleRadians + (float) *ghost * (rotary.endAngleRadians - rotary.startAngleRadians);
 	const auto centre = bounds.getCentre();
 	const auto direction = juce::Point<float> (std::sin (angle), -std::cos (angle));
 	g.setColour (Theme::text);

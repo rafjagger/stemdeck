@@ -389,30 +389,14 @@ void OneDeckComponent::handlePanel (const panel1::Event& e)
 		case Type::lengthUp:   column.oneShots().lengthUp().triggerClick(); break;
 		case Type::gain:       knobsetup::nudge (column.gain(), e.value); break;
 		case Type::threeD:     knobsetup::nudge (column.threeD(), e.value); break;
-		case Type::aux:        panelAux (e.stem, e.value); break;
+		case Type::aux:        auxPots.reading (e.stem, e.value); break;
 		default: break;
 	}
 }
 
-// The pot moves AUX only once it has crossed the knob's value; until then the knob shows where it stands.
-void OneDeckComponent::panelAux (int stem, double reading)
-{
-	auto& column = view.column (stem);
-	auto& pickup = potPickups[(size_t) stem];
-	if (! pickup.pickedUp())
-		pickup.setStored (column.aux().getValue());
-	if (const auto value = pickup.feed (reading))
-		column.aux().setValue (*value, juce::sendNotificationSync);
-	column.setAuxGhost (pickup.pickedUp() ? std::nullopt : std::optional<double> (pickup.ghost()));
-}
-
 void OneDeckComponent::rearmPotPickups()
 {
-	for (int s = 0; s < StemDeckPlayer::numStems; ++s)
-	{
-		potPickups[(size_t) s].rearm (view.column (s).aux().getValue());
-		view.column (s).setAuxGhost (std::nullopt);
-	}
+	auxPots.rearm();
 }
 
 void OneDeckComponent::showPanel()
@@ -506,6 +490,7 @@ void OneDeckComponent::timerCallback()
 		panelCountdown = refreshHz / 2;
 		updatePanelOwner();
 	}
+	auxPots.watch();
 	showPanel();
 	creatorLink->showStatus();
 	rec.update (audio->usingJack() ? audio->jackClient().getClientName() : juce::String());

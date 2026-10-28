@@ -3,6 +3,7 @@
 #include <gtest/gtest.h>
 
 #include "OneDeckAudio.h"
+#include "AuxPots.h"
 #include "OneDeckView.h"
 #include "Outputs.h"
 #include "StemKnob.h"
@@ -507,4 +508,88 @@ TEST_F (OneDeck, AuxMeterReadsTheAuxBus)
 	setAllAux (1.0f);
 	settle();
 	EXPECT_GT (aux.levelDb(), -60.0f) << "the send lights the aux bus's W";
+}
+
+//==============================================================================
+// R13 on the real columns: the pots move AUX only after crossing its value.
+TEST_F (OneDeck, PotsMoveAuxOnlyAfterCrossingAndNeverJump)
+{
+	OneDeckView view (audio, formats, 0);
+	view.setSize (screenWidth, viewHeight);
+	AuxPots pots ([&view] (int stem) -> StemColumn& { return view.column (stem); });
+	auto& knob = view.column (1).aux();
+	knob.setValue (0.5, juce::sendNotificationSync);
+	pots.rearm();   // as after a load
+
+	pots.reading (1, 0.2);
+	pots.reading (1, 0.4);
+	EXPECT_DOUBLE_EQ (knob.getValue(), 0.5) << "a pot that has not crossed does nothing";
+	EXPECT_FLOAT_EQ (settings().aux[1].load(), 0.5f);
+	pots.reading (1, 0.55);
+	EXPECT_DOUBLE_EQ (knob.getValue(), 0.55);
+	EXPECT_FLOAT_EQ (settings().aux[1].load(), 0.55f);
+
+	// A touch moves the knob away from the pot: the pot must find it again.
+	knob.setValue (0.9, juce::sendNotificationSync);
+	pots.reading (1, 0.58);
+	EXPECT_DOUBLE_EQ (knob.getValue(), 0.9) << "no jump to the pot";
+	pots.reading (1, 0.95);
+	EXPECT_DOUBLE_EQ (knob.getValue(), 0.95);
+}
+
+TEST_F (OneDeck, AuxPotAfterALoadKeepsItsLastPlaceAsGhostAndDoesNotJump)
+{
+	OneDeckView view (audio, formats, 0);
+	view.setSize (screenWidth, viewHeight);
+	AuxPots pots ([&view] (int stem) -> StemColumn& { return view.column (stem); });
+	auto& knob = view.column (0).aux();
+	knob.setValue (0.5, juce::sendNotificationSync);
+	pots.rearm();
+	pots.reading (0, 0.5);
+	ASSERT_FALSE (view.column (0).hasAuxGhost());
+
+	knob.setValue (0.8, juce::sendNotificationSync);   // a load
+	pots.rearm();
+	EXPECT_TRUE (view.column (0).hasAuxGhost()) << "the pot's place shows at once, without a new reading";
+	EXPECT_DOUBLE_EQ (view.column (0).auxGhost().value(), 0.5);
+	pots.reading (0, 0.5);
+	EXPECT_DOUBLE_EQ (knob.getValue(), 0.8);
+	pots.reading (0, 0.85);
+	EXPECT_DOUBLE_EQ (knob.getValue(), 0.85);
+	EXPECT_FALSE (view.column (0).hasAuxGhost());
+}
+
+TEST_F (OneDeck, WatchRearmsAPickedUpPotWhenTheKnobIsMovedAway)
+{
+	OneDeckView view (audio, formats, 0);
+	view.setSize (screenWidth, viewHeight);
+	AuxPots pots ([&view] (int stem) -> StemColumn& { return view.column (stem); });
+	auto& knob = view.column (2).aux();
+	knob.setValue (0.5, juce::sendNotificationSync);
+	pots.rearm();
+	pots.reading (2, 0.5);
+	knob.setValue (0.1, juce::sendNotificationSync);
+	pots.watch();
+	EXPECT_TRUE (view.column (2).hasAuxGhost());
+	EXPECT_DOUBLE_EQ (view.column (2).auxGhost().value(), 0.5);
+}
+
+// A page test must paint: the ghost mark changes the picture on the knob, and only there.
+TEST_F (OneDeck, PaintsTheAuxGhostMark)
+{
+	DJLookAndFeel look;
+	OneDeckView view (audio, formats, 0);
+	view.setLookAndFeel (&look);
+	view.setSize (screenWidth, viewHeight);
+	view.setSet (set);
+	auto& column = view.column (0);
+	const auto knobArea = view.getLocalArea (&column, column.aux().getBounds());
+	const auto knobOf = [&] { return snapshotOf (view).getClippedImage (knobArea); };
+
+	const auto without = knobOf();
+	column.setAuxGhost (0.75);
+	EXPECT_GT (differingPixels (without, knobOf()), 10) << "the mark is drawn";
+	column.setAuxGhost (std::nullopt);
+	EXPECT_EQ (differingPixels (without, knobOf()), 0) << "and goes again";
+	view.setLookAndFeel (nullptr);
 }

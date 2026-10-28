@@ -224,6 +224,8 @@ add_executable(stemdeck-spatial-tests
     ${CMAKE_SOURCE_DIR}/Source/SpatialLaw.cpp
     ${CMAKE_SOURCE_DIR}/Source/OneDeckView.cpp
     ${CMAKE_SOURCE_DIR}/Source/StemColumn.cpp
+    ${CMAKE_SOURCE_DIR}/Source/AuxPots.cpp
+    ${CMAKE_SOURCE_DIR}/Source/PotPickup.cpp
     ${CMAKE_SOURCE_DIR}/Source/OneShotKeys.cpp
     ${CMAKE_SOURCE_DIR}/Source/StemViewer.cpp
     ${CMAKE_SOURCE_DIR}/Source/LevelMeter.cpp

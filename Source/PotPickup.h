@@ -12,14 +12,14 @@ class PotPickup
 public:
 	// A value was loaded or restored, or the panel was gained: the pot has to
 	// find the value again.
-	void rearm (double storedValue);
+	// potNow: where the pot is known to stand; it counts as the side it is on, but does not pick up by itself.
+	void rearm (double storedValue, std::optional<double> potNow = std::nullopt);
 	// The stored value moved on its own (a touch on the knob) while the pot has not picked up.
 	void setStored (double storedValue) { stored = storedValue; }
 	// potValue 0..1. The value to apply once picked up, else nothing.
 	std::optional<double> feed (double potValue);
 
 	bool pickedUp() const { return picked; }
-	bool hasReading() const { return lastReading.has_value(); }
 	double ghost() const { return lastReading.value_or (stored); }
 
 private:

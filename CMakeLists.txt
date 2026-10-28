@@ -165,6 +165,7 @@ target_sources(StemDeck PRIVATE
     Source/PanelMap.cpp
     Source/PanelMapOneDeck.cpp
     Source/PotPickup.cpp
+    Source/AuxPots.cpp
     Source/PanelOwnership.cpp
     Source/PanelLink.cpp
     Source/PanelDevice.cpp

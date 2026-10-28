@@ -46,6 +46,8 @@ public:
 
 	// Where the hardware pot for AUX stands while it has not picked the knob up (R13); none hides the mark.
 	void setAuxGhost (std::optional<double> position);
+	std::optional<double> auxGhost() const { return ghost; }
+	bool hasAuxGhost() const { return ghost.has_value(); }
 
 	void paint (juce::Graphics&) override;
 	void paintOverChildren (juce::Graphics&) override;
@@ -61,7 +63,7 @@ private:
 	const juce::Colour colour;
 
 	juce::Label nameLabel, stateLabel;
-	std::optional<double> auxGhost;
+	std::optional<double> ghost;
 	juce::Slider gainKnob, threeDKnob, auxKnob, widthKnob;
 	juce::Label gainCaption, threeDCaption, auxCaption, widthCaption;
 	StemViewer stemViewer;

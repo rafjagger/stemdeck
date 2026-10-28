@@ -34,6 +34,7 @@
 #include "PioneerClock.h"
 #include "OscTruth.h"
 #include "ProLinkReceiver.h"
+#include "ProLinkPresence.h"
 #include "ProLinkSender.h"
 #include "MasterDeck.h"
 #include "StemCreator.h"
@@ -84,6 +85,8 @@ private:
 	double applyFollow (int deckIndex, FollowInput in, double followerPosition);
 	void setSyncSource (bool pio);
 	void setMasterDeck (int deckIndex);
+	int reportedDeck() const;
+	void followLinkMaster();
 	void updateNetwork();
 	std::array<bool, 2> decksPlaying() const;
 	void followPioneer();

@@ -17,8 +17,8 @@ class StemDeckPlayer;
 // link's master -- another instance's MASTER deck, or a player -- with the
 // two-deck app's rules (followLeader, DeckFollow). With no master heard the
 // deck runs on its own grid. The newest MASTER press wins (InstanceMaster).
-// No sockets here: the owner joins the link while wantsLink(), passes on
-// what it hears and publishes while isMaster().
+// No sockets here: the owner is on the link from the start (ProLinkPresence),
+// passes on what it hears and publishes while isMaster().
 class OneDeckSync
 {
 public:
@@ -28,9 +28,12 @@ public:
 	bool isSynced() const { return synced; }
 	void pressMaster (double seconds);   // refused (stays off) on a deck without a grid
 	bool isMaster() const { return master.isMaster(); }
-	bool wantsLink() const { return synced || isMaster(); }
+	bool syncOrMaster() const { return synced || isMaster(); }
 
 	void joined (double seconds);   // the owner's receiver started
+	// MASTER handed here by the link, or taken by another player
+	// (ProLinkReceiver::takeMasterChange); true when MASTER changed.
+	bool followLink (prolink::TempoMaster::Change, double seconds);
 	void hear (const std::vector<ProLinkReceiver::Event>&);
 
 	// Every tick: MASTER given up to a newer claim (true then), and the deck

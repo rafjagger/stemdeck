@@ -206,3 +206,76 @@ TEST (ProLinkAnnouncer, AloneOnTheLinkItWasFirst)
 	EXPECT_EQ (keepAlive[0x25], 0x02);
 	EXPECT_EQ (keepAlive[0x30], 1);
 }
+
+//==============================================================================
+// D6, startup.html, "Startup in a channel-specific port": the mixer's
+// intention pre-empts the claim; the player answers with a request straight
+// to the mixer, takes the number the mixer assigns, sends a final-stage claim
+// for it and, once the mixer finishes, keep-alives.
+namespace
+{
+	const uint32_t mixerIp = ip (192, 168, 8, 2);
+	prolink::Identity mixer() { return { 0x21, "DJM-V10", { 2, 0, 0, 0, 0, 2 }, mixerIp }; }
+}
+
+TEST (ProLinkAnnouncer, AChannelPortAssignsTheNumber)
+{
+	prolink::Announcer announcer (us());
+	typesSent (announcer, 0.0, 1.0);   // hellos, the first first-stage claim
+
+	const auto request = hear (announcer, prolink::mixerIntention (mixer()), mixerIp, 1.0);
+	ASSERT_EQ (request.size(), 1u);
+	EXPECT_EQ (request[0].to, mixerIp) << "straight to the mixer";
+	EXPECT_EQ (request[0].bytes[0x0a], 0x02);
+	EXPECT_EQ (request[0].bytes[0x0b], 0x01);
+	EXPECT_EQ (request[0].bytes[0x2e], 0x00);
+
+	EXPECT_TRUE (typesSent (announcer, 1.0, 1.2).empty()) << "the own claim waits for the mixer";
+
+	hear (announcer, prolink::numberAssignment (mixer(), 2, 1), mixerIp, 1.2);
+	EXPECT_EQ (announcer.device(), 2);
+	const auto finalClaim = announcer.due (1.2);
+	ASSERT_EQ (finalClaim.size(), 1u);
+	EXPECT_EQ (finalClaim[0].bytes[0x0a], 0x04);
+	EXPECT_EQ (finalClaim[0].bytes[0x24], 2) << "the assigned number";
+	EXPECT_EQ (finalClaim[0].bytes[0x25], 1) << "N";
+
+	hear (announcer, prolink::assignmentFinished (mixer()), mixerIp, 1.21);
+	const auto next = announcer.due (1.5);
+	ASSERT_EQ (next.size(), 1u);
+	EXPECT_EQ (next[0].bytes[0x0a], 0x06) << "keep-alives";
+	EXPECT_EQ (next[0].bytes[0x24], 2);
+	EXPECT_TRUE (announcer.isOnline());
+}
+
+TEST (ProLinkAnnouncer, AnAssignmentNobodyAskedForIsIgnored)
+{
+	prolink::Announcer announcer (us());
+	typesSent (announcer, 0.0, 1.0);
+	hear (announcer, prolink::numberAssignment (mixer(), 2, 1), mixerIp, 1.0);
+	EXPECT_EQ (announcer.device(), 6);
+}
+
+// A mixer that announces and then never assigns: the own claim resumes after
+// a second rather than waiting for ever.
+TEST (ProLinkAnnouncer, AMixerThatNeverAssignsIsNotWaitedFor)
+{
+	prolink::Announcer announcer (us());
+	typesSent (announcer, 0.0, 1.0);
+	hear (announcer, prolink::mixerIntention (mixer()), mixerIp, 1.0);
+	EXPECT_TRUE (typesSent (announcer, 1.0, 1.9).empty());
+	const auto resumed = typesSent (announcer, 2.0, 6.0);
+	ASSERT_FALSE (resumed.empty());
+	EXPECT_EQ (resumed.back(), 0x06);
+	EXPECT_EQ (announcer.device(), 6);
+	EXPECT_TRUE (announcer.isOnline());
+}
+
+TEST (ProLinkAnnouncer, ASettledPlayerIgnoresAMixersIntention)
+{
+	prolink::Announcer announcer (us());
+	typesSent (announcer, 0.0, 4.0);
+	ASSERT_TRUE (announcer.isOnline());
+	EXPECT_TRUE (hear (announcer, prolink::mixerIntention (mixer()), mixerIp, 4.0).empty());
+	EXPECT_EQ (announcer.device(), 6);
+}

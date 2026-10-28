@@ -136,6 +136,7 @@ target_sources(StemDeck PRIVATE
     Source/DeckFollow.cpp
     Source/OneDeckSync.cpp
     Source/ProLinkAnnouncer.cpp
+    Source/ProLinkTempoMaster.cpp
     Source/ProLinkReceiver.cpp
     Source/LinkInterface.cpp
     Source/MasterDeck.cpp

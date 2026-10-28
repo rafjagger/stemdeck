@@ -29,6 +29,14 @@ void InstanceMaster::press (double seconds)
 	claimedAt = seconds;
 }
 
+void InstanceMaster::take (double seconds)
+{
+	if (master)
+		return;
+	master = true;
+	claimedAt = seconds;
+}
+
 void InstanceMaster::onStatus (int device, bool claimsMaster, double seconds)
 {
 	if (! claimsMaster)

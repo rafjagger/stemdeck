@@ -7,16 +7,76 @@
 #include <JuceHeader.h>
 
 #include <arpa/inet.h>
+#include <algorithm>
 #include <cmath>
+#include <limits>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
 namespace
 {
-	constexpr double statusEvery = 0.2;
+	// A CDJ's status interval; the CDJ-3000's absolute position interval.
+	constexpr double statusEvery = 0.2, positionEvery = 0.03;
 
 	double now() { return juce::Time::getMillisecondCounterHiRes() / 1000.0; }
+
+	// A deck as heard at `t`: its read head carried to now and delayed by the
+	// audio still in flight.
+	struct DeckNow
+	{
+		BeatGrid grid;
+		bool loaded = false, playing = false, moving = false;
+		double rate = 0.0, speed = 1.0, position = 0.0, length = 0.0;
+	};
+
+	DeckNow deckAt (const StemDeckPlayer& player, double t, double pathLatency)
+	{
+		DeckNow deck;
+		deck.grid = player.getBeatGrid();
+		deck.loaded = player.isLoaded();
+		deck.playing = player.isPlaying();
+		deck.moving = deck.playing && ! player.isScratching();
+		deck.rate = player.getEffectiveRate();
+		deck.speed = player.getSpeed();
+		deck.length = player.getLength();
+		deck.position = audiblePosition (positionAt (player.getPosition(), player.getPositionStamp(), t, deck.rate, deck.moving),
+										 pathLatency, deck.moving ? deck.rate : 0.0);
+		return deck;
+	}
+
+	// The status's view of the deck: no grid is no track -- nothing a player
+	// could sync to.
+	prolink::PlayerState playerState (const DeckNow& deck, bool synced)
+	{
+		prolink::PlayerState state;
+		state.hasTrack = deck.grid.isValid();
+		state.synced = synced;
+		if (! state.hasTrack)
+			return state;
+
+		state.bpm = deck.grid.bpm;
+		state.pitch = deck.speed;
+		state.playing = deck.moving;
+		// Where we are in the bar: the beat last passed. The lead-in before
+		// the first downbeat counts into the bar, not the beat number.
+		if (const auto passed = beatPassed (deck.grid.firstBeat, deck.grid.bpm, deck.position))
+		{
+			state.beatNumber = passed->index >= 0 ? (uint32_t) (passed->index + 1) : 0;
+			state.beatInBar = passed->beatInBar;
+		}
+		return state;
+	}
+
+	prolink::Position positionOf (const DeckNow& deck)
+	{
+		prolink::Position position;
+		position.trackSeconds = deck.length;
+		position.playheadSeconds = std::max (0.0, deck.position);
+		position.pitch = deck.speed;
+		position.effectiveBpm = deck.grid.isValid() ? deck.grid.bpm * deck.rate : 0.0;
+		return position;
+	}
 
 	void sleepFor (double seconds)
 	{
@@ -32,14 +92,14 @@ ProLinkSender::~ProLinkSender()
 
 bool ProLinkSender::start (int number, uint32_t broadcastIpNetworkOrder,
 						   const osctruth::ProLinkPorts& truthPorts, const std::string& deviceName,
-						   std::function<bool()> isOnline)
+						   ProLinkRole* linkRole)
 {
 	stop();
 	deviceNumber = number;
 	broadcastIp = broadcastIpNetworkOrder;
 	ports = truthPorts;
 	name = deviceName;
-	online = std::move (isOnline);
+	role = linkRole;
 
 	if (! ports.complete())
 		return false;
@@ -80,50 +140,63 @@ void ProLinkSender::run()
 	// One scheduler for whichever deck is master: its half-beat guard keeps a
 	// handover from doubling a beat.
 	BeatScheduler scheduler;
-	double lastStatus = 0.0;
+	double lastStatus = -1.0e9, lastPosition = -1.0e9;
+
+	const auto idle = [&scheduler]
+	{
+		scheduler.step (now(), 0.0, 0.0, 0.0, 0.0, false);
+		sleepFor (BeatScheduler::wakeEvery);
+	};
 
 	while (running)
 	{
-		const auto* player = master.load();
-		const auto grid = player != nullptr ? player->getBeatGrid() : BeatGrid {};
-
-		// Nothing without a master deck with a tempo -- not even a status: a
-		// "master" with no beats would take master from a device that has them.
-		// Nothing either before the player number is ours.
-		if (player == nullptr || ! grid.isValid() || (online && ! online()))
+		// Nothing before the player number is ours.
+		if (role != nullptr && ! role->isOnline())
 		{
-			scheduler.step (now(), 0.0, 0.0, 0.0, 0.0, false);
-			sleepFor (BeatScheduler::wakeEvery);
+			idle();
 			continue;
 		}
 
-		const auto moving = player->isPlaying() && ! player->isScratching();
-		const auto rate = player->getEffectiveRate();
 		const auto t = now();
-		const auto position = audiblePosition (positionAt (player->getPosition(), player->getPositionStamp(), t, rate, moving),
-											   pathLatency.load(), moving ? rate : 0.0);
+		const auto* beatDeck = master.load();
+		const auto* deck = beatDeck != nullptr ? beatDeck : reported.load();
+		const auto heard = deck != nullptr ? deckAt (*deck, t, pathLatency.load()) : DeckNow {};
+		const auto state = playerState (heard, synced.load());
+		if (role != nullptr)
+			// Playing as the DJ set it: a scratch while playing must not hand
+			// master away (the paused-master handoff).
+			role->reportLocal (state.hasTrack, state.hasTrack && heard.playing, state.synced);
 
 		if (t - lastStatus >= statusEvery)
 		{
-			// Where we are in the bar: the beat last passed.
-			// The lead-in before the first downbeat counts into the bar, not the beat number.
-			uint32_t beatNumber = 0;
-			int beatInBar = 1;
-			if (const auto passed = beatPassed (grid.firstBeat, grid.bpm, position))
-			{
-				beatNumber = passed->index >= 0 ? (uint32_t) (passed->index + 1) : 0;
-				beatInBar = passed->beatInBar;
-			}
-			send (prolink::statusPacket (deviceNumber, name, grid.bpm, player->getSpeed(), true, moving,
-										 beatNumber, beatInBar),
-				  ports.status);
+			// Without the link's role (tests): master while a MASTER deck has a tempo.
+			const auto masterRole = role != nullptr ? role->masterState()
+													: prolink::MasterState { beatDeck != nullptr && state.hasTrack };
+			send (prolink::statusPacket (device(), name, state, masterRole), ports.status);
 			lastStatus = t;
 		}
 
-		const auto step = scheduler.step (t, position, rate, grid.firstBeat, grid.bpm, moving);
+		if (heard.loaded && t - lastPosition >= positionEvery)
+		{
+			send (prolink::absolutePosition (device(), name, positionOf (heard)), ports.beat);
+			lastPosition = t;
+		}
+
+		// Beats only from a MASTER deck with a tempo.
+		if (beatDeck == nullptr || ! heard.grid.isValid())
+		{
+			idle();
+			continue;
+		}
+
+		const auto step = scheduler.step (t, heard.position, heard.rate, heard.grid.firstBeat, heard.grid.bpm, heard.moving);
 		sleepFor (step.sleepBefore);
 		if (step.send)
-			send (prolink::beatPacket (deviceNumber, name, grid.bpm, player->getSpeed(), step.send->beatInBar),
+		{
+			const auto msToEnd = heard.length > 0.0 ? (heard.length - step.send->trackSeconds) * 1000.0
+													: std::numeric_limits<double>::infinity();
+			send (prolink::beatPacket (device(), name, heard.grid.bpm, heard.speed, step.send->beatInBar, msToEnd),
 				  ports.beat);
+		}
 	}
 }

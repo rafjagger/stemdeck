@@ -21,9 +21,11 @@ TEST (DeckInstance, NamesFollowTheLetter)
 
 // Two instances on one host share the settings file, so the player number on
 // the link comes from the letter: the receiver drops its own number's beats.
-// A is player 6 (the two-deck app's), B 8 (7 is beat-analyzer's default).
+// A is player 6 (the two-deck app's), B 5: a CDJ-3000 numbers players 1-6
+// (manual p. 113), and a number outside that range is one no CDJ or DJM
+// expects.
 TEST (DeckInstance, ProLinkPlayerFollowsTheLetter)
 {
 	EXPECT_EQ ((DeckInstance { 'A' }).proLinkDevice(), 6);
-	EXPECT_EQ ((DeckInstance { 'B' }).proLinkDevice(), 8);
+	EXPECT_EQ ((DeckInstance { 'B' }).proLinkDevice(), 5);
 }

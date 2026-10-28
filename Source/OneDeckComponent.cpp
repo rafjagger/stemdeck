@@ -264,6 +264,8 @@ void OneDeckComponent::startSync()
 {
 	std::string truthError;
 	linkPorts = osctruth::proLinkPortsFrom (osctruth::readListeners (truth.path, truthError));
+	// The one deck is what this player's status and position report.
+	linkSender.setReported (&deckAudio.host().player());
 
 	auto& panel = view.deckPanel();
 	panel.setSyncTooltip (syncLabels::linkSyncTooltip());
@@ -284,13 +286,16 @@ void OneDeckComponent::startSync()
 void OneDeckComponent::masterChanged()
 {
 	linkSender.setMaster (sync.isMaster() ? &deckAudio.host().player() : nullptr);
+	link.wantMaster (sync.isMaster());
 	updateLink();
 }
 
-// On the link while SYNC or MASTER is on, as the two-deck app; off it otherwise.
+// On the link from the start, as a CDJ: SYNC and MASTER change what is sent, not
+// whether the player is there.
 void OneDeckComponent::updateLink()
 {
-	if (! sync.wantsLink())
+	const auto presence = prolink::presence (linkPorts.complete());
+	if (! presence.receiver)
 	{
 		linkSender.stop();
 		link.stop();
@@ -301,11 +306,10 @@ void OneDeckComponent::updateLink()
 	if (! link.isRunning() && link.start (device, linkPorts, instance.title()))
 		sync.joined (nowSeconds());
 
-	if (sync.isMaster() && link.isRunning() && ! linkSender.isRunning())
-		linkSender.start (device, link.broadcastAddress(), linkPorts, instance.title(),
-						  [this] { return link.isOnline(); });
-	else if (! sync.isMaster())
-		linkSender.stop();
+	// A status goes out whether master or not, as a CDJ's does; MASTER adds
+	// the beats (masterChanged() hands the sender the deck).
+	if (presence.sender && link.isRunning() && ! linkSender.isRunning())
+		linkSender.start (device, link.broadcastAddress(), linkPorts, instance.title(), &link);
 }
 
 void OneDeckComponent::showSyncStatus()
@@ -329,7 +333,7 @@ void OneDeckComponent::showSyncStatus()
 
 	const auto now = nowSeconds();
 	const auto& clock = sync.clock();
-	const auto text = ! sync.wantsLink()   ? syncLabels::sourceButton (true)
+	const auto text = ! sync.syncOrMaster() ? syncLabels::sourceButton (true)
 					: ! link.isRunning() || ! link.error().empty() ? syncLabels::error (link.error())
 					: sync.isMaster()    ? syncLabels::sendingMaster (instance.letter - 'A')
 					: clock.bpm() <= 0.0 ? syncLabels::nothingHeard()
@@ -518,10 +522,13 @@ void OneDeckComponent::timerCallback()
 {
 	view.refresh();
 	sync.hear (link.drain());
-	if (sync.update (nowSeconds()))
-		masterChanged();   // another deck took MASTER
-	// SYNC or MASTER on but not on the link (no network yet, ports busy): again every two seconds.
-	if (sync.wantsLink() && ! link.isRunning() && --linkRetryCountdown <= 0)
+	const auto handedOver = sync.followLink (link.takeMasterChange(), nowSeconds());
+	if (sync.update (nowSeconds()) || handedOver)
+		masterChanged();   // another deck took MASTER, or the link handed it here
+	link.wantMaster (sync.isMaster());
+	linkSender.setSynced (sync.isSynced());
+	// Not on the link (no network yet, ports busy): again every two seconds.
+	if (linkPorts.complete() && ! link.isRunning() && --linkRetryCountdown <= 0)
 	{
 		linkRetryCountdown = 2 * refreshHz;
 		updateLink();

@@ -16,6 +16,6 @@ struct DeckInstance
 	std::string title() const;          // "StemDeck A"
 	// Its player number on the link: two instances on one host share the
 	// settings file, and a receiver drops its own number's beats. A is 6 (the
-	// two-deck app's), B is 8 (7 is beat-analyzer's default).
+	// two-deck app's), B is 5: inside the CDJ-3000's 1-6 (manual p. 113).
 	int proLinkDevice() const;
 };

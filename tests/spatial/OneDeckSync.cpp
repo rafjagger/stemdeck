@@ -29,7 +29,7 @@
 // leaves the machine.
 namespace
 {
-constexpr int deckA = 6, deckB = 8;   // DeckInstance::proLinkDevice()
+constexpr int deckA = 6, deckB = 5;   // DeckInstance::proLinkDevice()
 const uint32_t loopback = htonl (INADDR_LOOPBACK);
 const uint32_t loopbackBroadcast = htonl (0x7fffffff);   // 127.255.255.255
 

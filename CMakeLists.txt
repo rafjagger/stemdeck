@@ -19,6 +19,12 @@ if(CCACHE_PROGRAM)
     set(CMAKE_CXX_COMPILER_LAUNCHER ${CCACHE_LAUNCHER})
 endif()
 
+# Round as x86-64 does on every machine: GCC on aarch64 (a Raspberry Pi 5)
+# fuses a*b+c by default, and IEM's StereoEncoder then lands a rounding step
+# off its stored quaternion, so its listeners run -- and allocate -- on the
+# audio thread (tools/tests/test_float_contraction.py).
+add_compile_options(-ffp-contract=off)
+
 find_package(JUCE CONFIG REQUIRED)
 
 # Distro JUCE packages (e.g. Debian's "+ds" build) strip the bundled FLAC/Ogg
@@ -26,7 +32,8 @@ find_package(JUCE CONFIG REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(AUDIO_CODECS REQUIRED IMPORTED_TARGET flac vorbisenc vorbisfile vorbis ogg)
 pkg_check_modules(JACK REQUIRED IMPORTED_TARGET jack)
-# Key lock: Rubber Band's real-time stretcher (librubberband-dev; at run time librubberband3).
+# Key lock: Rubber Band's real-time stretcher (librubberband-dev; at run time librubberband3 on
+# forky, librubberband2 on trixie -- the package names it through shlibs).
 pkg_check_modules(RUBBERBAND REQUIRED IMPORTED_TARGET rubberband)
 
 # The engine's IEM nodes (spatial audio), compiled into this binary by its own

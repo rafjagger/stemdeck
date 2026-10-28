@@ -19,7 +19,7 @@ UNITS = REPO / ".config/systemd/user"
 UNIT = UNITS / "stemdeck.service"
 TEMPLATE = REPO / ".config/systemd/user/stemdeck@.service"
 EXTRA_DEPENDS = ("jack-example-tools", "xdotool", "x11-xserver-utils", "x11-utils",
-                 "python3", "onboard", "librubberband3", "pipewire-jack")
+                 "python3", "onboard", "pipewire-jack")
 TOOLS = ("a3-wait-for-the-screen", "rig-keep-the-screen.sh", "setup-separator.sh",
          "stemdeck-seed", "stemdeck-aes67-deck")
 AES67_UNITS = ("a3-aes67-deck@.service", "stemdeck-aes67.service")
@@ -72,6 +72,13 @@ class TheControlFile(unittest.TestCase):
         self.assertEqual("${shlibs:Depends}", depends[0])
         for package in EXTRA_DEPENDS:
             self.assertIn(package, depends)
+
+    def test_the_binarys_libraries_are_left_to_shlibs(self):
+        """Rubber Band's runtime is librubberband3 on forky (the NUCs) and
+        librubberband2 on trixie (Raspberry Pi OS): a name written by hand
+        holds on one of them only. dpkg-shlibdeps names the right one."""
+        by_hand = [d.strip() for d in self.fields["Depends"].split(",")][1:]
+        self.assertFalse([d for d in by_hand if d.startswith("lib")], by_hand)
 
     def test_it_names_no_jack_server_and_no_zita(self):
         for forbidden in ("jackd", "zita"):

@@ -200,13 +200,21 @@ class TheBase(RenderCase):
                      'sap.ip = "239.255.255.255"',
                      "sap.port = 9875",
                      # the Core's stream, "AES67 a3nuc1 out", in the PTP group
-                     'sess.name = "~ out$"',
+                     'rtp.session = "~ out$"',
                      "node.group = pipewire.ptp0",
                      "default.clock.rate          = 44100",
                      "default.clock.quantum       = 128",
                      "default.clock.min-quantum   = 128"):
             with self.subTest(line=line):
                 self.assertIn(line, text)
+
+    def test_no_receive_rule_matches_on_sess_name(self):
+        # PipeWire 1.6.9 module-rtp-sap matches stream.rules against the
+        # properties of the *received* session (rtp.session = the SDP s= name,
+        # node.name, media.name, rtp.*); there is no sess.name, so such a rule
+        # never matches and no stream is created (found on the rig 2026-10-28).
+        self.render("render-base")
+        self.assertNotIn("sess.name", self.conf())
 
     def test_the_base_sends_nothing(self):
         """The Core's sender owns aes67.stream's group; a second one there collides."""

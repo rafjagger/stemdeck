@@ -71,7 +71,7 @@ context.modules = [
                     # streams are the Core's to receive, not this host's.
                     matches = [
                         {
-                            sess.name = "~ out$"
+                            rtp.session = "~ out$"
                         }
                     ]
                     actions = {

@@ -12,6 +12,7 @@
 #include "Tips.h"
 
 #include <iostream>
+#include <utility>
 
 namespace
 {
@@ -103,6 +104,7 @@ OneDeckComponent::OneDeckComponent (DeckInstance deck, double pathLatencySeconds
 	truthKeeper = coretruth::follow (truth);
 	deckLink = std::make_unique<DeckLink> (instance.oscDeck(), host.spatialPorts().settings().deckThreeD);
 	deckLink->start (truth.path, truth.hash);
+	deckLink->followPlayer (deckAudio.host().player(), [this] { return sync.isMaster(); });
 
 	startSync();
 	setSize (768, 1024);

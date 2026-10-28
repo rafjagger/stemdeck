@@ -32,6 +32,9 @@ namespace remote
 		// Optional: empty in a truth from before them, and then a one-deck
 		// StemDeck sends no deck hello and takes no 3D.
 		std::string deckThreeD, deckHello;
+		// `stemdeck.tempo`: the deck's tempo report. Optional likewise: empty
+		// in a truth from before it, and then nothing is sent.
+		std::string deckTempo;
 	};
 
 	// One switch, 0-based inside StemDeck: deck 0-1, stem 0-3, bus 0-4 (1-4, AUX).
@@ -51,6 +54,42 @@ namespace remote
 	std::optional<float> parseDeckThreeD (const Words& words, const std::string& address, int oscDeck, float value);
 	// The hello's address for the deck; empty when the truth has no word for it.
 	std::string deckHelloAddress (const Words& words, int oscDeck);
+
+	// What a deck tells Core about its clock: the BPM as it plays (0 with no
+	// track), whether it plays, whether it shows MASTER.
+	struct Tempo
+	{
+		double bpm = 0.0;
+		bool playing = false, master = false;
+	};
+	struct TempoSend
+	{
+		std::string address;
+		float bpm = 0.0f;
+		int playing = 0, master = 0;
+	};
+	// The tempo report for deck `oscDeck` (any number the truth's range
+	// allows); none without the truth's word.
+	std::optional<TempoSend> tempoMessage (const Words& words, int oscDeck, const Tempo& tempo);
+	// The BPM a deck shows: the grid's tempo times its rate; 0 with no track
+	// or no grid.
+	double tempoOf (bool loaded, double gridBpm, double rate);
+
+	// When a deck's tempo report goes out (Ruling A5): the first state at
+	// once, then on a change of playing/master or of the BPM by more than
+	// 0.01 against what Core last heard, and again every 2 s; never twice
+	// within 100 ms, so a pitch fader on the move does not flood Core.
+	class TempoReport
+	{
+	public:
+		std::optional<Tempo> next (const Tempo& now, double nowMs);
+
+		static constexpr double repeatMs = 2000.0, minGapMs = 100.0, bpmDeadband = 0.01;
+
+	private:
+		std::optional<Tempo> sent;
+		double sentAtMs = 0.0;
+	};
 
 	struct Outgoing
 	{

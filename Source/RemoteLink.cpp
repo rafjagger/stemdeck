@@ -2,6 +2,7 @@
 
 #include "Buses.h"
 #include "OscTruthFile.h"
+#include "PlayerTempo.h"
 #include "PointerInjector.h"
 
 #include <iostream>
@@ -143,6 +144,7 @@ void RemoteLink::timerCallback()
 	inject (pointerGate.tick (clock));
 	reportLiveChange (clock);
 	sendLevels();
+	sendTempos();
 	if (++ticks % (levelsPerSecond * helloEverySeconds) == 0)
 	{
 		sayHello();
@@ -158,6 +160,23 @@ void RemoteLink::timerCallback()
 void RemoteLink::sayHello()
 {
 	toCore.send (juce::OSCMessage (juce::String (words.hello), juce::String ("stemdeck"), truthHash));
+}
+
+// Decks 1 and 2 report their tempo to Core (the one-deck instances do it
+// themselves, DeckLink); remote::TempoReport decides when.
+void RemoteLink::sendTempos()
+{
+	if (words.deckTempo.empty())
+		return;
+	const auto master = masterDeck ? masterDeck() : -1;
+	for (int deck = 0; deck < 2; ++deck)
+	{
+		const auto tempo = tempoReports[(size_t) deck].next (tempoOfPlayer (*players[(size_t) deck], master == deck), nowMs());
+		const auto send = tempo ? remote::tempoMessage (words, deck + 1, *tempo) : std::nullopt;
+		if (send)
+			toCore.send (juce::OSCMessage (juce::String (send->address), send->bpm, (juce::int32) send->playing,
+										   (juce::int32) send->master));
+	}
 }
 
 static_assert (2 * StemSet::numStems == remote::stemMeters);

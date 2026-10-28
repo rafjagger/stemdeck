@@ -83,7 +83,7 @@ namespace osctruth
 		return { patternOf ("stemdeck.bus"), patternOf ("stemdeck.buses"), patternOf ("stemdeck.recall"),
 				 patternOf ("vu"), patternOf ("device.hello"), meters, ahead,
 				 optionalPattern ("stemdeck.pointer"), optionalPattern ("prodj.live"),
-				 optionalPattern ("stemdeck.3d"), optionalPattern ("stemdeck.deck-hello") };
+				 optionalPattern ("stemdeck.3d"), optionalPattern ("stemdeck.deck-hello"), optionalPattern ("stemdeck.tempo") };
 	}
 
 	MeterParameters readMeterParameters (const std::string& path, std::string& error)

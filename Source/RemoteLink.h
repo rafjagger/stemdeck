@@ -44,11 +44,14 @@ public:
 	// The pro-DJ LIVE state as StemDeck shows it (the lease included), once per
 	// change. Never fires while the truth lacks the `prodj.live` word.
 	std::function<void (bool)> onLiveChanged;
+	// The deck shown as MASTER (0-based, -1 none), for the tempo report.
+	std::function<int()> masterDeck;
 
 private:
 	void oscMessageReceived (const juce::OSCMessage& message) override;
 	void timerCallback() override;
 	void sayHello();
+	void sendTempos();
 	void sendLevels();
 	void report (const std::vector<int>& stems, const buses::Masks& now);
 	void inject (const std::vector<remote::Inject>& injects);
@@ -71,6 +74,7 @@ private:
 	bool relayConnected = false;
 	bool running = false;
 	int ticks = 0;
+	std::array<remote::TempoReport, 2> tempoReports;
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (RemoteLink)
 };

@@ -328,8 +328,8 @@ namespace surface
 		t.loop = loopBlock.removeFromTop (halfHeight);
 		splitPair (loopBlock.removeFromBottom (halfHeight), m.gap, t.loopIn, t.loopOut);
 
-		auto search = keys.removeFromRight (share (width, trackSearchShare));
-		keys.removeFromRight (m.gap);
+		auto search = keys.removeFromLeft (share (width, trackSearchShare));
+		keys.removeFromLeft (m.gap);
 		t.previous = search.removeFromTop (halfHeight);
 		t.next = search.removeFromBottom (halfHeight);
 

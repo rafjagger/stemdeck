@@ -116,8 +116,8 @@ namespace surface
 
 	// The one-deck screen's foot row, the transport band (2026-10-28), in its
 	// own coordinates, left to right: on the transport's tile the loop block
-	// (LOOP on top, LOOP IN | LOOP OUT under it), CUE | PLAY, as tall as the
-	// row and the biggest keys, and the track search (|< over >|); then the
+	// (LOOP on top, LOOP IN | LOOP OUT under it), the track search (|< over
+	// >|), and CUE | PLAY, as tall as the row and the biggest keys; then the
 	// meters' card at the right, one bar each for MAIN, AUX and CUE.
 	struct TransportKeys
 	{

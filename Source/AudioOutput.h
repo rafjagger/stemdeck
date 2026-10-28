@@ -18,6 +18,8 @@ public:
 	void open (const juce::String& clientName, const juce::StringArray& portNames, juce::AudioSource& source,
 	           const juce::StringArray& inputNames, JackOutput::InputSink* inputSink);
 	void closeJack();   // no more input blocks
+	// Under JACK: makes and keeps the map's links (JackOutput::keepLinks); without JACK nothing.
+	void keepLinks (a3::links::LinkMap map) { if (jackOpen) jack.keepLinks (std::move (map)); }
 	void close();
 
 	bool usingJack() const { return jackOpen; }

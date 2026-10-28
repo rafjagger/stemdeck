@@ -103,8 +103,13 @@ add_executable(stemdeck-tests
     SpatialLaw.cpp
     ${CMAKE_SOURCE_DIR}/Source/SpatialLaw.cpp
     ${CMAKE_SOURCE_DIR}/third_party/a3-core/src/a3-engine/Laws.cpp
-    ${CMAKE_SOURCE_DIR}/third_party/a3-core/src/a3-engine/PurestGain.cpp)
+    ${CMAKE_SOURCE_DIR}/third_party/a3-core/src/a3-engine/PurestGain.cpp
+    DeckLinks.cpp
+    ${CMAKE_SOURCE_DIR}/Source/DeckLinks.cpp
+    ${CMAKE_SOURCE_DIR}/third_party/a3-core/src/a3-links/LinkMap.cpp
+    ${CMAKE_SOURCE_DIR}/third_party/a3-core/src/a3-links/LinkPlan.cpp)
 target_include_directories(stemdeck-tests PRIVATE ${CMAKE_SOURCE_DIR}/Source ${CMAKE_SOURCE_DIR}/third_party/a3-core/src)
+target_compile_definitions(stemdeck-tests PRIVATE STEMDECK_DATA_DIR="${CMAKE_SOURCE_DIR}/data")
 
 # The session is XML: juce_core, and nothing else of JUCE, comes into the
 # tests -- as a library of its own, JUCE's way for module code outside an app.

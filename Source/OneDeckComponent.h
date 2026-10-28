@@ -63,6 +63,7 @@ private:
 	void saveSession();
 	OneDeckSession gatherSession() const;
 	void updateDeviceStatus();
+	void keepLinks();   // the JACK links of this deck's map (DeckLinks)
 	// The A³ Motion panel: held by one instance (panel.lock). Looked at every half second.
 	juce::String panelPreferenceKey() const;
 	void startPanel();

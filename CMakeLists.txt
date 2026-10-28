@@ -190,7 +190,11 @@ target_sources(StemDeck PRIVATE
     Source/DeckMotion.cpp
     Source/StemViewer.cpp
     third_party/a3-core/src/a3-engine/Laws.cpp
-    third_party/a3-core/src/a3-engine/PurestGain.cpp)
+    third_party/a3-core/src/a3-engine/PurestGain.cpp
+    Source/DeckLinks.cpp
+    third_party/a3-core/src/a3-links/LinkMap.cpp
+    third_party/a3-core/src/a3-links/LinkPlan.cpp
+    third_party/a3-core/src/a3-links/JackLinker.cpp)
 target_include_directories(StemDeck PRIVATE third_party/a3-core/src)
 
 target_compile_definitions(StemDeck PRIVATE

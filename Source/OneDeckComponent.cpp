@@ -3,6 +3,7 @@
 #include "OneDeckComponent.h"
 
 #include "AppSettings.h"
+#include "DeckLinks.h"
 #include "LinkInterface.h"
 #include "KnobSetup.h"
 #include "OscTruthFile.h"
@@ -104,6 +105,7 @@ OneDeckComponent::OneDeckComponent (DeckInstance deck, double pathLatencySeconds
 	audio->onDeviceChanged = [this] { updateDeviceStatus(); };
 	audio->open (juce::String (instance.jackClientName()), portNames, deckAudio, { "rec_L", "rec_R" }, &recorder);
 	rec.button.setEnabled (audio->usingJack());
+	keepLinks();
 
 	truthKeeper = coretruth::follow (truth);
 	deckLink = std::make_unique<DeckLink> (instance.oscDeck(), host.spatialPorts().settings().deckThreeD);
@@ -132,6 +134,18 @@ OneDeckComponent::~OneDeckComponent()
 	analysisPool.removeAllJobs (true, 5000);
 	audio->close();
 	setLookAndFeel (nullptr);
+}
+
+// Deck B on a3nuc2 links itself to its AES67 sender (ruling R8); deck A has
+// no map and the engine links it.
+void OneDeckComponent::keepLinks()
+{
+	juce::String error;
+	const auto home = juce::File::getSpecialLocation (juce::File::userHomeDirectory).getFullPathName().toStdString();
+	if (auto map = deckLinkMap (instance.letter, home, std::getenv ("STEMDECK_LINK_MAP"), error))
+		audio->keepLinks (std::move (*map));
+	else
+		std::cerr << "StemDeck: no links: " << error << std::endl;
 }
 
 //==============================================================================

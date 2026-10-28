@@ -62,7 +62,9 @@ juce::String JackOutput::open (const juce::String& name, const juce::StringArray
 	sampleRate = (double) jack_get_sample_rate (client);
 	bufferSize = jack_get_buffer_size (client);
 	renderBuffer.setSize ((int) ports.size(), (int) bufferSize.load());
-	source->prepareToPlay ((int) bufferSize.load(), sampleRate.load());
+	// PipeWire may not know the block size yet; the buffer-size callback prepares then.
+	if (jackformat::complete (bufferSize.load(), sampleRate.load()))
+		source->prepareToPlay ((int) bufferSize.load(), sampleRate.load());
 
 	if (jack_activate (client) != 0)
 	{

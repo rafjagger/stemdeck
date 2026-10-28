@@ -181,6 +181,19 @@ TEST_F (OneDeck, VolumeMinimaAreExactSilence)
 // automatic only while Core is not heard; `on` ignores Core, `off` never runs.
 // With nothing cued and the phones at MIX, the phones carry sound exactly
 // when it runs.
+// PipeWire calls the sample-rate callback before a block size is known: the
+// whole deck (player and engine) refuses a block of 0 and prepares at 128 later.
+TEST_F (OneDeck, PrepareWithBlockSizeZeroIsRefused)
+{
+	EXPECT_FALSE (audio.host().prepare (rate, 0));
+	audio.prepareToPlay (0, rate);   // the JACK path: must not divide by zero
+	EXPECT_TRUE (audio.host().prepare (rate, block));
+	setAllStems (false, false, 1.0f);
+	player().play();
+	renderBlocks (blocksFor (0.3));
+	EXPECT_GT (peakOver (layout.bformat, 0.05), 0.0f);
+}
+
 TEST_F (OneDeck, PhonesDecoderFollowsR12)
 {
 	using spatial::PhonesMode;

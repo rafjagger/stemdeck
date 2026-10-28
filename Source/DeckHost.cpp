@@ -26,11 +26,13 @@ DeckHost::DeckHost (juce::AudioFormatManager& formatManager, juce::ThreadPool& a
 DeckHost::~DeckHost() = default;
 
 //==============================================================================
-void DeckHost::prepare (double sampleRate, int samplesPerBlockExpected)
+bool DeckHost::prepare (double sampleRate, int samplesPerBlockExpected)
 {
+	if (samplesPerBlockExpected <= 0)
+		return false;
 	stemPairs.setSize (StemDeckPlayer::numOutputChannels, juce::jmax (samplesPerBlockExpected, 4096));
 	deckPlayer.prepareToPlay (samplesPerBlockExpected, sampleRate);
-	ports.prepare (sampleRate, samplesPerBlockExpected);
+	return ports.prepare (sampleRate, samplesPerBlockExpected);
 }
 
 const juce::AudioBuffer<float>& DeckHost::render (juce::AudioBuffer<float>& spatialOutputs, int firstChannel, int numSamples)

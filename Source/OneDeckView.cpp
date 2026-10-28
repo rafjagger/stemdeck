@@ -9,201 +9,75 @@
 
 namespace
 {
-	// The outputs row's boxes, shares of its width: B-format (16 bars), cue, AUX, phones.
-	constexpr std::array<float, 4> boxShares { 0.34f, 0.19f, 0.19f, 0.28f };
-	// A box's title and caption lines, shares of its height; a meter bar, a share of its box's width.
-	constexpr float titleShare = 0.22f, captionShare = 0.2f, singleBarShare = 0.14f, fontShare = 0.8f;
-
 	// The view, top to bottom, shares of its height: the rolling waveform, the
-	// overview, the outputs row; the deck panel and the stem columns take the rest.
-	constexpr float waveShare = 0.15f, overviewShare = 0.06f, outputsShare = 0.15f;
+	// overview, the foot row (transport and meters); the deck panel and the
+	// stem columns take the rest.
+	constexpr float waveShare = 0.15f, overviewShare = 0.06f, footShare = 0.15f;
 	// The deck panel's card, a share of the width (the two-deck deck column's).
 	constexpr float deckCardShare = 0.23f;
 	// Inside the card, shares of its height: title, stems, the DeckPanel column, BPM, original.
 	constexpr float titleLine = 0.05f, stemsLine = 0.04f, columnShare = 0.52f, bpmLine = 0.07f, bpmInfoLine = 0.04f;
 	constexpr float pitchColumnShare = 0.32f;   // of the card's width: the fader beside value, range, KEY and SHIFT
+	constexpr float captionFontShare = 0.8f;    // a meter's name, of its line
 
-	void setUpPhonesKnob (juce::Slider& knob, double fresh, std::function<juce::String (double)> text)
+	juce::String meterName (outputs::oneDeck::MeteredBus bus)
 	{
-		knobsetup::rotaryKnob (knob, 0.0, 1.0, 0.01, fresh);
-		knob.textFromValueFunction = std::move (text);
-		// Neutral: the phones are no stem and no state.
-		knob.setColour (juce::Slider::rotarySliderFillColourId, Theme::textDim);
-	}
-
-	void setUpCaption (juce::Label& label, const juce::String& text, juce::Component& parent)
-	{
-		label.setText (text, juce::dontSendNotification);
-		label.setColour (juce::Label::textColourId, Theme::textDim);
-		label.setJustificationType (juce::Justification::centred);
-		label.setMinimumHorizontalScale (0.6f);
-		parent.addAndMakeVisible (label);
-	}
-
-	// Bars side by side, centred in `area`, each `barWidth` wide with a gap of a third of it.
-	void placeBars (juce::OwnedArray<LevelMeter>& meters, juce::Rectangle<int> area, int barWidth)
-	{
-		const auto gap = juce::jmax (1, barWidth / 3);
-		const auto total = meters.size() * barWidth + (meters.size() - 1) * gap;
-		auto row = area.withSizeKeepingCentre (juce::jmin (total, area.getWidth()), area.getHeight());
-		for (auto* meter : meters)
+		switch (bus)
 		{
-			meter->setBounds (row.removeFromLeft (barWidth));
-			row.removeFromLeft (gap);
+			case outputs::oneDeck::MeteredBus::main: return "MAIN";
+			case outputs::oneDeck::MeteredBus::aux:  return "AUX";
+			case outputs::oneDeck::MeteredBus::cue:  return "CUE";
 		}
+		return {};
 	}
 }
 
 //==============================================================================
 OneDeckOutputs::OneDeckOutputs (OneDeckAudio& a) : audio (a)
 {
-	const auto addMeters = [this] (juce::OwnedArray<LevelMeter>& meters, int count, bool clipLamp)
+	for (auto& meter : meters)
 	{
-		for (int i = 0; i < count; ++i)
-		{
-			auto* meter = meters.add (new LevelMeter());
-			meter->setShowsClip (clipLamp);
-			addAndMakeVisible (meter);
-		}
-	};
-	addMeters (bformatMeters, outputs::bformatChannels, false);
-	for (auto* bar : { &cueBar, &auxBar })
-	{
-		bar->setShowsClip (true);
-		addAndMakeVisible (*bar);
+		meter.setShowsClip (true);
+		addAndMakeVisible (meter);
 	}
-
-	boxes[0].title = "OUT " + juce::String::fromUTF8 ("\xc2\xb7") + " B-format";
-	boxes[1].title = "CUE " + juce::String::fromUTF8 ("\xc2\xb7") + " B-format";
-	boxes[2].title = "AUX " + juce::String::fromUTF8 ("\xc2\xb7") + " send";
-	boxes[3].title = "PHONES";
-	captions[0] = juce::String (outputs::bformatChannels) + " ch " + juce::String::fromUTF8 ("\xe2\x86\x92") + " Core";
-	captions[2] = juce::String::fromUTF8 ("\xe2\x86\x92") + " Core aux";
-
-	setUpPhonesKnob (levelKnob, 1.0, [] (double v) { return juce::String (juce::roundToInt (v * 100.0)) + " %"; });
-	setUpPhonesKnob (mixKnob, 0.0, [] (double v)
-	{
-		return v <= 0.0 ? juce::String ("CUE") : v >= 1.0 ? juce::String ("MIX") : juce::String (juce::roundToInt (v * 100.0)) + " % MIX";
-	});
-	levelKnob.setTooltip ("Phones level");
-	mixKnob.setTooltip ("Phones: the cue at the left end, the deck's mix at the right");
-	levelKnob.onValueChange = [this] { phonesMoved(); };
-	mixKnob.onValueChange = [this] { phonesMoved(); };
-	addAndMakeVisible (levelKnob);
-	addAndMakeVisible (mixKnob);
-	setUpCaption (levelCaption, "LEVEL", *this);
-	setUpCaption (mixCaption, juce::String::fromUTF8 ("CUE\xe2\x86\x94MIX"), *this);
 }
 
 void OneDeckOutputs::setMeterParameters (MeterParameters parameters)
 {
-	for (auto* meter : bformatMeters)
-		meter->setParameters (parameters);
-	cueBar.setParameters (parameters);
-	auxBar.setParameters (parameters);
-}
-
-void OneDeckOutputs::setPhones (float level, float mix)
-{
-	levelKnob.setValue (level, juce::dontSendNotification);
-	mixKnob.setValue (mix, juce::dontSendNotification);
-	audio.setPhones ((float) levelKnob.getValue(), (float) mixKnob.getValue());
-}
-
-void OneDeckOutputs::phonesMoved()
-{
-	const auto level = (float) levelKnob.getValue(), mix = (float) mixKnob.getValue();
-	audio.setPhones (level, mix);
-	if (onPhonesChanged)
-		onPhonesChanged (level, mix);
-}
-
-void OneDeckOutputs::setStemNames (const std::array<juce::String, StemDeckPlayer::numStems>& names)
-{
-	stemNames = names;
+	for (auto& meter : meters)
+		meter.setParameters (parameters);
 }
 
 void OneDeckOutputs::refresh()
 {
-	const auto layout = outputs::oneDeck::layout();
-	for (int ch = 0; ch < bformatMeters.size(); ++ch)
-		bformatMeters[ch]->setLevel (audio.popPeak (layout.bformat + ch));
-	// The cue and the AUX are 9 and 16 ambisonic channels, not a stereo pair: each bar is its bus's W (ACN 0).
-	cueBar.setLevel (audio.popPeak (layout.cue));
-	auxBar.setLevel (audio.popPeak (layout.aux));
-
-	// Which stems are in the cue, by name; and whether StemDeck's own phones run (R12).
-	const auto& player = audio.host().player();
-	juce::StringArray cued;
-	for (int s = 0; s < StemDeckPlayer::numStems; ++s)
-		if (player.isStemCued (s))
-			cued.add (stemNames[(size_t) s].isNotEmpty() ? stemNames[(size_t) s].toUpperCase() : juce::String (s + 1));
-	std::array<juce::String, 4> now = captions;
-	now[1] = cued.isEmpty() ? juce::String ("nothing cued") : cued.joinIntoString (" ") + " cued";
-	now[3] = audio.phonesDecoderOn() ? juce::String ("on") : juce::String ("off");
-	if (now != shown)
-	{
-		shown = now;
-		repaint();
-	}
+	// The buses are 16, 16 and 9 ambisonic channels, not stereo pairs: each bar is its bus's W.
+	for (const auto bus : outputs::oneDeck::meteredBuses)
+		meters[(size_t) bus].setLevel (audio.popPeak (outputs::oneDeck::wChannel (bus)));
 }
 
 void OneDeckOutputs::paint (juce::Graphics& g)
 {
-	for (size_t b = 0; b < boxes.size(); ++b)
+	const auto card = getLocalBounds().toFloat();
+	g.setColour (Theme::panel);
+	g.fillRoundedRectangle (card, Theme::corner (card));
+
+	g.setColour (Theme::textDim);
+	for (const auto bus : outputs::oneDeck::meteredBuses)
 	{
-		const auto& box = boxes[b];
-		const auto card = box.area.toFloat();
-		g.setColour (Theme::panel);
-		g.fillRoundedRectangle (card, Theme::corner (card));
-
-		const auto title = box.area.withHeight (box.meters.getY() - box.area.getY());
-		g.setColour (Theme::text);
-		g.setFont (juce::FontOptions ((float) title.getHeight() * fontShare * 0.75f, juce::Font::bold));
-		g.drawFittedText (box.title, title.reduced (title.getHeight() / 3, 0), juce::Justification::centredLeft, 1, 0.7f);
-
-		g.setColour (Theme::textDim);
-		if (b + 1 == boxes.size())   // the phones' decoder (R12), on its title line
-		{
-			g.drawFittedText (shown[b], title.reduced (title.getHeight() / 3, 0), juce::Justification::centredRight, 1, 0.7f);
-			continue;
-		}
-		g.setFont (juce::FontOptions ((float) box.caption.getHeight() * fontShare));
-		g.drawFittedText (shown[b], box.caption, juce::Justification::centred, 1, 0.6f);
+		const auto& line = captions[(size_t) bus];
+		g.setFont (juce::FontOptions ((float) line.getHeight() * captionFontShare, juce::Font::bold));
+		g.drawFittedText (meterName (bus), line, juce::Justification::centred, 1, 0.6f);
 	}
 }
 
 void OneDeckOutputs::resized()
 {
-	const auto gap = surface::metrics (getParentWidth()).gap;
-	auto area = getLocalBounds();
-	const auto width = area.getWidth() - gap * ((int) boxes.size() - 1);
-	for (size_t b = 0; b < boxes.size(); ++b)
+	const auto slots = surface::oneDeckMeterSlots (surface::fromJuce (getLocalBounds()), surface::metrics (getParentWidth()));
+	for (size_t i = 0; i < slots.size(); ++i)
 	{
-		auto& box = boxes[b];
-		box.area = b + 1 == boxes.size() ? area : area.removeFromLeft (juce::roundToInt ((float) width * boxShares[b]));
-		area.removeFromLeft (gap);
-		auto inside = box.area.reduced (gap, gap / 2);
-		inside.removeFromTop (juce::roundToInt ((float) box.area.getHeight() * titleShare));
-		box.caption = inside.removeFromBottom (juce::roundToInt ((float) box.area.getHeight() * captionShare));
-		box.meters = inside;
+		meters[i].setBounds (surface::toJuce (slots[i].bar));
+		captions[i] = surface::toJuce (slots[i].caption);
 	}
-
-	const auto singleBar = juce::jmax (2, juce::roundToInt ((float) boxes[1].area.getWidth() * singleBarShare));
-	placeBars (bformatMeters, boxes[0].meters, juce::jmax (2, boxes[0].meters.getWidth() * 3 / (outputs::bformatChannels * 4)));
-	cueBar.setBounds (boxes[1].meters.withSizeKeepingCentre (singleBar, boxes[1].meters.getHeight()));
-	auxBar.setBounds (boxes[2].meters.withSizeKeepingCentre (singleBar, boxes[2].meters.getHeight()));
-
-	// The phones: two knobs, their names under them where the meters' caption stands.
-	auto knobs = boxes[3].meters;
-	auto names = boxes[3].caption;
-	const auto half = knobs.getWidth() / 2;
-	levelKnob.setBounds (knobs.removeFromLeft (half));
-	mixKnob.setBounds (knobs);
-	for (auto* caption : { &levelCaption, &mixCaption })
-		caption->setFont (juce::FontOptions ((float) names.getHeight() * fontShare));
-	levelCaption.setBounds (names.removeFromLeft (half));
-	mixCaption.setBounds (names);
 }
 
 //==============================================================================
@@ -215,6 +89,7 @@ OneDeckView::OneDeckView (OneDeckAudio& a, juce::AudioFormatManager& formats, in
 	addAndMakeVisible (wave);
 	addAndMakeVisible (panel);
 	panel.addBandPartsTo (*this);
+	panel.addTransportTo (*this);
 	// Across instances on the link (S4.7): the owner makes the keys pressable
 	// once it knows the truth has the link's ports.
 	panel.setSyncAvailable (false);
@@ -257,14 +132,11 @@ void OneDeckView::setSet (const StemSet& set)
 	thumbnails.setSet (set);
 	panel.setSet (set);
 	wave.setTitle (set.name);
-	std::array<juce::String, StemDeckPlayer::numStems> names;
 	for (int s = 0; s < StemDeckPlayer::numStems; ++s)
 	{
 		const auto& name = set.stemNames[(size_t) s];
-		names[(size_t) s] = name.isNotEmpty() ? name : "STEM " + juce::String (s + 1);
-		columns[(size_t) s]->setStemName (names[(size_t) s]);
+		columns[(size_t) s]->setStemName (name.isNotEmpty() ? name : "STEM " + juce::String (s + 1));
 	}
-	outputRow.setStemNames (names);
 }
 
 void OneDeckView::refresh()
@@ -296,6 +168,10 @@ void OneDeckView::paint (juce::Graphics& g)
 	const auto card = deckCard.toFloat();
 	g.setColour (Theme::panel);
 	g.fillRoundedRectangle (card, Theme::corner (card));
+	// The transport on its own tile, as in the two-deck column.
+	const auto tile = transportTile.toFloat();
+	g.setColour (Theme::panelRaised);
+	g.fillRoundedRectangle (tile, Theme::corner (tile));
 }
 
 void OneDeckView::resized()
@@ -310,7 +186,11 @@ void OneDeckView::resized()
 	surface::DeckTile parts;
 	parts.overview = surface::fromJuce (area.removeFromTop (share (getHeight(), overviewShare)));
 	area.removeFromTop (gap);
-	outputRow.setBounds (area.removeFromBottom (juce::roundToInt (height * outputsShare)));
+	const auto foot = surface::oneDeckFoot (surface::fromJuce (area.removeFromBottom (juce::roundToInt (height * footShare))),
+											surface::metrics (getWidth()));
+	transportTile = surface::toJuce (foot.transport.tile);
+	panel.setTransportBounds (foot.transport);
+	outputRow.setBounds (surface::toJuce (foot.metersTile));
 	area.removeFromBottom (gap);
 
 	// The deck panel's card: title and stems, DeckPanel's column, BPM, then

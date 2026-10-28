@@ -3,6 +3,7 @@
 #include "Buses.h"
 #include "SpatialLaw.h"
 
+#include <array>
 #include <string>
 
 // What StemDeck puts on its outputs: the five stereo buses (Buses.h), mixed
@@ -62,6 +63,22 @@ namespace outputs
 			return { channels, 0, bformatChannels + auxChannels, bformatChannels, bformatChannels + auxChannels + cueChannels, false };
 		}
 		inline int channelCount() { return layout().channels; }
+
+		// The screen meters each bus by its W, ACN 0 (2026-10-28): one bar
+		// for MAIN, AUX and CUE, in that order.
+		enum class MeteredBus { main, aux, cue };
+		inline constexpr std::array<MeteredBus, 3> meteredBuses { MeteredBus::main, MeteredBus::aux, MeteredBus::cue };
+		inline int wChannel (MeteredBus bus)
+		{
+			const auto l = layout();
+			switch (bus)
+			{
+				case MeteredBus::main: return l.bformat;
+				case MeteredBus::aux:  return l.aux;
+				case MeteredBus::cue:  return l.cue;
+			}
+			return l.bformat;
+		}
 
 		inline std::string portName (int channel)
 		{

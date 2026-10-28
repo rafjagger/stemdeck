@@ -27,7 +27,9 @@ public:
 	// spatial::phonesDecoderRuns says.
 	void updatePhonesDecoder (spatial::PhonesMode, bool phonesConnected, bool coreHeard);
 	bool phonesDecoderOn() const;
-	// LEVEL 0..1 and CUE<->MIX 0 (cue) .. 1 (mix).
+	// LEVEL 0..1 and CUE<->MIX 0 (cue) .. 1 (mix). No control on the screen
+	// since 2026-10-28 (cue and level are the desk's): the phones decoder
+	// plays at the defaults, 100 % and CUE, unless set here.
 	void setPhones (float level, float mix);
 
 	// The screen's meters: a channel's peak since the last call (any of the 22).

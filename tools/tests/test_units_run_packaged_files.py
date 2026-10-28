@@ -198,12 +198,27 @@ class TheBaseUnit(unittest.TestCase):
 class TheAes67Units(unittest.TestCase):
     UNITS = ("a3-aes67-deck@.service", "stemdeck-aes67.service")
 
-    def test_a_refused_render_does_not_loop(self):
-        """Exit 2 is a refused letter or a truth without the deck's keys."""
+    CONDITIONS = {
+        "a3-aes67-deck@.service": ("base-wanted", "can-render %i"),
+        "stemdeck-aes67.service": ("base-wanted", "can-render-base"),
+    }
+
+    def test_a_render_that_would_refuse_skips_the_unit(self):
+        """A failed ExecStartPre is restarted whatever RestartPreventExitStatus
+        says (measured, systemd 262): the refusal is a condition instead."""
+        for unit, steps in self.CONDITIONS.items():
+            lines = (UNITS / unit).read_text().splitlines()
+            first_pre = min(i for i, l in enumerate(lines) if l.startswith("ExecStartPre="))
+            for step in steps:
+                line = f"ExecCondition=/usr/lib/stemdeck/stemdeck-aes67-deck {step}"
+                with self.subTest(unit=unit, step=step):
+                    self.assertIn(line, lines)
+                    self.assertLess(lines.index(line), first_pre)
+
+    def test_no_restart_prevention_that_does_nothing(self):
         for unit in self.UNITS:
             with self.subTest(unit=unit):
-                self.assertIn("RestartPreventExitStatus=2",
-                              (UNITS / unit).read_text().splitlines())
+                self.assertNotIn("RestartPreventExitStatus", (UNITS / unit).read_text())
 
     def test_they_keep_the_host_s_audio_port(self):
         """The deck-host role sets it (P28); a unit that set it would override the role."""

@@ -9,6 +9,11 @@
     stemdeck-aes67-deck render-base [--truth PATH] [--home DIR]
         ~/.config/pipewire/pipewire-stemdeck-aes67.conf: the host's PTP clock
         and the Core's stream received (stemdeck-aes67.service).
+    stemdeck-aes67-deck can-render <X> | can-render-base [--truth PATH] [--home DIR]
+        Exit 0 when the render would succeed, 1 (with the reason) where it
+        would refuse: the units' ExecCondition, so a refusal skips the unit
+        instead of failing it -- systemd retries a failed ExecStartPre
+        whatever RestartPreventExitStatus says (measured, v262).
     stemdeck-aes67-deck base-wanted [--home DIR]
         Exit 0 when this host runs the base instance, 1 where a3-core's
         a3-aes67.service is (its ExecCondition): one PTP0 driver a graph.
@@ -198,15 +203,38 @@ class Parser(argparse.ArgumentParser):
 def parse(argv):
     parser = Parser(prog="stemdeck-aes67-deck")
     steps = parser.add_subparsers(dest="step", required=True)
-    deck = steps.add_parser("render")
-    deck.add_argument("letter")
-    base = steps.add_parser("render-base")
+    deck_steps = [steps.add_parser(name) for name in ("render", "can-render")]
+    base_steps = [steps.add_parser(name) for name in ("render-base", "can-render-base")]
     wanted = steps.add_parser("base-wanted")
-    for step in (deck, base, wanted):
+    for step in deck_steps:
+        step.add_argument("letter")
+    for step in (*deck_steps, *base_steps, wanted):
         step.add_argument("--home", type=Path, default=Path.home())
-    for step in (deck, base):
+    for step in (*deck_steps, *base_steps):
         step.add_argument("--truth")
     return parser.parse_args(argv)
+
+
+def target(args, environ):
+    """(path, make) for the deck or base config the step names."""
+    folder = args.home / PIPEWIRE_DIR
+    if args.step in ("render", "can-render"):
+        letter = deck_letter(args.letter)
+        truth = load_truth(truth_path(args.truth, args.home, environ))
+        return (folder / f"pipewire-aes67-deck-{letter}.conf",
+                lambda: deck_conf(truth, letter, environ))
+    truth = load_truth(truth_path(args.truth, args.home, environ))
+    return folder / BASE_CONF, lambda: base_conf(truth, environ)
+
+
+def can_render(args, environ):
+    """The unit's ExecCondition: 1 (skip, no restart) where render would refuse."""
+    try:
+        target(args, environ)[1]()
+    except (Refused, NoAudioPort) as refusal:
+        print(f"stemdeck-aes67-deck: {refusal}; not started")
+        return 1
+    return 0
 
 
 def run(argv, environ):
@@ -217,14 +245,9 @@ def run(argv, environ):
             print(f"stemdeck-aes67-deck: {unit} is here; its instance owns PTP0")
             return 1
         return 0
-    if args.step == "render":
-        letter = deck_letter(args.letter)
-    truth = load_truth(truth_path(args.truth, args.home, environ))
-    folder = args.home / PIPEWIRE_DIR
-    if args.step == "render":
-        render(folder / f"pipewire-aes67-deck-{letter}.conf", lambda: deck_conf(truth, letter, environ))
-    else:
-        render(folder / BASE_CONF, lambda: base_conf(truth, environ))
+    if args.step.startswith("can-"):
+        return can_render(args, environ)
+    render(*target(args, environ))
     return 0
 
 

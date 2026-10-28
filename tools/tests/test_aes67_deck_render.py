@@ -316,6 +316,63 @@ class WhichTruth(RenderCase):
         self.assertEqual(0, self.run_tool("render", "B").returncode)
 
 
+class CanRender(RenderCase):
+    """`can-render <X>` / `can-render-base`: the units' ExecCondition. A refusal
+    skips the unit (exit 1) instead of failing it: systemd retries a failed
+    ExecStartPre whatever RestartPreventExitStatus says (measured, v262)."""
+
+    REFUSALS = (
+        ("no audio port", {"network": {}}, "B"),
+        ("letter without a group", {}, "C"),
+        ("no deck listener", {"listeners": TRUTH["listeners"][2:]}, "B"),
+        ("no sap listener", {"listeners": TRUTH["listeners"][:2]}, "B"),
+        ("no sap host", {"hosts": {k: v for k, v in TRUTH["hosts"].items() if k != "sap"}}, "B"),
+    )
+
+    def check(self, step, *args):
+        return self.run_tool(step, *args, "--truth", str(self.truth_file))
+
+    def test_a_renderable_deck_and_base_pass(self):
+        self.assertEqual(0, self.check("can-render", "B").returncode)
+        self.assertEqual(0, self.check("can-render-base").returncode)
+        self.assertEqual([], self.written())
+
+    def test_can_render_agrees_with_render_on_every_refusal(self):
+        for why, change, letter in self.REFUSALS:
+            with self.subTest(why=why):
+                self.write_truth({**TRUTH, **change})
+                self.assertNotEqual(0, self.render("render", letter).returncode)
+                done = self.check("can-render", letter)
+                self.assertEqual(1, done.returncode)
+                self.assertTrue(done.stdout.strip())
+                self.assertEqual([], self.written())
+
+    def test_can_render_base_agrees_with_render_base(self):
+        for why, change in (("no audio port", {"network": {}}),
+                            ("no sap listener", {"listeners": TRUTH["listeners"][:2]})):
+            with self.subTest(why=why):
+                self.write_truth({**TRUTH, **change})
+                self.assertNotEqual(0, self.render("render-base").returncode)
+                self.assertEqual(1, self.check("can-render-base").returncode)
+                self.assertEqual([], self.written())
+
+    def test_what_is_no_letter_is_skipped_not_failed(self):
+        for word in ("BB", "1", ""):
+            with self.subTest(word=word):
+                self.assertEqual(1, self.check("can-render", word).returncode)
+
+    def test_a_missing_truth_is_skipped(self):
+        self.truth_file.unlink()
+        self.assertEqual(1, self.check("can-render", "B").returncode)
+        self.assertEqual(1, self.check("can-render-base").returncode)
+
+    def test_the_host_s_audio_port_counts(self):
+        self.write_truth({**TRUTH, "network": {}})
+        done = self.run_tool("can-render", "B", "--truth", str(self.truth_file),
+                             env={"STEMDECK_AUDIO_PORT": "eno2"})
+        self.assertEqual(0, done.returncode)
+
+
 class UsageErrors(RenderCase):
     def test_an_unknown_step_is_refused(self):
         self.assertEqual(2, self.run_tool("nonsense").returncode)

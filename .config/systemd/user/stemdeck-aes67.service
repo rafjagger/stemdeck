@@ -11,11 +11,11 @@ After=pipewire.service wireplumber.service
 
 [Service]
 ExecCondition=/usr/lib/stemdeck/stemdeck-aes67-deck base-wanted
+# A render that would refuse (no audio socket, no group for the letter) skips
+# the unit: systemd retries a failing ExecStartPre whatever its exit status.
+ExecCondition=/usr/lib/stemdeck/stemdeck-aes67-deck can-render-base
 # STEMDECK_AUDIO_PORT, the host's audio socket, comes from the deck-host role's drop-in.
 ExecStartPre=/usr/lib/stemdeck/stemdeck-aes67-deck render-base
 ExecStart=/usr/bin/pipewire -c %h/.config/pipewire/pipewire-stemdeck-aes67.conf
 Restart=always
 RestartSec=2
-# Exit 2 is a refused render (a bad letter, a truth without the deck's keys):
-# restarting cannot mend it.
-RestartPreventExitStatus=2

@@ -12,6 +12,11 @@ namespace osctruth
 	// The file's `hosts`: name -> address. Empty, with `error` set, likewise.
 	std::map<std::string, std::string> readHosts (const std::string& path, std::string& error);
 
+	// The control network, network.address ("a.b.c.d/len", the Core's host
+	// address and the LAN's prefix). Empty when the truth has none; `error`
+	// set only when the file is missing or does not parse.
+	std::string readControlNetwork (const std::string& path, std::string& error);
+
 	// The patterns StemDeck speaks by remote control (spec stemdeck-remote).
 	// A missing one stays empty, with `error` naming it.
 	remote::Words readRemoteWords (const std::string& path, std::string& error);

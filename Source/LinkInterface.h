@@ -15,10 +15,6 @@
 // instead (a3nuc2: enp5s0 before eno1).
 namespace linkinterface
 {
-	// The control LAN, 192.168.8.0/24 -- the same constant the installer and
-	// the truth's network section carry.
-	constexpr const char* controlSubnet = "192.168.8.0/24";
-
 	struct Candidate
 	{
 		std::string name;
@@ -42,14 +38,17 @@ namespace linkinterface
 	// Zeros when the interface has none.
 	std::array<uint8_t, 6> hardwareAddress (const std::string& interfaceName);
 
-	// The up, broadcast-capable, non-loopback interface on the control LAN.
-	std::optional<Addresses> controlLan();
+	// The control LAN as the truth names it (network.address); empty when it does not.
+	std::string controlNetwork();
+
+	// The up, broadcast-capable, non-loopback interface in `subnet`; nothing for an empty one.
+	std::optional<Addresses> controlLan (const std::string& subnet);
 }
 
 // Pin the receiver (and so the sender's broadcast) to the control LAN; without
-// one up, it keeps finding its own interface at start().
+// one in the truth or up here, it keeps finding its own interface at start().
 inline void pinLinkToControlLan (ProLinkReceiver& receiver)
 {
-	if (const auto lan = linkinterface::controlLan())
+	if (const auto lan = linkinterface::controlLan (linkinterface::controlNetwork()))
 		receiver.useInterface (lan->local, lan->broadcast, lan->mac);
 }

@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Raphael Eismann
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "LinkInterface.h"
+#include "OscTruthFile.h"
 
 #include <arpa/inet.h>
 #include <ifaddrs.h>
@@ -80,8 +81,17 @@ namespace linkinterface
 		return mac;
 	}
 
-	std::optional<Addresses> controlLan()
+	std::string controlNetwork()
 	{
+		std::string error;
+		return osctruth::readControlNetwork (osctruth::liveTruthPath(), error);
+	}
+
+	std::optional<Addresses> controlLan (const std::string& subnet)
+	{
+		if (subnet.empty())
+			return std::nullopt;
+
 		ifaddrs* list = nullptr;
 		if (getifaddrs (&list) < 0)
 			return std::nullopt;
@@ -99,7 +109,7 @@ namespace linkinterface
 		}
 
 		std::optional<Addresses> result;
-		if (const auto chosen = chooseCandidate (found, controlSubnet))
+		if (const auto chosen = chooseCandidate (found, subnet))
 			for (auto* ifa = list; ifa != nullptr && ! result; ifa = ifa->ifa_next)
 			{
 				if (ifa->ifa_addr == nullptr || ifa->ifa_addr->sa_family != AF_INET || chosen->name != ifa->ifa_name)

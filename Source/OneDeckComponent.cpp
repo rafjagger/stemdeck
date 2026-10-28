@@ -141,6 +141,7 @@ void OneDeckComponent::loadSet (const StemSet& set)
 	}
 	view.setSet (set);
 	findSteps();
+	rearmPotPickups();
 }
 
 void OneDeckComponent::loadById (const juce::String& setId)
@@ -205,6 +206,7 @@ void OneDeckComponent::restoreSession()
 	}
 
 	creatorLink->restore (restored.stemJobs);
+	rearmPotPickups();
 
 	if (restored.imported)
 		saveSession();
@@ -355,6 +357,7 @@ void OneDeckComponent::updatePanelOwner()
 	auto decoder = std::make_unique<PanelDevice::MappedDecoder<panel1::InputDecoder, panel1::Event>>();
 	decoder->onEvent = [this] (const panel1::Event& e) { handlePanel (e); };
 	panelDevice = std::make_unique<PanelDevice> (std::move (decoder));
+	rearmPotPickups();   // the panel was gained
 }
 
 // Every press goes through the screen's own control: the panel does what a
@@ -386,7 +389,29 @@ void OneDeckComponent::handlePanel (const panel1::Event& e)
 		case Type::lengthUp:   column.oneShots().lengthUp().triggerClick(); break;
 		case Type::gain:       knobsetup::nudge (column.gain(), e.value); break;
 		case Type::threeD:     knobsetup::nudge (column.threeD(), e.value); break;
+		case Type::aux:        panelAux (e.stem, e.value); break;
 		default: break;
+	}
+}
+
+// The pot moves AUX only once it has crossed the knob's value; until then the knob shows where it stands.
+void OneDeckComponent::panelAux (int stem, double reading)
+{
+	auto& column = view.column (stem);
+	auto& pickup = potPickups[(size_t) stem];
+	if (! pickup.pickedUp())
+		pickup.setStored (column.aux().getValue());
+	if (const auto value = pickup.feed (reading))
+		column.aux().setValue (*value, juce::sendNotificationSync);
+	column.setAuxGhost (pickup.pickedUp() ? std::nullopt : std::optional<double> (pickup.ghost()));
+}
+
+void OneDeckComponent::rearmPotPickups()
+{
+	for (int s = 0; s < StemDeckPlayer::numStems; ++s)
+	{
+		potPickups[(size_t) s].rearm (view.column (s).aux().getValue());
+		view.column (s).setAuxGhost (std::nullopt);
 	}
 }
 

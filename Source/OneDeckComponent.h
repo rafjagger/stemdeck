@@ -14,6 +14,7 @@
 #include "PanelDevice.h"
 #include "PanelMapOneDeck.h"
 #include "PanelOwnership.h"
+#include "PotPickup.h"
 #include "ProLinkReceiver.h"
 #include "ProLinkSender.h"
 #include "RecorderControls.h"
@@ -67,6 +68,10 @@ private:
 	void updatePanelOwner();
 	void handlePanel (const panel1::Event&);
 	void showPanel();
+	// R13: the pots find their values again. After a session, a set load and a restore; B8 calls it
+	// when the panel is gained (here: whenever panelDevice is created).
+	void rearmPotPickups();
+	void panelAux (int stem, double reading);
 	void showSettings();
 	// The link (S4.7): joined while SYNC or MASTER is on; the MASTER deck publishes.
 	void startSync();
@@ -106,6 +111,7 @@ private:
 	panel::Ownership panelOwnership;
 	std::unique_ptr<PanelDevice> panelDevice;
 	int panelCountdown = 0;
+	std::array<PotPickup, StemDeckPlayer::numStems> potPickups;
 
 	OneDeckView view { deckAudio, formatManager, instance.letter - 'A' };
 	juce::Label deckLabel, deviceStatus;

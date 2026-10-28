@@ -80,6 +80,8 @@ add_executable(stemdeck-tests
     ${CMAKE_SOURCE_DIR}/Source/PanelLink.cpp
     PanelMapOneDeck.cpp
     ${CMAKE_SOURCE_DIR}/Source/PanelMapOneDeck.cpp
+    PotPickup.cpp
+    ${CMAKE_SOURCE_DIR}/Source/PotPickup.cpp
     PanelOwnership.cpp
     AppSettings.cpp
     ${CMAKE_SOURCE_DIR}/Source/AppSettings.cpp

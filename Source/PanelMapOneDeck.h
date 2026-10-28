@@ -6,6 +6,7 @@
 #include "PanelMap.h"
 
 #include <array>
+#include <optional>
 #include <vector>
 
 // What the A³ Motion panel means to a one-deck (-bformat) StemDeck, and what
@@ -20,7 +21,8 @@
 //       row 4  CUE    MUTE
 //       row 5  <      >      (the one-shot length)
 //   stem s's encoders: the upper one is GAIN (its push mutes), the lower is 3D.
-//   The pots are unused.
+//   The pots are AUX of stems 1-4 (pot n is stem n's send); the owner puts them
+//   through a PotPickup, so a pot never makes a value jump.
 namespace panel1
 {
 	using panel::Cell;
@@ -43,11 +45,11 @@ namespace panel1
 
 	struct Event
 	{
-		enum class Type { cueDown, cueUp, play, shiftDown, shiftUp, shot, stemCue, stemMute, lengthDown, lengthUp, gain, threeD };
+		enum class Type { cueDown, cueUp, play, shiftDown, shiftUp, shot, stemCue, stemMute, lengthDown, lengthUp, gain, threeD, aux };
 		Type type = Type::play;
 		int stem = -1;
 		motionlite::Shape shape = motionlite::Shape::orbit;   // shot
-		double value = 0.0;                                   // gain, threeD: encoder detents, + clockwise
+		double value = 0.0;                                   // gain, threeD: encoder detents, + clockwise; aux: the pot's reading, 0..1
 	};
 
 	// Turns polled frames into events: a key reports its press (CUE and SHIFT
@@ -56,10 +58,11 @@ namespace panel1
 	{
 	public:
 		std::vector<Event> feed (const panel::Frame& frame);
-		void reset() { tracker.reset(); }
+		void reset() { tracker.reset(); potAt = {}; }
 
 	private:
 		panel::EdgeTracker tracker;
+		std::array<std::optional<int>, panel::potCount> potAt {};
 	};
 
 	//==============================================================================

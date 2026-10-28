@@ -9,6 +9,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include <functional>
+#include <optional>
 
 class DeckSpatialPorts;
 class StemDeckPlayer;
@@ -43,7 +44,11 @@ public:
 	juce::String stateText() const { return stateLabel.getText(); }
 	juce::String auxCaptionText() const { return auxCaption.getText(); }
 
+	// Where the hardware pot for AUX stands while it has not picked the knob up (R13); none hides the mark.
+	void setAuxGhost (std::optional<double> position);
+
 	void paint (juce::Graphics&) override;
+	void paintOverChildren (juce::Graphics&) override;
 	void resized() override;
 
 private:
@@ -56,6 +61,7 @@ private:
 	const juce::Colour colour;
 
 	juce::Label nameLabel, stateLabel;
+	std::optional<double> auxGhost;
 	juce::Slider gainKnob, threeDKnob, auxKnob, widthKnob;
 	juce::Label gainCaption, threeDCaption, auxCaption, widthCaption;
 	StemViewer stemViewer;

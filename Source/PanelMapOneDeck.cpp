@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "PanelMapOneDeck.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace panel1
@@ -156,6 +157,23 @@ namespace panel1
 				event.stem = knob.stem;
 				events.push_back (event);
 			}
+		}
+
+		if (! frame.pots)
+			return events;
+		// The first reading of each pot is reported too: the screen shows where it stands.
+		for (int pot = 0; pot < panel::potCount; ++pot)
+		{
+			const auto raw = (*frame.pots)[(size_t) pot];
+			auto& at = potAt[(size_t) pot];
+			if (at && std::abs (raw - *at) <= panel::InputDecoder::potDeadband)
+				continue;
+			at = raw;
+			Event event;
+			event.type = Event::Type::aux;
+			event.stem = pot;
+			event.value = std::clamp (raw / (double) panel::potMaximum, 0.0, 1.0);
+			events.push_back (event);
 		}
 		return events;
 	}

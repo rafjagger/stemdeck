@@ -5,6 +5,7 @@
 #include <JuceHeader.h>
 
 #include <arpa/inet.h>
+#include <utility>
 #include <netinet/in.h>
 #include <poll.h>
 #include <sys/socket.h>
@@ -79,6 +80,11 @@ bool ProLinkReceiver::start (int number, const osctruth::ProLinkPorts& truthPort
 		broadcastIp = found->broadcast;
 	}
 	announcer = std::make_unique<prolink::Announcer> (self);
+	tempo = std::make_unique<prolink::TempoMaster> (number, deviceName, now());
+	addresses.clear();
+	ownIp = self.ip;
+	lastWantsMaster = false;
+	currentDevice = number;
 	online = false;
 
 	if (! openSocket (sockAnnounce, ports.announce)
@@ -90,6 +96,8 @@ bool ProLinkReceiver::start (int number, const osctruth::ProLinkPorts& truthPort
 		std::lock_guard<std::mutex> guard (lock);
 		lastError.clear();
 		events.clear();
+		role = {};
+		pendingChange = prolink::TempoMaster::Change::none;
 	}
 	running = true;
 	thread = std::thread ([this] { run(); });
@@ -139,14 +147,118 @@ void ProLinkReceiver::hearAnnouncement (double at)
 		announce (announcer->hear (buffer, (size_t) n, from.sin_addr.s_addr, at));
 }
 
-void ProLinkReceiver::run()
+prolink::MasterState ProLinkReceiver::masterState() const
+{
+	std::lock_guard<std::mutex> guard (lock);
+	return role;
+}
+
+void ProLinkReceiver::reportLocal (bool hasTrack, bool playing, bool synced)
+{
+	localTrack = hasTrack;
+	localPlaying = playing;
+	localSynced = synced;
+}
+
+prolink::TempoMaster::Change ProLinkReceiver::takeMasterChange()
+{
+	std::lock_guard<std::mutex> guard (lock);
+	return std::exchange (pendingChange, prolink::TempoMaster::Change::none);
+}
+
+// Port 50001, unicast to the device as a CDJ does -- except to a device on
+// this host, which shares the port with us and beat-analyzer: a unicast would
+// reach only the socket bound last, so it goes out as broadcast (#70).
+void ProLinkReceiver::sendControl (const std::vector<prolink::TempoMaster::Send>& packets)
+{
+	for (const auto& packet : packets)
+	{
+		const auto found = addresses.find (packet.to);
+		if (found == addresses.end())
+			continue;
+		sockaddr_in to {};
+		to.sin_family = AF_INET;
+		to.sin_port = htons ((uint16_t) ports.beat);
+		to.sin_addr.s_addr = found->second == ownIp ? broadcastIp : found->second;
+		sendto (sockBeat, packet.bytes.data(), packet.bytes.size(), 0, reinterpret_cast<sockaddr*> (&to), sizeof (to));
+	}
+}
+
+// The role follows the number (a mixer may assign one), the deck the sender
+// reports and the DJ's MASTER; it acts only once the number is ours.
+void ProLinkReceiver::runTempoMaster (double at)
+{
+	tempo->setDevice (announcer->device());
+	tempo->setLocal (localTrack.load(), localPlaying.load(), localSynced.load());
+	if (const auto wanted = wantsMaster.load(); wanted != lastWantsMaster)
+	{
+		tempo->want (wanted, at);
+		lastWantsMaster = wanted;
+	}
+	if (online)
+		sendControl (tempo->tick (at));
+
+	std::lock_guard<std::mutex> guard (lock);
+	role = tempo->state();
+	if (const auto change = tempo->takeChange(); change != prolink::TempoMaster::Change::none)
+		pendingChange = change;
+}
+
+void ProLinkReceiver::hearStatus (double at)
 {
 	uint8_t buffer[600]; // CDJ-3000 status packets reach 0x200 bytes
+	sockaddr_in from {};
+	socklen_t fromLength = sizeof (from);
+	const auto n = recvfrom (sockStatus, buffer, sizeof (buffer), 0, reinterpret_cast<sockaddr*> (&from), &fromLength);
+	if (n <= 0)
+		return;
 
+	const auto own = currentDevice.load();
+	if (auto status = prolink::parseStatus (buffer, (size_t) n); status && status->device != 0 && status->device != own)
+	{
+		addresses[status->device] = from.sin_addr.s_addr;
+		sendControl (tempo->hear (*status, at));
+		std::lock_guard<std::mutex> guard (lock);
+		events.push_back ({ *status, at });
+	}
+	else if (auto mixer = prolink::parseMixerStatus (buffer, (size_t) n); mixer && mixer->device != own)
+	{
+		addresses[mixer->device] = from.sin_addr.s_addr;
+		sendControl (tempo->hear (*mixer, at));
+	}
+}
+
+// Port 50001: beats, and the takeover and sync control packets.
+void ProLinkReceiver::hearBeatPort (double at)
+{
+	uint8_t buffer[600];
+	sockaddr_in from {};
+	socklen_t fromLength = sizeof (from);
+	const auto n = recvfrom (sockBeat, buffer, sizeof (buffer), 0, reinterpret_cast<sockaddr*> (&from), &fromLength);
+	if (n <= 0)
+		return;
+
+	const auto own = currentDevice.load();
+	if (auto beat = prolink::parseBeat (buffer, (size_t) n); beat && beat->device != own)
+	{
+		std::lock_guard<std::mutex> guard (lock);
+		events.push_back ({ *beat, at });
+	}
+	else if (auto control = prolink::parseControl (buffer, (size_t) n); control && control->device != own)
+	{
+		addresses[control->device] = from.sin_addr.s_addr;
+		sendControl (tempo->hear (*control, at));
+	}
+}
+
+void ProLinkReceiver::run()
+{
 	while (running)
 	{
 		announce (announcer->due (now()));
 		online = announcer->isOnline();
+		currentDevice = announcer->device();
+		runTempoMaster (now());
 		if (! announcer->refusal().empty())
 		{
 			std::lock_guard<std::mutex> guard (lock);
@@ -161,28 +273,10 @@ void ProLinkReceiver::run()
 			hearAnnouncement (now());
 
 		if (fds[1].revents & POLLIN)
-		{
-			const auto n = recv (sockBeat, buffer, sizeof (buffer), 0);
-			const auto at = now();
-			if (n > 0)
-				if (auto beat = prolink::parseBeat (buffer, (size_t) n); beat && beat->device != deviceNumber)
-				{
-					std::lock_guard<std::mutex> guard (lock);
-					events.push_back ({ *beat, at });
-				}
-		}
+			hearBeatPort (now());
 
 		if (fds[2].revents & POLLIN)
-		{
-			const auto n = recv (sockStatus, buffer, sizeof (buffer), 0);
-			const auto at = now();
-			if (n > 0)
-				if (auto status = prolink::parseStatus (buffer, (size_t) n); status && status->device != 0 && status->device != deviceNumber)
-				{
-					std::lock_guard<std::mutex> guard (lock);
-					events.push_back ({ *status, at });
-				}
-		}
+			hearStatus (now());
 	}
 }
 

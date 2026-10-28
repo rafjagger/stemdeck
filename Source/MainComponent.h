@@ -85,6 +85,8 @@ private:
 	double applyFollow (int deckIndex, FollowInput in, double followerPosition);
 	void setSyncSource (bool pio);
 	void setMasterDeck (int deckIndex);
+	int reportedDeck() const;
+	void followLinkMaster();
 	void updateNetwork();
 	std::array<bool, 2> decksPlaying() const;
 	void followPioneer();

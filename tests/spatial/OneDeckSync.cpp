@@ -211,7 +211,7 @@ TEST (ProLinkOnOneHost, TheSenderWaitsForThePlayerNumber)
 
 	ProLinkSender sender;
 	sender.setMaster (&player);
-	ASSERT_TRUE (sender.start (deckB, loopbackBroadcast, testPorts(), "StemDeck", [&deck] { return deck.isOnline(); }));
+	ASSERT_TRUE (sender.start (deckB, loopbackBroadcast, testPorts(), "StemDeck", &deck));
 
 	EXPECT_TRUE (heard<prolink::StatusPacket> (listener, 3.0).empty()) << "nothing while the number is claimed";
 	const auto statuses = heard<prolink::StatusPacket> (listener, 1.5);
@@ -219,6 +219,69 @@ TEST (ProLinkOnOneHost, TheSenderWaitsForThePlayerNumber)
 	ASSERT_FALSE (statuses.empty()) << "the claim is done after 3.6 s";
 	EXPECT_EQ (statuses.front().device, deckB);
 	sender.stop();
+}
+
+// D2: on the link, a player sends status whether master or not, and with no
+// track loaded says so (BPM ffff) -- as a CDJ does.
+TEST (ProLinkOnOneHost, ANonMasterWithoutATrackStillSendsStatus)
+{
+	ProLinkReceiver deck, listener;
+	ASSERT_TRUE (startOnLoopback (deck, deckB)) << deck.error();
+	ASSERT_TRUE (startOnLoopback (listener, 7)) << listener.error();
+
+	ProLinkSender sender;
+	ASSERT_TRUE (sender.start (deckB, loopbackBroadcast, testPorts(), "StemDeck B", &deck));
+
+	heard<prolink::StatusPacket> (listener, 3.8);   // the claim
+	const auto statuses = heard<prolink::StatusPacket> (listener, 0.7);
+	ASSERT_GE (statuses.size(), 2u) << "about every 200 ms";
+	EXPECT_EQ (statuses.back().device, deckB);
+	EXPECT_FALSE (statuses.back().isMaster);
+	EXPECT_DOUBLE_EQ (statuses.back().bpm, 0.0) << "no track";
+	sender.stop();
+}
+
+// D3 over the sockets, two instances on one host: deck A is master; MASTER on
+// deck B asks it (broadcast, as both share the port), A names B in Mh, B
+// takes over and A lets go.
+TEST (ProLinkOnOneHost, MasterPassesBetweenTwoInstances)
+{
+	juce::ScopedJuceInitialiser_GUI juce;
+	juce::AudioFormatManager formats;
+	StemDeckPlayer playerA (formats), playerB (formats);
+	playerA.setBeatGrid ({ 126.0, 0.0 });
+	playerB.setBeatGrid ({ 124.0, 0.0 });
+
+	ProLinkReceiver a, b;
+	ASSERT_TRUE (startOnLoopback (a, deckA)) << a.error();
+	ASSERT_TRUE (startOnLoopback (b, deckB)) << b.error();
+	ProLinkSender senderA, senderB;
+	senderA.setMaster (&playerA);
+	senderB.setReported (&playerB);
+	ASSERT_TRUE (senderA.start (deckA, loopbackBroadcast, testPorts(), "StemDeck A", &a));
+	ASSERT_TRUE (senderB.start (deckB, loopbackBroadcast, testPorts(), "StemDeck B", &b));
+	a.wantMaster (true);
+
+	const auto waitFor = [] (auto condition, double seconds)
+	{
+		const auto until = std::chrono::steady_clock::now() + std::chrono::duration<double> (seconds);
+		while (! condition() && std::chrono::steady_clock::now() < until)
+			std::this_thread::sleep_for (std::chrono::milliseconds (10));
+		return condition();
+	};
+	ASSERT_TRUE (waitFor ([&a] { return a.masterState().master; }, 5.0)) << "alone, A takes it";
+
+	senderB.setMaster (&playerB);
+	b.wantMaster (true);
+	// Within the next status of A's, well before B would take it unanswered.
+	static_assert (prolink::TempoMaster::answerWait >= 0.8);
+	ASSERT_TRUE (waitFor ([&b] { return b.masterState().master; }, 0.8)) << "A hands over";
+	ASSERT_TRUE (waitFor ([&a] { return ! a.masterState().master; }, 1.0)) << "and lets go";
+	EXPECT_EQ (a.takeMasterChange(), prolink::TempoMaster::Change::yielded);
+	EXPECT_EQ (b.takeMasterChange(), prolink::TempoMaster::Change::none) << "B asked for it";
+	EXPECT_EQ (a.masterState().syncCounter, 1u);
+	senderA.stop();
+	senderB.stop();
 }
 
 //==============================================================================
@@ -339,6 +402,25 @@ TEST_F (OneDeckSyncTest, AnotherInstanceTakingMasterTurnsThisOneOff)
 	EXPECT_TRUE (sync.update (10.05)) << "gave master up";
 	EXPECT_FALSE (sync.isMaster());
 	EXPECT_FALSE (view.deckPanel().isMasterLit());
+}
+
+// D3: the link hands MASTER to this deck (the old master paused, or a DJM's
+// command): it lights and leads; another player taking it turns it off.
+TEST_F (OneDeckSyncTest, TheLinkHandsMasterHereAndTakesItAway)
+{
+	using Change = prolink::TempoMaster::Change;
+	sync.setSynced (true);
+	player().setSyncNudge (1.01);
+	EXPECT_FALSE (sync.followLink (Change::none, 10.0));
+	EXPECT_TRUE (sync.followLink (Change::granted, 10.0));
+	EXPECT_TRUE (sync.isMaster());
+	EXPECT_TRUE (view.deckPanel().isMasterLit());
+	EXPECT_DOUBLE_EQ (player().getEffectiveRate(), 1.0) << "the master leads";
+
+	EXPECT_TRUE (sync.followLink (Change::yielded, 11.0));
+	EXPECT_FALSE (sync.isMaster());
+	EXPECT_FALSE (view.deckPanel().isMasterLit());
+	EXPECT_FALSE (sync.followLink (Change::yielded, 11.1)) << "already off";
 }
 
 TEST_F (OneDeckSyncTest, SyncOffReleasesTheNudge)

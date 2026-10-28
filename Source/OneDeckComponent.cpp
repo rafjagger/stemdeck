@@ -264,6 +264,8 @@ void OneDeckComponent::startSync()
 {
 	std::string truthError;
 	linkPorts = osctruth::proLinkPortsFrom (osctruth::readListeners (truth.path, truthError));
+	// The one deck is what this player's status and position report.
+	linkSender.setReported (&deckAudio.host().player());
 
 	auto& panel = view.deckPanel();
 	panel.setSyncTooltip (syncLabels::linkSyncTooltip());
@@ -284,6 +286,7 @@ void OneDeckComponent::startSync()
 void OneDeckComponent::masterChanged()
 {
 	linkSender.setMaster (sync.isMaster() ? &deckAudio.host().player() : nullptr);
+	link.wantMaster (sync.isMaster());
 	updateLink();
 }
 
@@ -291,7 +294,7 @@ void OneDeckComponent::masterChanged()
 // whether the player is there.
 void OneDeckComponent::updateLink()
 {
-	const auto presence = prolink::presence (linkPorts.complete(), sync.isMaster());
+	const auto presence = prolink::presence (linkPorts.complete());
 	if (! presence.receiver)
 	{
 		linkSender.stop();
@@ -303,11 +306,10 @@ void OneDeckComponent::updateLink()
 	if (! link.isRunning() && link.start (device, linkPorts, instance.title()))
 		sync.joined (nowSeconds());
 
+	// A status goes out whether master or not, as a CDJ's does; MASTER adds
+	// the beats (masterChanged() hands the sender the deck).
 	if (presence.sender && link.isRunning() && ! linkSender.isRunning())
-		linkSender.start (device, link.broadcastAddress(), linkPorts, instance.title(),
-						  [this] { return link.isOnline(); });
-	else if (! presence.sender)
-		linkSender.stop();
+		linkSender.start (device, link.broadcastAddress(), linkPorts, instance.title(), &link);
 }
 
 void OneDeckComponent::showSyncStatus()
@@ -520,8 +522,11 @@ void OneDeckComponent::timerCallback()
 {
 	view.refresh();
 	sync.hear (link.drain());
-	if (sync.update (nowSeconds()))
-		masterChanged();   // another deck took MASTER
+	const auto handedOver = sync.followLink (link.takeMasterChange(), nowSeconds());
+	if (sync.update (nowSeconds()) || handedOver)
+		masterChanged();   // another deck took MASTER, or the link handed it here
+	link.wantMaster (sync.isMaster());
+	linkSender.setSynced (sync.isSynced());
 	// Not on the link (no network yet, ports busy): again every two seconds.
 	if (linkPorts.complete() && ! link.isRunning() && --linkRetryCountdown <= 0)
 	{

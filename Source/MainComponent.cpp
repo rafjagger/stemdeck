@@ -943,16 +943,56 @@ void MainComponent::setMasterDeck (int deckIndex)
 	for (int d = 0; d < numDecks; ++d)
 		decks[(size_t) d]->setMaster (d == deckIndex);
 	pioSender.setMaster (deckIndex >= 0 ? players[(size_t) deckIndex] : nullptr);
+	proLink.wantMaster (deckIndex >= 0);
 	updateNetwork();
 }
 
+// The deck this player's status and position report: the master deck, else a
+// synced playing deck, else a playing one; -1 for none (no track).
+int MainComponent::reportedDeck() const
+{
+	if (masterDeck >= 0)
+		return masterDeck;
+	for (int d = 0; d < numDecks; ++d)
+		if (pioSynced[(size_t) d] && players[(size_t) d]->isPlaying())
+			return d;
+	for (int d = 0; d < numDecks; ++d)
+		if (players[(size_t) d]->isPlaying())
+			return d;
+	return -1;
+}
+
+// The link hands MASTER here (another master paused, a DJM's command), or
+// another player takes it (its MASTER pressed): the deck's MASTER follows, as
+// a CDJ's does.
+void MainComponent::followLinkMaster()
+{
+	using Change = prolink::TempoMaster::Change;
+	const auto change = proLink.takeMasterChange();
+	if (change == Change::yielded && masterDeck >= 0)
+	{
+		masterTurnedOff = true;   // not straight back by the lone-deck rule
+		setMasterDeck (-1);
+	}
+	else if (change == Change::granted && masterDeck < 0)
+	{
+		masterTurnedOff = false;
+		setMasterDeck (std::max (0, reportedDeck()));
+	}
+
+	const auto reported = reportedDeck();
+	pioSender.setReported (reported >= 0 ? players[(size_t) reported] : nullptr);
+	pioSender.setSynced (reported >= 0 && pioSynced[(size_t) reported]);
+}
+
 // On the Pioneer network from the start, as a CDJ: the receiver announces our
-// player on the link and listens, the sender sends the master deck's beat.
-// PIO and MASTER change what is sent, not whether the player is there.
+// player on the link and listens, the sender sends its status whether master or
+// not. PIO and MASTER change what is sent -- MASTER adds the master deck's
+// beats -- not whether the player is there.
 void MainComponent::updateNetwork()
 {
 	const auto device = appProperties.getUserSettings()->getIntValue ("pioDevice", 6);
-	const auto presence = prolink::presence (proLinkPorts.complete(), masterDeck >= 0);
+	const auto presence = prolink::presence (proLinkPorts.complete());
 
 	if (! presence.receiver)
 	{
@@ -965,10 +1005,7 @@ void MainComponent::updateNetwork()
 		proLink.start (device, proLinkPorts);
 
 	if (presence.sender && proLink.isRunning() && ! pioSender.isRunning())
-		pioSender.start (device, proLink.broadcastAddress(), proLinkPorts, "StemDeck",
-						 [this] { return proLink.isOnline(); });
-	else if (! presence.sender)
-		pioSender.stop();
+		pioSender.start (device, proLink.broadcastAddress(), proLinkPorts, "StemDeck", &proLink);
 }
 
 // One synced deck against its leader: the rules in followLeader(), the
@@ -1073,6 +1110,8 @@ void MainComponent::timerCallback()
 	mixer.refresh();
 	updateSync();
 	sendPreview();
+
+	followLinkMaster();
 
 	// With no master yet, the only playing deck becomes it (like a lone CDJ).
 	if (const auto chosen = chooseMaster (-1, decksPlaying(), masterDeck, ! pioSource && ! masterTurnedOff); chosen != masterDeck)

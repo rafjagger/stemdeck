@@ -29,6 +29,9 @@ class InstanceMaster
 public:
 	void joined (double seconds);   // this instance started listening on the link
 	void press (double seconds);    // MASTER pressed: on, or off when on
+	// The link's handoff (ProLinkTempoMaster): the role handed here, or taken.
+	void take (double seconds);
+	void drop() { master = false; }
 	void onStatus (int device, bool claimsMaster, double seconds);
 
 	// True once, when another player's newer claim takes master from this deck.

@@ -145,3 +145,30 @@ TEST (MasterDeck, AJoinAfterThePressKeepsTheNewMaster)
 	EXPECT_TRUE (old.yieldIfOvertaken (12.2));
 	EXPECT_FALSE (old.isMaster());
 }
+
+// D3: the link passes the role on (ProLinkTempoMaster): handed to this deck
+// unasked, it is master from then on, newer than any claim heard before; taken
+// away, it is off at once.
+TEST (MasterDeck, TheLinkCanHandMasterToThisDeck)
+{
+	InstanceMaster master;
+	master.joined (5.0);
+	master.onStatus (other, true, 9.9);
+	master.take (10.0);
+	EXPECT_TRUE (master.isMaster());
+	master.onStatus (other, true, 10.1);
+	EXPECT_FALSE (master.yieldIfOvertaken (10.1)) << "the old master's claim is older";
+	master.take (10.2);
+	EXPECT_TRUE (master.isMaster()) << "taking twice is not a toggle";
+}
+
+TEST (MasterDeck, TheLinkCanTakeMasterAway)
+{
+	InstanceMaster master;
+	master.press (10.0);
+	master.drop();
+	EXPECT_FALSE (master.isMaster());
+	EXPECT_FALSE (master.yieldIfOvertaken (10.1));
+	master.drop();
+	EXPECT_FALSE (master.isMaster()) << "dropping twice is not a toggle";
+}

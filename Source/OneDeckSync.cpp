@@ -33,6 +33,23 @@ void OneDeckSync::joined (double seconds)
 	master.joined (seconds);
 }
 
+bool OneDeckSync::followLink (prolink::TempoMaster::Change change, double seconds)
+{
+	using Change = prolink::TempoMaster::Change;
+	if (change == Change::granted && ! master.isMaster())
+	{
+		master.take (seconds);
+		player.setSyncNudge (1.0);   // the master leads: no correction of its own
+	}
+	else if (change == Change::yielded && master.isMaster())
+		master.drop();
+	else
+		return false;
+
+	panel.setMaster (master.isMaster());
+	return true;
+}
+
 void OneDeckSync::hear (const std::vector<ProLinkReceiver::Event>& events)
 {
 	for (const auto& event : events)

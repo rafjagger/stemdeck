@@ -4,26 +4,19 @@
 
 #include "ProLinkPresence.h"
 
-// A CDJ-3000 announces, claims its number and sends keep-alives from the
-// moment it is plugged in, whatever its SYNC and MASTER keys say. Only the
-// beats of a master deck wait for MASTER.
-TEST (ProLinkPresence, OnTheLinkWithNeitherSyncNorMaster)
+// A CDJ-3000 announces, claims its number, sends keep-alives and a status
+// from the moment it is plugged in, whatever its SYNC and MASTER keys say.
+// Only the beats wait for MASTER -- the sender's business, not the presence's.
+TEST (ProLinkPresence, OnTheLinkAndSendingStatusAsSoonAsThePortsAreKnown)
 {
-	const auto presence = prolink::presence (true, false);
+	const auto presence = prolink::presence (true);
 	EXPECT_TRUE (presence.receiver) << "announce and claim as soon as the ports are known";
-	EXPECT_FALSE (presence.sender) << "no master deck: nothing to publish";
-}
-
-TEST (ProLinkPresence, AMasterDeckAlsoSends)
-{
-	const auto presence = prolink::presence (true, true);
-	EXPECT_TRUE (presence.receiver);
-	EXPECT_TRUE (presence.sender);
+	EXPECT_TRUE (presence.sender) << "a status every 200 ms, master or not";
 }
 
 TEST (ProLinkPresence, OffTheLinkWithoutPorts)
 {
-	const auto presence = prolink::presence (false, true);
+	const auto presence = prolink::presence (false);
 	EXPECT_FALSE (presence.receiver) << "no a3-osc.json: no ports to use";
 	EXPECT_FALSE (presence.sender);
 }

@@ -31,6 +31,9 @@ public:
 	bool syncOrMaster() const { return synced || isMaster(); }
 
 	void joined (double seconds);   // the owner's receiver started
+	// MASTER handed here by the link, or taken by another player
+	// (ProLinkReceiver::takeMasterChange); true when MASTER changed.
+	bool followLink (prolink::TempoMaster::Change, double seconds);
 	void hear (const std::vector<ProLinkReceiver::Event>&);
 
 	// Every tick: MASTER given up to a newer claim (true then), and the deck

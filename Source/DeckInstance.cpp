@@ -6,4 +6,14 @@ std::string DeckInstance::jackClientName() const { return std::string ("StemDeck
 std::string DeckInstance::sessionDir() const { return std::string (1, letter); }
 int DeckInstance::oscDeck() const { return letter - 'A' + 1; }
 std::string DeckInstance::title() const { return std::string ("StemDeck ") + letter; }
-int DeckInstance::proLinkDevice() const { return letter == 'A' ? 6 : 5; }
+int DeckInstance::proLinkDevice() const
+{
+	switch (letter)
+	{
+		case 'A': return 6;
+		case 'B': return 5;
+		case 'C': return 4;
+		case 'D': return 3;
+		default: return 0;
+	}
+}

@@ -13,12 +13,16 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 DEBIAN = REPO / "packaging/DEBIAN"
 STAGE = REPO / "packaging/stage"
-UNIT = REPO / ".config/systemd/user/stemdeck.service"
+UNITS = REPO / ".config/systemd/user"
+UNIT = UNITS / "stemdeck.service"
 TEMPLATE = REPO / ".config/systemd/user/stemdeck@.service"
 EXTRA_DEPENDS = ("jack-example-tools", "xdotool", "x11-xserver-utils", "x11-utils",
                  "python3", "onboard", "librubberband3", "pipewire-jack")
 TOOLS = ("a3-wait-for-the-screen", "rig-keep-the-screen.sh", "setup-separator.sh",
-         "stemdeck-seed")
+         "stemdeck-seed", "stemdeck-aes67-deck")
+AES67_UNITS = ("a3-aes67-deck@.service", "stemdeck-aes67.service")
+AES67_TEMPLATES = ("pipewire-aes67-deck.conf.in", "pipewire-stemdeck-aes67.conf.in")
+EEE = "etc/systemd/network/99-default.link.d/stemdeck-eee.conf"
 
 
 def fields(text):
@@ -125,6 +129,10 @@ class TheStagedTree(unittest.TestCase):
         "usr/share/stemdeck/stemdeck-without-core.xml",
         "usr/lib/systemd/user/stemdeck.service",
         "usr/lib/systemd/user/stemdeck@.service",
+        *(f"usr/lib/systemd/user/{unit}" for unit in AES67_UNITS),
+        *(f"usr/share/stemdeck/{template}" for template in AES67_TEMPLATES),
+        "usr/share/stemdeck/links-aes67.json",
+        EEE,
         "usr/share/doc/stemdeck/copyright",
     }
 
@@ -177,6 +185,44 @@ class TheStagedTree(unittest.TestCase):
             for word in value.lstrip("-@:+!").split():
                 if word.startswith(("/usr/lib/stemdeck/", "/usr/bin/stemdeck")):
                     with self.subTest(program=word):
+                        self.assertTrue((stage / word.lstrip("/")).is_file())
+
+    def test_package_ships_the_deck_sender_unit_and_eee(self):
+        stage = self.stage()
+        for unit in AES67_UNITS:
+            with self.subTest(unit=unit):
+                self.assertEqual((UNITS / unit).read_bytes(),
+                                 (stage / "usr/lib/systemd/user" / unit).read_bytes())
+        for template in AES67_TEMPLATES:
+            with self.subTest(template=template):
+                self.assertEqual((REPO / "tools" / template).read_bytes(),
+                                 (stage / "usr/share/stemdeck" / template).read_bytes())
+        eee = (stage / EEE).read_text()
+        self.assertIn("[EnergyEfficientEthernet]\nEnable=false\n", eee)
+
+    def test_package_ships_the_aes67_link_map(self):
+        stage = self.stage()
+        self.assertEqual((REPO / "data/links-aes67.json").read_bytes(),
+                         (stage / "usr/share/stemdeck/links-aes67.json").read_bytes())
+
+    def test_no_aes67_unit_is_enabled_by_the_package(self):
+        """The deck-host role pulls them in; a3nuc1 carries the package too."""
+        for name in ("postinst", "prerm", "postrm"):
+            for line in code_lines(DEBIAN / name):
+                for unit in AES67_UNITS:
+                    with self.subTest(script=name, unit=unit):
+                        self.assertNotIn(unit.split("@")[0], line)
+
+    def test_every_program_the_aes67_units_start_is_in_the_tree(self):
+        stage = self.stage()
+        for unit in AES67_UNITS:
+            for line in (UNITS / unit).read_text().splitlines():
+                key, _, value = line.partition("=")
+                if not key.startswith("Exec"):
+                    continue
+                word = value.lstrip("-@:+!").split()[0]
+                if word.startswith("/usr/lib/stemdeck/"):
+                    with self.subTest(unit=unit, program=word):
                         self.assertTrue((stage / word.lstrip("/")).is_file())
 
     def test_an_unknown_extra_argument_is_refused(self):

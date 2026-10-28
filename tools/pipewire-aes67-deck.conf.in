@@ -1,0 +1,85 @@
+# SPDX-FileCopyrightText: 2026 Raphael Eismann
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# AES67 sender of one deck on a deck host: MAIN1-16, AUX1-16, CUE1-9 as one
+# 41-channel stream to the Core. A template: stemdeck-aes67-deck renders it
+# into ~/.config/pipewire/pipewire-aes67-deck-<X>.conf from the truth, and
+# a3-aes67-deck@<X>.service runs it as a PipeWire instance of its own.
+#
+# No PTP driver here: the rtp-sink joins pipewire.ptp0, which the host's base
+# instance (stemdeck-aes67.service) drives; two PTP0 drivers in one graph
+# would fight (plan ruling R4).
+
+context.properties = {
+    # Errors only: the sender warns "missing timeout" hundreds of times a second.
+    log.level = 1
+}
+
+context.spa-libs = {
+    support.*       = support/libspa-support
+}
+
+context.modules = [
+    { name = libpipewire-module-rt
+        args = {
+            nice.level = -11
+        }
+        flags = [ ifexists nofail ]
+    }
+    { name = libpipewire-module-protocol-native }
+    { name = libpipewire-module-client-node }
+    { name = libpipewire-module-adapter }
+    # Only to announce the sender: with no rule to make a stream, it receives nothing.
+    { name = libpipewire-module-rtp-sap
+        args = {
+            local.ifname = "@AUDIO_PORT@"
+            sap.ip = "@SAP_IP@"
+            sap.port = @SAP_PORT@
+            net.ttl = 32
+            net.loop = false
+            ptp.management-socket = "/var/run/ptp4lro"
+            stream.rules = [
+                {
+                    matches = [
+                        {
+                            sess.sap.announce = true
+                        }
+                    ]
+                    actions = {
+                        announce-stream = {}
+                    }
+                }
+            ]
+        }
+    }
+    { name = libpipewire-module-rtp-sink
+        args = {
+            local.ifname = "@AUDIO_PORT@"
+            destination.ip = "@STREAM_IP@"
+            destination.port = @STREAM_PORT@
+            # 41 channels at 0.25 ms are a 1365-byte packet; the receiver needs 1500 too (S0).
+            net.mtu = 1500
+            net.ttl = 32
+            net.loop = false
+            sess.min-ptime = 0.25
+            sess.max-ptime = 0.25
+            sess.name = "@SESSION_NAME@"
+            sess.media = "audio"
+            sess.latency.msec = 3
+            audio.format = "S24BE"
+            audio.rate = 44100
+            audio.channels = 41
+            node.channel-names = [@CHANNEL_NAMES@]
+
+            stream.props = {
+                node.name = "@NODE_NAME@"
+                media.class = "Audio/Sink"
+                node.virtual = false
+                device.api = aes67
+                node.group = "pipewire.ptp0"
+                sess.sap.announce = true
+                node.always-process = true
+            }
+        }
+    }
+]

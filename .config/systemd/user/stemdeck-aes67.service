@@ -1,0 +1,19 @@
+# SPDX-FileCopyrightText: 2026 Raphael Eismann
+# SPDX-License-Identifier: GPL-3.0-or-later
+[Unit]
+Description=AES67 PTP clock and receiver of a deck host (PipeWire, on the audio network)
+# A deck host has no a3-core, so StemDeck brings this instance: the PTP clock
+# its deck senders join and the Core's stream received. Not a3-core's
+# a3-aes67.service under another name only: a3nuc1 carries both packages, and
+# where a3-core's unit is, that instance owns PTP0 and this one stays off
+# (ExecCondition, never Conflicts=: a conflict drops start jobs at boot,
+# 2026-10-27). Shipped, not enabled: a3-aes67-deck@.service requires it.
+Requires=pipewire.service
+After=pipewire.service wireplumber.service
+
+[Service]
+ExecCondition=/usr/lib/stemdeck/stemdeck-aes67-deck base-wanted
+ExecStartPre=/usr/lib/stemdeck/stemdeck-aes67-deck render-base
+ExecStart=/usr/bin/pipewire -c %h/.config/pipewire/pipewire-stemdeck-aes67.conf
+Restart=always
+RestartSec=2

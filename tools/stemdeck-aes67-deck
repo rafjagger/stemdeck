@@ -1,0 +1,238 @@
+#!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2026 Raphael Eismann
+# SPDX-License-Identifier: GPL-3.0-or-later
+"""A deck host's AES67 configs for PipeWire, rendered from the truth.
+
+    stemdeck-aes67-deck render <X> [--truth PATH] [--home DIR]
+        ~/.config/pipewire/pipewire-aes67-deck-<X>.conf: deck X's sender
+        (a3-aes67-deck@<X>.service).
+    stemdeck-aes67-deck render-base [--truth PATH] [--home DIR]
+        ~/.config/pipewire/pipewire-stemdeck-aes67.conf: the host's PTP clock
+        and the Core's stream received (stemdeck-aes67.service).
+    stemdeck-aes67-deck base-wanted [--home DIR]
+        Exit 0 when this host runs the base instance, 1 where a3-core's
+        a3-aes67.service is (its ExecCondition): one PTP0 driver a graph.
+
+The truth is StemDeck's (Source/OscTruthFile.h): --truth, else $A3_OSC_TRUTH,
+else what Core last served (~/.cache/a3/a3-osc.json) if it reads as a truth,
+else the package's /usr/share/a3/a3-osc.json. A deck host has no a3-core.
+
+Exit 2: a usage error or a truth without the deck's keys -- the unit must not
+loop on it. Exit 1: no audio port in the truth's network; nothing is written
+and an earlier render goes, so no sender starts on a stale socket.
+"""
+
+import argparse
+import json
+import os
+import sys
+from pathlib import Path
+
+PACKAGE_TRUTH = Path("/usr/share/a3/a3-osc.json")
+CACHED_TRUTH = Path(".cache/a3/a3-osc.json")
+PIPEWIRE_DIR = Path(".config/pipewire")
+TEMPLATE_DIRS = (Path(__file__).resolve().parent, Path("/usr/share/stemdeck"))
+DECK_TEMPLATE = "pipewire-aes67-deck.conf.in"
+BASE_TEMPLATE = "pipewire-stemdeck-aes67.conf.in"
+BASE_CONF = "pipewire-stemdeck-aes67.conf"
+CHANNEL_NAMES = ([f"MAIN{n}" for n in range(1, 17)] + [f"AUX{n}" for n in range(1, 17)]
+                 + [f"CUE{n}" for n in range(1, 10)])
+# Where a3-core's AES67 unit can be: its package's copy, the copy its postinst
+# puts in the user's units (left behind when the package goes), a /usr unit.
+CORE_AES67_UNITS = (Path(".local/share/a3-core/config/systemd/user/a3-aes67.service"),
+                    Path(".config/systemd/user/a3-aes67.service"))
+CORE_AES67_SYSTEM_UNIT = Path("usr/lib/systemd/user/a3-aes67.service")
+
+
+class Refused(Exception):
+    """A usage error or a truth that lacks a key: exit 2."""
+
+
+class NoAudioPort(Exception):
+    """The truth names no audio socket: exit 1, nothing written."""
+
+
+# -- the truth ------------------------------------------------------------------
+
+def reads_as_truth(path):
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return False
+    return isinstance(data, dict) and "hosts" in data and "listeners" in data
+
+
+def truth_path(given, home, environ, package=PACKAGE_TRUTH):
+    if given:
+        return Path(given)
+    if environ.get("A3_OSC_TRUTH"):
+        return Path(environ["A3_OSC_TRUTH"])
+    cached = home / CACHED_TRUTH
+    return cached if reads_as_truth(cached) else package
+
+
+def load_truth(path):
+    try:
+        return json.loads(path.read_text())
+    except (OSError, ValueError) as error:
+        raise Refused(f"no usable truth at {path}: {error}") from None
+
+
+def audio_port(truth):
+    port = truth.get("network", {}).get("audio_port", "")
+    if not port:
+        raise NoAudioPort("the truth's network has no audio_port: no AES67 on this host")
+    return port
+
+
+def listener(truth, program, role):
+    for entry in truth.get("listeners", []):
+        if entry.get("program") == program and entry.get("role") == role:
+            return entry
+    raise Refused(f"the truth has no listener {program}.{role}")
+
+
+def host(truth, name):
+    try:
+        return truth["hosts"][name]
+    except KeyError:
+        raise Refused(f"the truth has no host '{name}'") from None
+
+
+def endpoint(truth, program, role, **fields):
+    entry = listener(truth, program, role)
+    return host(truth, entry["host"].format(**fields)), entry["port"]
+
+
+# -- rendering ------------------------------------------------------------------
+
+def template(name):
+    for folder in TEMPLATE_DIRS:
+        if (folder / name).is_file():
+            return (folder / name).read_text()
+    raise Refused(f"no {name} in {', '.join(str(d) for d in TEMPLATE_DIRS)}")
+
+
+def filled(text, values):
+    for placeholder, value in values.items():
+        text = text.replace(f"@{placeholder}@", str(value))
+    return text
+
+
+def deck_letter(word):
+    if len(word) != 1 or not word.isalpha() or not word.isascii():
+        raise Refused(f"'{word}' is no deck letter")
+    return word.upper()
+
+
+def deck_conf(truth, letter):
+    port = audio_port(truth)
+    stream_ip, stream_port = endpoint(truth, "aes67", "deck", deck=letter.lower())
+    sap_ip, sap_port = endpoint(truth, "aes67", "sap")
+    return filled(template(DECK_TEMPLATE), {
+        "AUDIO_PORT": port,
+        "STREAM_IP": stream_ip,
+        "STREAM_PORT": stream_port,
+        "SAP_IP": sap_ip,
+        "SAP_PORT": sap_port,
+        "SESSION_NAME": f"AES67 deck {letter}",
+        "NODE_NAME": f"aes67-deck-{letter.lower()}",
+        "CHANNEL_NAMES": ", ".join(f'"{name}"' for name in CHANNEL_NAMES),
+    })
+
+
+def base_conf(truth):
+    port = audio_port(truth)
+    sap_ip, sap_port = endpoint(truth, "aes67", "sap")
+    return filled(template(BASE_TEMPLATE), {
+        "AUDIO_PORT": port,
+        "SAP_IP": sap_ip,
+        "SAP_PORT": sap_port,
+    })
+
+
+def write_whole(path, text):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    partial = path.with_name(path.name + ".new")
+    partial.write_text(text)
+    os.replace(partial, path)
+
+
+def render(path, make):
+    """Write what make() gives; without an audio port, take an old render away."""
+    try:
+        text = make()
+    except NoAudioPort:
+        path.unlink(missing_ok=True)
+        raise
+    write_whole(path, text)
+    print(f"stemdeck-aes67-deck: rendered {path}")
+
+
+# -- the base's condition -------------------------------------------------------
+
+def core_aes67_unit(home, root):
+    """a3-core's AES67 unit on this host, or None."""
+    for place in (*(home / unit for unit in CORE_AES67_UNITS), root / CORE_AES67_SYSTEM_UNIT):
+        if place.exists():
+            return place
+    return None
+
+
+def base_wanted(home, root=Path("/")):
+    return core_aes67_unit(home, root) is None
+
+
+# -- command line ---------------------------------------------------------------
+
+class Parser(argparse.ArgumentParser):
+    def error(self, message):
+        raise Refused(message)
+
+
+def parse(argv):
+    parser = Parser(prog="stemdeck-aes67-deck")
+    steps = parser.add_subparsers(dest="step", required=True)
+    deck = steps.add_parser("render")
+    deck.add_argument("letter")
+    base = steps.add_parser("render-base")
+    wanted = steps.add_parser("base-wanted")
+    for step in (deck, base, wanted):
+        step.add_argument("--home", type=Path, default=Path.home())
+    for step in (deck, base):
+        step.add_argument("--truth")
+    return parser.parse_args(argv)
+
+
+def run(argv, environ):
+    args = parse(argv)
+    if args.step == "base-wanted":
+        unit = core_aes67_unit(args.home, Path("/"))
+        if unit is not None:
+            print(f"stemdeck-aes67-deck: {unit} is here; its instance owns PTP0")
+            return 1
+        return 0
+    if args.step == "render":
+        letter = deck_letter(args.letter)
+    truth = load_truth(truth_path(args.truth, args.home, environ))
+    folder = args.home / PIPEWIRE_DIR
+    if args.step == "render":
+        render(folder / f"pipewire-aes67-deck-{letter}.conf", lambda: deck_conf(truth, letter))
+    else:
+        render(folder / BASE_CONF, lambda: base_conf(truth))
+    return 0
+
+
+def main():
+    try:
+        return run(sys.argv[1:], os.environ)
+    except Refused as error:
+        print(f"stemdeck-aes67-deck: {error}", file=sys.stderr)
+        return 2
+    except NoAudioPort as error:
+        print(f"stemdeck-aes67-deck: {error}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

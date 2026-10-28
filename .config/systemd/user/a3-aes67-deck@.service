@@ -1,0 +1,16 @@
+# SPDX-FileCopyrightText: 2026 Raphael Eismann
+# SPDX-License-Identifier: GPL-3.0-or-later
+[Unit]
+Description=AES67 sender of deck %i
+# Its config is rendered from the truth before every start. It has no PTP
+# driver of its own: its rtp-sink joins pipewire.ptp0, which the host's base
+# instance drives (plan ruling R4). Shipped, not enabled: the deck-host role's
+# drop-in on stemdeck@<X> pulls it in.
+Requires=stemdeck-aes67.service
+After=stemdeck-aes67.service
+
+[Service]
+ExecStartPre=/usr/lib/stemdeck/stemdeck-aes67-deck render %i
+ExecStart=/usr/bin/pipewire -c %h/.config/pipewire/pipewire-aes67-deck-%i.conf
+Restart=always
+RestartSec=2

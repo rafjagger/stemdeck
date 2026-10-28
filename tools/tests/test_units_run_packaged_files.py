@@ -125,5 +125,67 @@ class TheTemplateUnit(unittest.TestCase):
         self.assertEqual(committed, self.TWO_DECK.read_bytes())
 
 
+class TheDeckSenderUnit(unittest.TestCase):
+    """a3-aes67-deck@.service: deck %i's AES67 sender on a deck host (R4)."""
+    UNIT = UNITS / "a3-aes67-deck@.service"
+
+    def lines(self):
+        return self.UNIT.read_text().splitlines()
+
+    def test_unit_runs_packaged_files(self):
+        for line in ("Description=AES67 sender of deck %i",
+                     "ExecStartPre=/usr/lib/stemdeck/stemdeck-aes67-deck render %i",
+                     "ExecStart=/usr/bin/pipewire -c %h/.config/pipewire/pipewire-aes67-deck-%i.conf",
+                     "Restart=always",
+                     "RestartSec=2"):
+            with self.subTest(line=line):
+                self.assertIn(line, self.lines())
+        self.assertTrue((REPO / "tools/stemdeck-aes67-deck").is_file())
+
+    def test_it_joins_the_base_instance_s_clock(self):
+        """Its rtp-sink joins pipewire.ptp0, which the base's PTP0-Driver drives."""
+        self.assertIn("Requires=stemdeck-aes67.service", self.lines())
+        self.assertIn("After=stemdeck-aes67.service", self.lines())
+
+    def test_no_conflicts_and_no_install(self):
+        self.assertFalse([l for l in self.lines() if l.startswith("Conflicts=")])
+        self.assertNotIn("[Install]", self.UNIT.read_text())
+
+
+class TheBaseUnit(unittest.TestCase):
+    """stemdeck-aes67.service: the deck host's PTP clock and receiver (P10, P24)."""
+    UNIT = UNITS / "stemdeck-aes67.service"
+
+    def lines(self):
+        return self.UNIT.read_text().splitlines()
+
+    def test_unit_runs_packaged_files(self):
+        for line in ("ExecCondition=/usr/lib/stemdeck/stemdeck-aes67-deck base-wanted",
+                     "ExecStartPre=/usr/lib/stemdeck/stemdeck-aes67-deck render-base",
+                     "ExecStart=/usr/bin/pipewire -c %h/.config/pipewire/pipewire-stemdeck-aes67.conf",
+                     "Restart=always",
+                     "RestartSec=2"):
+            with self.subTest(line=line):
+                self.assertIn(line, self.lines())
+
+    def test_the_condition_runs_before_the_render(self):
+        lines = self.lines()
+        condition = lines.index("ExecCondition=/usr/lib/stemdeck/stemdeck-aes67-deck base-wanted")
+        render = lines.index("ExecStartPre=/usr/lib/stemdeck/stemdeck-aes67-deck render-base")
+        self.assertLess(condition, render)
+
+    def test_it_runs_on_the_audio_server(self):
+        self.assertIn("Requires=pipewire.service", self.lines())
+        self.assertIn("After=pipewire.service wireplumber.service", self.lines())
+
+    def test_no_conflicts_and_no_install(self):
+        """Chosen by ExecCondition=, never by Conflicts= (2026-10-27 boot trap)."""
+        self.assertFalse([l for l in self.lines() if l.startswith("Conflicts=")])
+        self.assertNotIn("[Install]", self.UNIT.read_text())
+
+    def test_it_is_not_a3_cores_unit(self):
+        self.assertFalse((UNITS / "a3-aes67.service").exists())
+
+
 if __name__ == "__main__":
     unittest.main()

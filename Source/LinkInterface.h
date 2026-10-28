@@ -4,6 +4,7 @@
 
 #include "ProLinkReceiver.h"
 
+#include <array>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -26,12 +27,20 @@ namespace linkinterface
 
 	// The first candidate whose address lies in `subnet` ("a.b.c.d/len"), or
 	// nothing -- the caller then keeps its own detection.
+	std::optional<Candidate> chooseCandidate (const std::vector<Candidate>& found, const std::string& subnet);
 	std::optional<std::string> choose (const std::vector<Candidate>& found, const std::string& subnet);
 
 	struct Addresses
 	{
 		uint32_t local = 0, broadcast = 0;   // network byte order
+		std::array<uint8_t, 6> mac {};
 	};
+
+	// Up, can broadcast, not loopback: what the link may use (ifa_flags).
+	bool usable (unsigned interfaceFlags);
+
+	// Zeros when the interface has none.
+	std::array<uint8_t, 6> hardwareAddress (const std::string& interfaceName);
 
 	// The up, broadcast-capable, non-loopback interface on the control LAN.
 	std::optional<Addresses> controlLan();
@@ -42,5 +51,5 @@ namespace linkinterface
 inline void pinLinkToControlLan (ProLinkReceiver& receiver)
 {
 	if (const auto lan = linkinterface::controlLan())
-		receiver.useInterface (lan->local, lan->broadcast);
+		receiver.useInterface (lan->local, lan->broadcast, lan->mac);
 }

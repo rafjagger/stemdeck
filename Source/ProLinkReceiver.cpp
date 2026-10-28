@@ -1,5 +1,7 @@
 #include "ProLinkReceiver.h"
 
+#include "LinkInterface.h"
+
 #include <JuceHeader.h>
 
 #include <arpa/inet.h>
@@ -43,7 +45,7 @@ bool ProLinkReceiver::detectInterface()
 	{
 		if (ifa->ifa_addr == nullptr || ifa->ifa_addr->sa_family != AF_INET)
 			continue;
-		if ((ifa->ifa_flags & IFF_LOOPBACK) || ! (ifa->ifa_flags & IFF_UP) || ! (ifa->ifa_flags & IFF_BROADCAST))
+		if (! linkinterface::usable (ifa->ifa_flags))
 			continue;
 
 		localIp = reinterpret_cast<sockaddr_in*> (ifa->ifa_addr)->sin_addr.s_addr;
@@ -59,15 +61,7 @@ bool ProLinkReceiver::detectInterface()
 	if (ifName.empty())
 		return false;
 
-	const auto probe = socket (AF_INET, SOCK_DGRAM, 0);
-	if (probe >= 0)
-	{
-		ifreq request {};
-		std::strncpy (request.ifr_name, ifName.c_str(), IFNAMSIZ - 1);
-		if (ioctl (probe, SIOCGIFHWADDR, &request) == 0)
-			std::memcpy (mac.data(), request.ifr_hwaddr.sa_data, 6);
-		close (probe);
-	}
+	mac = linkinterface::hardwareAddress (ifName);
 	return true;
 }
 
@@ -112,6 +106,7 @@ bool ProLinkReceiver::start (int number, const osctruth::ProLinkPorts& truthPort
 	{
 		localIp = forcedLocalIp;
 		broadcastIp = forcedBroadcastIp;
+		mac = forcedMac;
 	}
 	else if (! detectInterface())
 		return fail ("no network");
@@ -213,8 +208,10 @@ void ProLinkReceiver::run()
 	}
 }
 
-void ProLinkReceiver::useInterface (uint32_t localIpNetworkOrder, uint32_t broadcastIpNetworkOrder)
+void ProLinkReceiver::useInterface (uint32_t localIpNetworkOrder, uint32_t broadcastIpNetworkOrder,
+									const std::array<uint8_t, 6>& macAddress)
 {
+	forcedMac = macAddress;
 	forcedLocalIp = localIpNetworkOrder;
 	forcedBroadcastIp = broadcastIpNetworkOrder;
 }

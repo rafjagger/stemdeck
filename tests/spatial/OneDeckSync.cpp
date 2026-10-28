@@ -128,6 +128,43 @@ TEST (ProLinkOnOneHost, TwoInstancesHearOneAnothersBeat)
 	EXPECT_EQ (atB[0].device, 7);
 }
 
+// P4: pinning an interface must not blank the keep-alive's MAC (a detected
+// interface fills it); the announce port carries it to every listener.
+TEST (ProLinkOnOneHost, APinnedInterfaceStillAnnouncesItsMac)
+{
+	const auto fd = socket (AF_INET, SOCK_DGRAM, 0);
+	ASSERT_GE (fd, 0);
+	const int on = 1;
+	setsockopt (fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof (on));
+	sockaddr_in address {};
+	address.sin_family = AF_INET;
+	address.sin_port = htons ((uint16_t) testPorts().announce);
+	address.sin_addr.s_addr = htonl (INADDR_ANY);
+	ASSERT_EQ (bind (fd, reinterpret_cast<sockaddr*> (&address), sizeof (address)), 0);
+	timeval timeout { 1, 0 };
+	setsockopt (fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof (timeout));
+
+	const std::array<uint8_t, 6> mac { 0x02, 0xa3, 0x00, 0x00, 0x08, 0x20 };
+	ProLinkReceiver receiver;
+	receiver.useInterface (loopback, loopbackBroadcast, mac);
+	ASSERT_TRUE (receiver.start (deckA, testPorts())) << receiver.error();
+
+	uint8_t buffer[600];
+	std::array<uint8_t, 6> heardMac {};
+	for (int tries = 0; tries < 5; ++tries)
+	{
+		const auto n = recv (fd, buffer, sizeof (buffer), 0);
+		if (n >= 0x2c && buffer[0x0a] == 0x06)   // keep-alive
+		{
+			std::copy (buffer + 0x26, buffer + 0x2c, heardMac.begin());
+			break;
+		}
+	}
+	close (fd);
+	receiver.stop();
+	EXPECT_EQ (heardMac, mac);
+}
+
 // ...and the real sender of the MASTER instance reaches both listeners: its
 // status says master, with its tempo.
 TEST (ProLinkOnOneHost, TheMasterInstancesSenderReachesBothListeners)

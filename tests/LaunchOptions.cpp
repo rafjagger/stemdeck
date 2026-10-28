@@ -102,7 +102,7 @@ TEST (LaunchOptions, PathLatencyFromEnvironment)
 	EXPECT_DOUBLE_EQ (ok (parseLaunch ({}, std::string ("18.5"))).pathLatencyMs, 18.5);
 	EXPECT_DOUBLE_EQ (ok (parseLaunch ({}, std::nullopt)).pathLatencyMs, 0.0) << "unset: no offset";
 
-	for (const char* bad : { "-1", "x", "500", "", "18ms", "nan" })
+	for (const char* bad : { "-1", "x", "500", "", "18ms", "nan", " 5", "5 ", "0x10", "1e1", "+5", ".", "1.2.3" })
 	{
 		const auto r = parseLaunch ({}, std::string (bad));
 		ASSERT_TRUE (std::holds_alternative<std::string> (r)) << bad;

@@ -38,7 +38,9 @@ public:
 	void stop();
 	// Use this interface instead of finding one at start(): the tests' loopback
 	// (127.0.0.1, broadcast 127.255.255.255). Network byte order.
-	void useInterface (uint32_t localIpNetworkOrder, uint32_t broadcastIpNetworkOrder);
+	// `mac` goes into the keep-alive; zeros when not given.
+	void useInterface (uint32_t localIpNetworkOrder, uint32_t broadcastIpNetworkOrder,
+					   const std::array<uint8_t, 6>& mac = {});
 	bool isRunning() const { return running.load(); }
 	std::string error() const;
 
@@ -63,6 +65,7 @@ private:
 	std::string name;
 	std::array<uint8_t, 6> mac {};
 	uint32_t localIp = 0, broadcastIp = 0;
+	std::array<uint8_t, 6> forcedMac {};
 	uint32_t forcedLocalIp = 0, forcedBroadcastIp = 0;   // useInterface(); 0: find one
 
 	mutable std::mutex lock;

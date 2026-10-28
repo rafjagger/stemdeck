@@ -210,6 +210,7 @@ add_executable(stemdeck-spatial-tests
     ${CMAKE_SOURCE_DIR}/Source/PioneerClock.cpp
     ${CMAKE_SOURCE_DIR}/Source/ProLinkPackets.cpp
     ${CMAKE_SOURCE_DIR}/Source/ProLinkReceiver.cpp
+    ${CMAKE_SOURCE_DIR}/Source/LinkInterface.cpp
     ${CMAKE_SOURCE_DIR}/Source/ProLinkSender.cpp
     ${CMAKE_SOURCE_DIR}/Source/BeatScheduler.cpp
     ${CMAKE_SOURCE_DIR}/Source/DeckInstance.cpp

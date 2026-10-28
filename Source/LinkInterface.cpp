@@ -4,8 +4,12 @@
 
 #include <arpa/inet.h>
 #include <ifaddrs.h>
+#include <cstring>
 #include <net/if.h>
 #include <netinet/in.h>
+#include <sys/ioctl.h>
+#include <sys/socket.h>
+#include <unistd.h>
 
 namespace linkinterface
 {
@@ -42,12 +46,38 @@ namespace linkinterface
 		}
 	}
 
-	std::optional<std::string> choose (const std::vector<Candidate>& found, const std::string& subnet)
+	std::optional<Candidate> chooseCandidate (const std::vector<Candidate>& found, const std::string& subnet)
 	{
 		for (const auto& candidate : found)
 			if (inSubnet (candidate.ipv4, subnet))
-				return candidate.name;
+				return candidate;
 		return std::nullopt;
+	}
+
+	std::optional<std::string> choose (const std::vector<Candidate>& found, const std::string& subnet)
+	{
+		if (const auto candidate = chooseCandidate (found, subnet))
+			return candidate->name;
+		return std::nullopt;
+	}
+
+	bool usable (unsigned flags)
+	{
+		return ! (flags & IFF_LOOPBACK) && (flags & IFF_UP) && (flags & IFF_BROADCAST);
+	}
+
+	std::array<uint8_t, 6> hardwareAddress (const std::string& interfaceName)
+	{
+		std::array<uint8_t, 6> mac {};
+		const auto probe = socket (AF_INET, SOCK_DGRAM, 0);
+		if (probe < 0)
+			return mac;
+		ifreq request {};
+		std::strncpy (request.ifr_name, interfaceName.c_str(), IFNAMSIZ - 1);
+		if (ioctl (probe, SIOCGIFHWADDR, &request) == 0)
+			std::memcpy (mac.data(), request.ifr_hwaddr.sa_data, 6);
+		close (probe);
+		return mac;
 	}
 
 	std::optional<Addresses> controlLan()
@@ -61,7 +91,7 @@ namespace linkinterface
 		{
 			if (ifa->ifa_addr == nullptr || ifa->ifa_addr->sa_family != AF_INET)
 				continue;
-			if ((ifa->ifa_flags & IFF_LOOPBACK) || ! (ifa->ifa_flags & IFF_UP) || ! (ifa->ifa_flags & IFF_BROADCAST))
+			if (! usable (ifa->ifa_flags))
 				continue;
 			char text[INET_ADDRSTRLEN] {};
 			inet_ntop (AF_INET, &reinterpret_cast<sockaddr_in*> (ifa->ifa_addr)->sin_addr, text, sizeof (text));
@@ -69,14 +99,18 @@ namespace linkinterface
 		}
 
 		std::optional<Addresses> result;
-		if (const auto name = choose (found, controlSubnet))
+		if (const auto chosen = chooseCandidate (found, controlSubnet))
 			for (auto* ifa = list; ifa != nullptr && ! result; ifa = ifa->ifa_next)
 			{
-				if (ifa->ifa_addr == nullptr || ifa->ifa_addr->sa_family != AF_INET || *name != ifa->ifa_name)
+				if (ifa->ifa_addr == nullptr || ifa->ifa_addr->sa_family != AF_INET || chosen->name != ifa->ifa_name)
 					continue;
-				const auto local = reinterpret_cast<sockaddr_in*> (ifa->ifa_addr)->sin_addr.s_addr;
+				const auto local = reinterpret_cast<sockaddr_in*> (ifa->ifa_addr)->sin_addr;
+				char text[INET_ADDRSTRLEN] {};
+				inet_ntop (AF_INET, &local, text, sizeof (text));
+				if (chosen->ipv4 != text)
+					continue;   // an alias of the same interface
 				const auto netmask = reinterpret_cast<sockaddr_in*> (ifa->ifa_netmask)->sin_addr.s_addr;
-				result = Addresses { local, local | ~netmask };
+				result = Addresses { local.s_addr, local.s_addr | ~netmask, hardwareAddress (chosen->name) };
 			}
 
 		freeifaddrs (list);

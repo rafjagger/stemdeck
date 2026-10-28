@@ -20,6 +20,17 @@ TEST (LinkInterface, NoneOnTheControlLanIsNone)
 	EXPECT_EQ (linkinterface::choose ({}, "192.168.8.0/24"), std::nullopt);
 }
 
+// Two IPv4 addresses on one interface: the one on the control LAN is the one
+// the link must announce with.
+TEST (LinkInterface, TheAddressInTheSubnetWinsNotTheInterfaceName)
+{
+	const std::vector<linkinterface::Candidate> found {
+		{ "eno1", "10.0.0.5" }, { "eno1", "192.168.8.20" } };
+	const auto chosen = linkinterface::chooseCandidate (found, "192.168.8.0/24");
+	ASSERT_TRUE (chosen);
+	EXPECT_EQ (chosen->ipv4, "192.168.8.20");
+}
+
 TEST (LinkInterface, SubnetEdgesAndPrefixLengths)
 {
 	EXPECT_TRUE (linkinterface::choose ({ { "a", "192.168.8.255" } }, "192.168.8.0/24"));

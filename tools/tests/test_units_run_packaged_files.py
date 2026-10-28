@@ -151,6 +151,14 @@ class TheDeckSenderUnit(unittest.TestCase):
         self.assertFalse([l for l in self.lines() if l.startswith("Conflicts=")])
         self.assertNotIn("[Install]", self.UNIT.read_text())
 
+    def test_it_never_runs_beside_a3_cores_aes67(self):
+        """A condition-skipped base still satisfies Requires=: the sender checks itself."""
+        lines = self.lines()
+        condition = "ExecCondition=/usr/lib/stemdeck/stemdeck-aes67-deck base-wanted"
+        self.assertIn(condition, lines)
+        self.assertLess(lines.index(condition), lines.index(
+            "ExecStartPre=/usr/lib/stemdeck/stemdeck-aes67-deck render %i"))
+
 
 class TheBaseUnit(unittest.TestCase):
     """stemdeck-aes67.service: the deck host's PTP clock and receiver (P10, P24)."""
@@ -185,6 +193,31 @@ class TheBaseUnit(unittest.TestCase):
 
     def test_it_is_not_a3_cores_unit(self):
         self.assertFalse((UNITS / "a3-aes67.service").exists())
+
+
+class TheAes67Units(unittest.TestCase):
+    UNITS = ("a3-aes67-deck@.service", "stemdeck-aes67.service")
+
+    def test_a_refused_render_does_not_loop(self):
+        """Exit 2 is a refused letter or a truth without the deck's keys."""
+        for unit in self.UNITS:
+            with self.subTest(unit=unit):
+                self.assertIn("RestartPreventExitStatus=2",
+                              (UNITS / unit).read_text().splitlines())
+
+    def test_they_keep_the_host_s_audio_port(self):
+        """The deck-host role sets it (P28); a unit that set it would override the role."""
+        for unit in self.UNITS:
+            with self.subTest(unit=unit):
+                self.assertNotIn("Environment=STEMDECK_AUDIO_PORT",
+                                 (UNITS / unit).read_text())
+                self.assertNotIn("UnsetEnvironment", (UNITS / unit).read_text())
+
+    def test_they_carry_no_license_header(self):
+        """.reuse/dep5 licenses .config/*, as for the repository's other units."""
+        for unit in self.UNITS:
+            with self.subTest(unit=unit):
+                self.assertNotIn("SPDX", (UNITS / unit).read_text())
 
 
 if __name__ == "__main__":

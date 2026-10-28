@@ -1,5 +1,3 @@
-# SPDX-FileCopyrightText: 2026 Raphael Eismann
-# SPDX-License-Identifier: GPL-3.0-or-later
 [Unit]
 Description=AES67 sender of deck %i
 # Its config is rendered from the truth before every start. It has no PTP
@@ -10,7 +8,14 @@ Requires=stemdeck-aes67.service
 After=stemdeck-aes67.service
 
 [Service]
+# Never beside a3-core's AES67 (a3nuc1): a base skipped by its condition still
+# satisfies Requires=, so the sender checks for itself.
+ExecCondition=/usr/lib/stemdeck/stemdeck-aes67-deck base-wanted
+# STEMDECK_AUDIO_PORT, the host's audio socket, comes from the deck-host role's drop-in.
 ExecStartPre=/usr/lib/stemdeck/stemdeck-aes67-deck render %i
 ExecStart=/usr/bin/pipewire -c %h/.config/pipewire/pipewire-aes67-deck-%i.conf
 Restart=always
 RestartSec=2
+# Exit 2 is a refused render (a bad letter, a truth without the deck's keys):
+# restarting cannot mend it.
+RestartPreventExitStatus=2

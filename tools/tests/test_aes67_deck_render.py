@@ -59,7 +59,8 @@ class RenderCase(unittest.TestCase):
         self.truth_file.write_text(json.dumps(truth))
 
     def run_tool(self, *args, env=None):
-        environ = {k: v for k, v in os.environ.items() if k != "A3_OSC_TRUTH"}
+        environ = {k: v for k, v in os.environ.items()
+                   if k not in ("A3_OSC_TRUTH", "STEMDECK_AUDIO_PORT")}
         environ.update(env or {})
         return subprocess.run([TOOL, *args, "--home", str(self.home)],
                               capture_output=True, text=True, env=environ)
@@ -154,6 +155,26 @@ class TheDeckSender(RenderCase):
         self.render("render", "B")
         self.assertEqual([], self.written())
 
+    def test_the_host_s_own_audio_port_wins(self):
+        """P28: the served truth names the Core's socket; the host knows its own."""
+        done = self.run_tool("render", "B", "--truth", str(self.truth_file),
+                             env={"STEMDECK_AUDIO_PORT": "eno2"})
+        self.assertEqual(0, done.returncode, done.stderr)
+        self.assertIn('local.ifname = "eno2"', self.conf())
+        self.assertNotIn("enp5s0", self.conf())
+
+    def test_an_empty_host_audio_port_falls_back_to_the_truth(self):
+        self.run_tool("render", "B", "--truth", str(self.truth_file),
+                      env={"STEMDECK_AUDIO_PORT": ""})
+        self.assertIn('local.ifname = "enp5s0"', self.conf())
+
+    def test_the_host_s_audio_port_without_one_in_the_truth(self):
+        self.write_truth({**TRUTH, "network": {}})
+        done = self.run_tool("render", "B", "--truth", str(self.truth_file),
+                             env={"STEMDECK_AUDIO_PORT": "eno2"})
+        self.assertEqual(0, done.returncode, done.stderr)
+        self.assertIn('local.ifname = "eno2"', self.conf())
+
     def test_a_truth_without_the_deck_listener_is_refused(self):
         self.write_truth({**TRUTH, "listeners": TRUTH["listeners"][2:]})
         done = self.render("render", "B")
@@ -206,6 +227,21 @@ class TheBase(RenderCase):
         self.write_truth({**TRUTH, "network": {}})
         done = self.render("render-base")
         self.assertNotEqual(0, done.returncode)
+        self.assertEqual([], self.written())
+
+    def test_the_host_s_own_audio_port_wins(self):
+        done = self.run_tool("render-base", "--truth", str(self.truth_file),
+                             env={"STEMDECK_AUDIO_PORT": "eno2"})
+        self.assertEqual(0, done.returncode, done.stderr)
+        self.assertIn('clock.interface = "eno2"', self.conf())
+        self.assertIn('local.ifname = "eno2"', self.conf())
+        self.assertNotIn("enp5s0", self.conf())
+
+    def test_without_any_audio_port_the_base_writes_nothing(self):
+        self.write_truth({**TRUTH, "network": {}})
+        done = self.run_tool("render-base", "--truth", str(self.truth_file),
+                             env={"STEMDECK_AUDIO_PORT": ""})
+        self.assertEqual(1, done.returncode)
         self.assertEqual([], self.written())
 
     def test_its_name_is_not_a3_cores(self):

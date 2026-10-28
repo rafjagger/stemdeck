@@ -1,5 +1,3 @@
-# SPDX-FileCopyrightText: 2026 Raphael Eismann
-# SPDX-License-Identifier: GPL-3.0-or-later
 [Unit]
 Description=AES67 PTP clock and receiver of a deck host (PipeWire, on the audio network)
 # A deck host has no a3-core, so StemDeck brings this instance: the PTP clock
@@ -13,7 +11,11 @@ After=pipewire.service wireplumber.service
 
 [Service]
 ExecCondition=/usr/lib/stemdeck/stemdeck-aes67-deck base-wanted
+# STEMDECK_AUDIO_PORT, the host's audio socket, comes from the deck-host role's drop-in.
 ExecStartPre=/usr/lib/stemdeck/stemdeck-aes67-deck render-base
 ExecStart=/usr/bin/pipewire -c %h/.config/pipewire/pipewire-stemdeck-aes67.conf
 Restart=always
 RestartSec=2
+# Exit 2 is a refused render (a bad letter, a truth without the deck's keys):
+# restarting cannot mend it.
+RestartPreventExitStatus=2

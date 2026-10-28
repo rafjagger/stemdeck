@@ -13,7 +13,8 @@
         Exit 0 when this host runs the base instance, 1 where a3-core's
         a3-aes67.service is (its ExecCondition): one PTP0 driver a graph.
 
-The truth is StemDeck's (Source/OscTruthFile.h): --truth, else $A3_OSC_TRUTH,
+The audio socket is $STEMDECK_AUDIO_PORT when set and not empty, else the
+truth's network.audio_port. The truth is StemDeck's (Source/OscTruthFile.h): --truth, else $A3_OSC_TRUTH,
 else what Core last served (~/.cache/a3/a3-osc.json) if it reads as a truth,
 else the package's /usr/share/a3/a3-osc.json. A deck host has no a3-core.
 
@@ -78,10 +79,14 @@ def load_truth(path):
         raise Refused(f"no usable truth at {path}: {error}") from None
 
 
-def audio_port(truth):
-    port = truth.get("network", {}).get("audio_port", "")
+def audio_port(truth, environ):
+    """The host's own socket ($STEMDECK_AUDIO_PORT, set by the deck-host role),
+    else the truth's: the truth a deck host holds is the Core's, naming the
+    Core's socket (ruling P28)."""
+    port = environ.get("STEMDECK_AUDIO_PORT") or truth.get("network", {}).get("audio_port", "")
     if not port:
-        raise NoAudioPort("the truth's network has no audio_port: no AES67 on this host")
+        raise NoAudioPort("neither $STEMDECK_AUDIO_PORT nor the truth's network.audio_port "
+                          "names an audio socket: no AES67 on this host")
     return port
 
 
@@ -125,8 +130,8 @@ def deck_letter(word):
     return word.upper()
 
 
-def deck_conf(truth, letter):
-    port = audio_port(truth)
+def deck_conf(truth, letter, environ):
+    port = audio_port(truth, environ)
     stream_ip, stream_port = endpoint(truth, "aes67", "deck", deck=letter.lower())
     sap_ip, sap_port = endpoint(truth, "aes67", "sap")
     return filled(template(DECK_TEMPLATE), {
@@ -141,8 +146,8 @@ def deck_conf(truth, letter):
     })
 
 
-def base_conf(truth):
-    port = audio_port(truth)
+def base_conf(truth, environ):
+    port = audio_port(truth, environ)
     sap_ip, sap_port = endpoint(truth, "aes67", "sap")
     return filled(template(BASE_TEMPLATE), {
         "AUDIO_PORT": port,
@@ -217,9 +222,9 @@ def run(argv, environ):
     truth = load_truth(truth_path(args.truth, args.home, environ))
     folder = args.home / PIPEWIRE_DIR
     if args.step == "render":
-        render(folder / f"pipewire-aes67-deck-{letter}.conf", lambda: deck_conf(truth, letter))
+        render(folder / f"pipewire-aes67-deck-{letter}.conf", lambda: deck_conf(truth, letter, environ))
     else:
-        render(folder / BASE_CONF, lambda: base_conf(truth))
+        render(folder / BASE_CONF, lambda: base_conf(truth, environ))
     return 0
 
 

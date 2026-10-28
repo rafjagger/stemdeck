@@ -34,24 +34,29 @@ DeckPanel::DeckPanel (StemDeckPlayer& p, StemThumbnails& thumbnails, int index)
 	// vinyl mode and grid adjust are wired through it.
 	addChildComponent (jog);
 
-	// Cue reacts to press and release, not to clicks.
-	cueButton.onStateChange = [this]
-	{
-		const bool down = cueButton.isDown();
-
-		if (down != cueButtonWasDown)
-		{
-			cueButtonWasDown = down;
-			down ? cuePressed() : cueReleased();
-		}
-	};
+	// Cue reacts to press and release, not to clicks: held while any finger is on it.
+	cueButton.onHold = [this] { cuePressed(); };
+	cueButton.onLetGo = [this] { cueReleased(); };
 	cueButton.setColour (juce::TextButton::textColourOffId, Theme::cue);
 	// Lit like a CDJ's CUE (CueLight.h); updateCueLight() sets the toggle state.
 	cueButton.setColour (juce::TextButton::buttonOnColourId, Theme::cue);
 	cueButton.setColour (juce::TextButton::textColourOnId, juce::Colours::black);
-	playButton.onClick = [this] { togglePlay(); };
+	playButton.onClick = [this] { playPressed(); };
 	playButton.setColour (juce::TextButton::buttonOnColourId, Theme::play);
 	loopOffButton.onClick = [this] { player.clearLoop(); };
+
+	// Lit while looping (LOOP, OUT) or while the in point waits for OUT (IN).
+	loopButton.onClick = [this] { toggleLoop(); };
+	loopButton.setTooltip ("Loop: leave the loop, or go back into the last one");
+	loopInButton.onClick = [this] { loopIn(); };
+	loopInButton.setTooltip ("Loop in: the loop starts here");
+	loopOutButton.onClick = [this] { loopOut(); };
+	loopOutButton.setTooltip ("Loop out: the loop ends here and plays");
+	for (auto* key : { &loopButton, &loopInButton, &loopOutButton })
+	{
+		key->setColour (juce::TextButton::buttonOnColourId, Theme::loop);
+		key->setMouseClickGrabsKeyboardFocus (false);
+	}
 	loopOffButton.setTooltip (juce::String ("Set a loop: drag in the overview"));
 	loopOffButton.setColour (juce::TextButton::buttonOnColourId, Theme::loop);
 
@@ -94,7 +99,7 @@ DeckPanel::DeckPanel (StemDeckPlayer& p, StemThumbnails& thumbnails, int index)
 	nextButton.onClick = [this] { if (onStep) onStep (1); };
 	setStepsAvailable (false, false, {}, {});
 
-	for (auto* b : { &previousButton, &nextButton, &cueButton, &playButton, &loopOffButton, &repeatButton, &syncButton, &masterButton, &vinylButton, &gridButton })
+	for (auto* b : std::initializer_list<juce::TextButton*> { &previousButton, &nextButton, &cueButton, &playButton, &loopOffButton, &repeatButton, &syncButton, &masterButton, &vinylButton, &gridButton })
 	{
 		b->setMouseClickGrabsKeyboardFocus (false); // keyboard shortcuts stay with the main window
 		addAndMakeVisible (b);
@@ -251,59 +256,62 @@ void DeckPanel::setSet (const StemSet& set)
 	for (int s = 0; s < StemSet::numStems; ++s)
 		labels[(size_t) s] = juce::String (stemLaneLabel (set.stemNames[(size_t) s].toStdString(), s));
 	overview.setStemNames (labels);
-	previewingFromCue = false;
+	cuePlay.reset();
+	deckLoop.reset();
 }
 
-void DeckPanel::togglePlay()
+void DeckPanel::playPressed()
 {
-	previewingFromCue = false;
-
-	if (player.isPlaying())
-		player.pause();
-	else
-		player.play();
+	cuePlay.playPressed (transport);
 }
 
 void DeckPanel::cuePressed()
 {
-	cueHeld = true;
+	cuePlay.cueDown (transport);
 	updateCueLight();
-
-	if (! player.isLoaded())
-		return;
-
-	if (player.isPlaying())
-	{
-		player.pause();
-		player.setPosition (player.getCuePoint());
-	}
-	else if (std::abs (player.getPosition() - player.getCuePoint()) > 0.01)
-	{
-		player.setCuePoint (player.getPosition());
-	}
-	else
-	{
-		previewingFromCue = true;
-		player.play();
-	}
 }
 
 void DeckPanel::cueReleased()
 {
-	cueHeld = false;
+	cuePlay.cueUp (transport);
 	updateCueLight();
+}
 
-	if (previewingFromCue)
-	{
-		previewingFromCue = false;
-		player.pause();
-		player.setPosition (player.getCuePoint());
-	}
+void DeckPanel::loopIn()
+{
+	deckLoop.in (transport);
+	updateLoopLights();
+}
+
+void DeckPanel::loopOut()
+{
+	deckLoop.out (transport);
+	updateLoopLights();
+}
+
+void DeckPanel::toggleLoop()
+{
+	deckLoop.toggle (transport);
+	updateLoopLights();
+}
+
+void DeckPanel::loopInOrOut()
+{
+	deckLoop.inOrOut (transport);
+	updateLoopLights();
+}
+
+void DeckPanel::updateLoopLights()
+{
+	const auto looping = player.hasLoop();
+	loopButton.setToggleState (looping, juce::dontSendNotification);
+	loopInButton.setToggleState (looping || deckLoop.isInMarked(), juce::dontSendNotification);
+	loopOutButton.setToggleState (looping, juce::dontSendNotification);
 }
 
 void DeckPanel::updateCueLight()
 {
-	const auto light = cuelight::cueLight (player.isLoaded(), player.isPlaying(), cueHeld,
+	const auto light = cuelight::cueLight (player.isLoaded(), player.isPlaying(), cuePlay.isCueHeld(),
 										   player.getPosition(), player.getCuePoint());
 	const bool lit = light == cuelight::CueLight::steady
 					 || (light == cuelight::CueLight::blink
@@ -335,6 +343,7 @@ void DeckPanel::refresh()
 	updateCueLight();
 	loopOffButton.setToggleState (player.hasLoop(), juce::dontSendNotification);
 	loopOffButton.setEnabled (player.hasLoop());
+	updateLoopLights();
 	overview.refresh();
 	jog.refresh();
 }
@@ -377,7 +386,7 @@ void DeckPanel::resized()
 	for (auto* time : { &elapsedLabel, &remainingLabel })
 		time->setFont (juce::FontOptions ((float) time->getHeight() * 0.7f));
 	if (transportPlace == surface::Transport::inColumn)
-		setTransportBounds ({ layout.transportTile, layout.previous, layout.cue, layout.play, layout.next });
+		setTransportBounds ({ layout.transportTile, layout.previous, layout.cue, layout.play, layout.next, {}, {}, {} });   // no loop block in the column
 	place (loopOffButton, layout.loopOff);
 	place (repeatButton, layout.repeat);
 	place (syncButton, layout.sync);
@@ -409,8 +418,9 @@ void DeckPanel::addBandPartsTo (juce::Component& parent)
 void DeckPanel::addTransportTo (juce::Component& parent)
 {
 	transportPlace = surface::Transport::elsewhere;
-	for (auto* key : { &previousButton, &cueButton, &playButton, &nextButton })
+	for (auto* key : std::initializer_list<juce::TextButton*> { &previousButton, &cueButton, &playButton, &nextButton, &loopButton, &loopInButton, &loopOutButton })
 		parent.addAndMakeVisible (key);
+	loopOffButton.setVisible (false);   // LOOP in the foot row does its job
 	resized();
 }
 
@@ -420,6 +430,9 @@ void DeckPanel::setTransportBounds (const surface::TransportKeys& keys)
 	cueButton.setBounds (surface::toJuce (keys.cue));
 	playButton.setBounds (surface::toJuce (keys.play));
 	nextButton.setBounds (surface::toJuce (keys.next));
+	loopButton.setBounds (surface::toJuce (keys.loop));
+	loopInButton.setBounds (surface::toJuce (keys.loopIn));
+	loopOutButton.setBounds (surface::toJuce (keys.loopOut));
 }
 
 void DeckPanel::setBandBounds (const surface::DeckTile& parts)

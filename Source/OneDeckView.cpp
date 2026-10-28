@@ -19,6 +19,7 @@ namespace
 	constexpr float titleLine = 0.05f, stemsLine = 0.04f, columnShare = 0.52f, bpmLine = 0.07f, bpmInfoLine = 0.04f;
 	constexpr float pitchColumnShare = 0.32f;   // of the card's width: the fader beside value, range, KEY and SHIFT
 	constexpr float captionFontShare = 0.8f;    // a meter's name, of its line
+	constexpr float captionWidthShare = 0.34f;  // and at most this of its width: "MAIN" fits with room beside it
 
 	juce::String meterName (outputs::oneDeck::MeteredBus bus)
 	{
@@ -65,7 +66,8 @@ void OneDeckOutputs::paint (juce::Graphics& g)
 	for (const auto bus : outputs::oneDeck::meteredBuses)
 	{
 		const auto& line = captions[(size_t) bus];
-		g.setFont (juce::FontOptions ((float) line.getHeight() * captionFontShare, juce::Font::bold));
+		const auto size = juce::jmin ((float) line.getHeight() * captionFontShare, (float) line.getWidth() * captionWidthShare);
+		g.setFont (juce::FontOptions (size, juce::Font::bold));
 		g.drawFittedText (meterName (bus), line, juce::Justification::centred, 1, 0.6f);
 	}
 }

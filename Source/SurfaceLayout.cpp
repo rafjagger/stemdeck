@@ -91,9 +91,9 @@ namespace surface
 		// between them and the one above it.
 		constexpr int keysOnlyUnits = deckUnits - 2 * transportUnits - 2 * gapUnits;
 
-		// The one-deck foot row, in per mille: the meters' card of the row's
-		// width, the track search of the transport tile's.
-		constexpr int footMetersShare = 250, trackSearchShare = 200;
+		// The one-deck foot row, in per mille of its width: the meters' card,
+		// the loop block, the track search; CUE | PLAY take the rest.
+		constexpr int footMetersShare = 170, loopBlockShare = 190, trackSearchShare = 130;
 		// A meter slot: its bar of the slot's width, its caption of the card's height.
 		constexpr int meterBarShare = 300, meterCaptionShare = 220;
 
@@ -281,7 +281,12 @@ namespace surface
 		area.removeFromBottom (rowGap);
 		splitPair (area.removeFromBottom (units (keyUnits)), rowGap, c.sync, c.master);
 		area.removeFromBottom (rowGap);
-		splitPair (area.removeFromBottom (units (keyUnits)), rowGap, c.loopOff, c.repeat);
+		// Without the transport LOOP OFF goes too (the foot row's LOOP does
+		// its job), and REPEAT has the row to itself.
+		if (hasTransport)
+			splitPair (area.removeFromBottom (units (keyUnits)), rowGap, c.loopOff, c.repeat);
+		else
+			c.repeat = area.removeFromBottom (units (keyUnits));
 		area.removeFromBottom (rowGap);
 
 		// Grid Adjust above the keys; with GRID off its room is the times'.
@@ -308,18 +313,28 @@ namespace surface
 	OneDeckFoot oneDeckFoot (Rect row, Metrics m)
 	{
 		OneDeckFoot foot;
-		foot.metersTile = row.removeFromRight (share (row.w, footMetersShare));
+		const auto width = row.w;
+		foot.metersTile = row.removeFromRight (share (width, footMetersShare));
 		row.removeFromRight (m.gap);
 
 		auto& t = foot.transport;
 		t.tile = row;
 		auto keys = t.tile.reduced (m.gap);
-		auto search = keys.removeFromRight (share (keys.w, trackSearchShare));
+		const auto halfHeight = (keys.h - m.gap) / 2;
+
+		// Two rows of equal height in each block: over and under.
+		auto loopBlock = keys.removeFromRight (share (width, loopBlockShare));
 		keys.removeFromRight (m.gap);
+		t.loop = loopBlock.removeFromTop (halfHeight);
+		splitPair (loopBlock.removeFromBottom (halfHeight), m.gap, t.loopIn, t.loopOut);
+
+		auto search = keys.removeFromRight (share (width, trackSearchShare));
+		keys.removeFromRight (m.gap);
+		t.previous = search.removeFromTop (halfHeight);
+		t.next = search.removeFromBottom (halfHeight);
+
+		keys.removeFromRight ((keys.w - m.gap) % 2);   // CUE and PLAY alike
 		splitPair (keys, m.gap, t.cue, t.play);
-		t.previous = search.removeFromTop ((search.h - m.gap) / 2);
-		search.removeFromTop (m.gap);
-		t.next = search;
 		return foot;
 	}
 

@@ -2,6 +2,7 @@
 
 #include "SurfaceLayout.h"
 
+#include <cstdlib>
 #include <string>
 #include <utility>
 #include <vector>
@@ -528,7 +529,8 @@ TEST (SurfaceLayout, GridEditRowHasFiveKeysUnderTheNudgeKeys)
 // The one-deck screen (2026-10-28): its outputs row lost the phones and the
 // 16 B-format bars, and the transport moved into the room -- CUE | PLAY as
 // tall as the row at the left, the track search stacked beside them, the
-// three meters' card at the right.
+// loop block (LOOP over IN | OUT) beside that, the three meters' card at the
+// right.
 namespace
 {
 	// OneDeckView's foot row on the rig: 15 % of its 756 x 718.
@@ -573,16 +575,68 @@ TEST (SurfaceLayout, OneDeckTransportIsFingerSizedOnTheRig)
 {
 	const auto foot = surface::oneDeckFoot (footRow (rigFootWidth, rigFootHeight), surface::metrics (rigFootWidth));
 	const auto& t = foot.transport;
-	// About 7 px a mm: CUE and PLAY over 12 mm high, the track search over 6 mm.
+	// About 7 px a mm: CUE and PLAY over 12 mm high and wider than high, the
+	// track search and the loop keys over 6 mm each way.
 	for (const auto& key : { t.cue, t.play })
 	{
 		EXPECT_GE (key.h, 84);
-		EXPECT_GE (key.w, 2 * key.h) << "wide enough to hit without looking";
+		EXPECT_GE (key.w * 2, 3 * key.h) << "wide enough to hit without looking";
 	}
-	for (const auto& key : { t.previous, t.next })
+	for (const auto& key : { t.previous, t.next, t.loop, t.loopIn, t.loopOut })
 	{
 		EXPECT_GE (key.h, 40);
-		EXPECT_GE (key.w, 80);
+		EXPECT_GE (key.w, 60);
+	}
+}
+
+// The transport band from right to left (2026-10-28): the meters; the loop
+// block, LOOP on top, LOOP IN | LOOP OUT under it; |< over >|; PLAY; CUE.
+TEST (SurfaceLayout, OneDeckFootRunsMetersLoopSearchPlayCueFromTheRight)
+{
+	for (const auto& [w, h] : footRows)
+	{
+		const auto foot = surface::oneDeckFoot (footRow (w, h), surface::metrics (w));
+		const auto& t = foot.transport;
+		const auto size = sizeName (w, h);
+
+		for (const auto& key : { t.loop, t.loopIn, t.loopOut })
+			EXPECT_TRUE (t.tile.contains (key)) << size;
+		EXPECT_LT (t.loopOut.right(), foot.metersTile.x) << "the meters at the far right, " << size;
+		EXPECT_LT (t.loopIn.right(), t.loopOut.x) << "IN before OUT, " << size;
+		EXPECT_EQ (t.loopIn.y, t.loopOut.y);
+		EXPECT_LE (std::abs (t.loopIn.w - t.loopOut.w), 1) << "IN and OUT alike";
+		EXPECT_EQ (t.loopIn.h, t.loopOut.h);
+		EXPECT_LT (t.loop.bottom(), t.loopIn.y + 1) << "LOOP on top, " << size;
+		EXPECT_EQ (t.loop.x, t.loopIn.x) << "LOOP spans IN and OUT";
+		EXPECT_EQ (t.loop.right(), t.loopOut.right());
+		EXPECT_EQ (t.loop.h, t.loopIn.h);
+		EXPECT_EQ (t.loop.y, t.previous.y) << "the loop block lines up with the track search";
+		EXPECT_EQ (t.loopIn.bottom(), t.next.bottom());
+
+		EXPECT_LT (t.next.right(), t.loop.x) << "the track search left of the loop block, " << size;
+		EXPECT_LT (t.play.right(), t.previous.x) << "PLAY left of the track search, " << size;
+		EXPECT_LT (t.cue.right(), t.play.x) << "CUE at the far left, " << size;
+
+		for (const auto& small : { t.previous, t.next, t.loop, t.loopIn, t.loopOut })
+			EXPECT_LT (small.w * small.h, t.cue.w * t.cue.h) << "CUE and PLAY are the biggest, " << size;
+		EXPECT_GE (t.loopIn.h, 34) << "a fingertip, " << size;
+	}
+}
+
+// Shares, not pixels: the same row twice as large is the same picture twice as large.
+TEST (SurfaceLayout, OneDeckFootScalesWithItsRow)
+{
+	const auto small = surface::oneDeckFoot (footRow (rigFootWidth, rigFootHeight), surface::metrics (rigFootWidth));
+	const auto large = surface::oneDeckFoot (footRow (2 * rigFootWidth, 2 * rigFootHeight), surface::metrics (2 * rigFootWidth));
+	// Within a hundredth of the row: the gaps round to whole pixels.
+	const auto near = [] (int doubled, int single) { return std::abs (doubled - 2 * single) <= 2 * rigFootWidth / 100; };
+	for (const auto& [a, b] : { std::pair { small.transport.cue, large.transport.cue }, { small.transport.loop, large.transport.loop },
+								{ small.transport.loopOut, large.transport.loopOut }, { small.transport.next, large.transport.next },
+								{ small.metersTile, large.metersTile } })
+	{
+		EXPECT_TRUE (near (b.x, a.x)) << b.x << " vs " << a.x;
+		EXPECT_TRUE (near (b.w, a.w)) << b.w << " vs " << a.w;
+		EXPECT_TRUE (near (b.h, a.h)) << b.h << " vs " << a.h;
 	}
 }
 
@@ -629,12 +683,16 @@ TEST (SurfaceLayout, DeckColumnWithoutTransportGivesTheRoomToTheKeys)
 
 			for (const auto& key : { without.transportTile, without.previous, without.cue, without.play, without.next })
 				EXPECT_TRUE (key.isEmpty()) << "nothing of the transport in the column";
-			for (const auto& [a, b] : { std::pair { with.loopOff, without.loopOff }, { with.sync, without.sync }, { with.vinyl, without.vinyl },
+			for (const auto& [a, b] : { std::pair { with.repeat, without.repeat }, { with.sync, without.sync }, { with.vinyl, without.vinyl },
 										{ with.gridNudge[0], without.gridNudge[0] }, { with.gridEdit[0], without.gridEdit[0] } })
 				EXPECT_GT (b.h, a.h) << sizeName (w, h);
-			EXPECT_LT (without.loopOff.bottom(), without.sync.y + 1);
+			EXPECT_LT (without.repeat.bottom(), without.sync.y + 1);
 			EXPECT_LT (without.sync.bottom(), without.vinyl.y + 1);
-			for (const auto& key : { without.loopOff, without.repeat, without.sync, without.master, without.vinyl, without.grid })
+			// LOOP OFF went to the foot row's LOOP; REPEAT keeps its row, alone across it.
+			EXPECT_TRUE (without.loopOff.isEmpty()) << sizeName (w, h);
+			EXPECT_EQ (without.repeat.x, without.sync.x) << sizeName (w, h);
+			EXPECT_EQ (without.repeat.right(), without.master.right()) << sizeName (w, h);
+			for (const auto& key : { without.repeat, without.sync, without.master, without.vinyl, without.grid })
 				EXPECT_TRUE (column.contains (key)) << sizeName (w, h);
 			EXPECT_GE (without.vinyl.bottom(), column.h - column.h / 10) << "the keys at the column's foot";
 		}

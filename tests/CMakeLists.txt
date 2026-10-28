@@ -3,6 +3,10 @@ add_executable(stemdeck-tests
     Smoke.cpp
     CueLight.cpp
     ${CMAKE_SOURCE_DIR}/Source/CueLight.cpp
+    CuePlay.cpp
+    ${CMAKE_SOURCE_DIR}/Source/CuePlay.cpp
+    DeckLoop.cpp
+    ${CMAKE_SOURCE_DIR}/Source/DeckLoop.cpp
     WaveformScale.cpp
     WaveformColumns.cpp
     BarPhase.cpp
@@ -259,6 +263,8 @@ add_executable(stemdeck-spatial-tests
     ${CMAKE_SOURCE_DIR}/Source/Waveforms.cpp
     ${CMAKE_SOURCE_DIR}/Source/JogWheel.cpp
     ${CMAKE_SOURCE_DIR}/Source/CueLight.cpp
+    ${CMAKE_SOURCE_DIR}/Source/CuePlay.cpp
+    ${CMAKE_SOURCE_DIR}/Source/DeckLoop.cpp
     ${CMAKE_SOURCE_DIR}/Source/SyncLabels.cpp
     ${CMAKE_SOURCE_DIR}/Source/SurfaceLayout.cpp
     ${CMAKE_SOURCE_DIR}/Source/Theme.cpp

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include <gtest/gtest.h>
 
+#include "../BareXServer.h"
 #include "OneDeckAudio.h"
 #include "AuxPots.h"
 #include "OneDeckView.h"
@@ -336,7 +337,7 @@ TEST_F (OneDeck, PaintsEveryState)
 
 // For the maintainer's eye: with STEMDECK_SNAPSHOT_DIR set, the deck part at
 // the rig's real size as PNGs -- loaded and stopped, then playing with a stem
-// cued and sent to AUX, so the meters stand lit.
+// cued and sent to AUX, so the meters stand lit, then looping.
 TEST_F (OneDeck, WritesTheRigSizedScreenForReview)
 {
 	const auto directory = juce::SystemStats::getEnvironmentVariable ("STEMDECK_SNAPSHOT_DIR", {});
@@ -360,18 +361,27 @@ TEST_F (OneDeck, WritesTheRigSizedScreenForReview)
 		EXPECT_GT (lumaVariance (image), 50.0) << name;
 		ASSERT_TRUE (juce::PNGImageFormat().writeImageToStream (image, stream));
 	};
+	const auto playFor = [&] (double seconds)
+	{
+		for (int i = 0; i < blocksFor (seconds); ++i)
+		{
+			renderBlock();
+			view.refresh();
+		}
+	};
+	player().clearLoop();
 	write ("one-deck-stopped");
 
 	setAllStems (false, false, 1.0f);
 	view.column (1).cue().setToggleState (true, juce::sendNotificationSync);
 	view.column (0).aux().setValue (0.8, juce::sendNotificationSync);
 	player().play();
-	for (int i = 0; i < blocksFor (0.3); ++i)
-	{
-		renderBlock();
-		view.refresh();
-	}
+	playFor (0.3);
 	write ("one-deck-playing");
+
+	player().setLoop (0.5, 2.5);
+	playFor (0.3);
+	write ("one-deck-looping");
 	view.setLookAndFeel (nullptr);
 }
 
@@ -606,6 +616,29 @@ TEST_F (OneDeck, TheTransportStandsInTheFootRow)
 	for (const auto bus : outputs::oneDeck::meteredBuses)
 		EXPECT_TRUE (view.outputs().getLocalBounds().contains (view.outputs().meter (bus).getBounds()));
 
+	// The loop block between the track search and the meters (2026-10-28).
+	for (auto* key : { &panel.loopKey(), &panel.loopInKey(), &panel.loopOutKey() })
+	{
+		EXPECT_EQ (key->getParentComponent(), &view);
+		EXPECT_TRUE (key->isVisible());
+		EXPECT_TRUE (foot.contains (key->getBounds())) << key->getButtonText();
+		for (const auto& other : keys)
+			EXPECT_FALSE (other.intersects (key->getBounds())) << key->getButtonText();
+		keys.push_back (key->getBounds());
+		EXPECT_GE (key->getHeight(), 40) << "over 6 mm on the rig";
+	}
+	EXPECT_LT (panel.nextKey().getRight(), panel.loopKey().getX());
+	EXPECT_LT (panel.loopKey().getBottom(), panel.loopInKey().getY() + 1) << "LOOP on top";
+	EXPECT_LT (panel.loopInKey().getRight(), panel.loopOutKey().getX()) << "IN | OUT";
+	EXPECT_LT (panel.loopOutKey().getRight(), meters.getX());
+	EXPECT_EQ (panel.loopKey().getButtonText(), "LOOP") << "its state is its light, not its text";
+
+	// LOOP OFF left the deck column; REPEAT stayed in it.
+	EXPECT_FALSE (panel.loopOffKey().isVisible());
+	EXPECT_TRUE (panel.repeatKey().isVisible());
+	EXPECT_EQ (panel.repeatKey().getParentComponent(), &panel);
+	EXPECT_TRUE (panel.getLocalBounds().contains (panel.repeatKey().getBounds()));
+
 	// GRID re-lays the column: the transport stays where the view put it.
 	const auto cue = panel.cueKey().getBounds();
 	panel.resized();
@@ -640,7 +673,117 @@ TEST_F (OneDeck, PaintsTheFootRowInEachState)
 
 	const auto playArea = view.deckPanel().playKey().getBounds().translated (-foot.getX(), -foot.getY());
 	EXPECT_GT (differingPixels (stopped.getClippedImage (playArea), playing.getClippedImage (playArea)), 10) << "PLAY is lit";
+
+	// Looping: LOOP, IN and OUT light; the in point waiting: IN alone.
+	const auto areaOf = [&] (juce::Component& key) { return key.getBounds().translated (-foot.getX(), -foot.getY()); };
+	auto& panel = view.deckPanel();
+	player().clearLoop();
+	const auto unlooped = footOf();
+	player().setLoop (0.5, 2.5);
+	const auto looping = footOf();
+	EXPECT_GT (lumaVariance (looping), 50.0);
+	for (auto* key : { &panel.loopKey(), &panel.loopInKey(), &panel.loopOutKey() })
+		EXPECT_GT (differingPixels (unlooped.getClippedImage (areaOf (*key)), looping.getClippedImage (areaOf (*key))), 10)
+			<< key->getButtonText() << " is lit while looping";
+
+	player().clearLoop();
+	panel.loopIn();
+	const auto marked = footOf();
+	EXPECT_GT (differingPixels (unlooped.getClippedImage (areaOf (panel.loopInKey())), marked.getClippedImage (areaOf (panel.loopInKey()))), 10)
+		<< "IN is lit while its point waits for OUT";
+	EXPECT_EQ (differingPixels (unlooped.getClippedImage (areaOf (panel.loopKey())), marked.getClippedImage (areaOf (panel.loopKey()))), 0)
+		<< "LOOP stays dark";
 	view.setLookAndFeel (nullptr);
+}
+
+// The loop keys on the screen loop the player itself (CDJ-style, DeckLoop.h).
+TEST_F (OneDeck, TheLoopKeysLoopTheDeck)
+{
+	OneDeckView view (audio, formats, 0);
+	view.setSize (rigViewWidth, rigViewHeight);
+	auto& panel = view.deckPanel();
+	player().clearLoop();
+	player().setBeatGrid ({ 120.0, 0.0 });   // a beat every 0.5 s: the loop snaps to it
+	player().setPosition (0.52);
+	player().play();
+
+	panel.loopInKey().onClick();
+	EXPECT_FALSE (player().hasLoop());
+	renderBlocks (blocksFor (1.0));
+	panel.loopOutKey().onClick();
+	ASSERT_TRUE (player().hasLoop());
+	EXPECT_NEAR (player().getLoop().getStart(), 0.5, 1e-3) << "on the beat";
+	EXPECT_NEAR (player().getLoop().getEnd(), 1.5, 1e-3);
+	EXPECT_TRUE (player().isPlaying());
+
+	panel.loopKey().onClick();
+	EXPECT_FALSE (player().hasLoop()) << "LOOP exits";
+	EXPECT_TRUE (player().isPlaying()) << "and plays on";
+	panel.loopKey().onClick();
+	ASSERT_TRUE (player().hasLoop()) << "LOOP again goes back in";
+	EXPECT_NEAR (player().getLoop().getStart(), 0.5, 1e-3);
+	EXPECT_NEAR (player().getPosition(), 0.5, 0.01);
+}
+
+// The maintainer's case on the screen (2026-10-28): one finger holds CUE --
+// which reaches JUCE twice, as touch#0 and X's emulated mouse#0 -- a second
+// finger taps PLAY (touch#1), then the first lets go. The deck plays on from
+// where it was, without going back to the cue point.
+TEST_F (OneDeck, HoldingCueAndTappingPlayOnTheScreenPlaysOn)
+{
+	if (! barex::hasDisplay())
+		GTEST_SKIP() << "no X display";
+	barex::internWindowManagerAtoms();
+
+	OneDeckView view (audio, formats, 0);
+	view.setSize (rigViewWidth, rigViewHeight);
+	view.addToDesktop (0);
+	view.setVisible (true);
+	auto* peer = view.getPeer();
+	ASSERT_NE (peer, nullptr);
+	auto& panel = view.deckPanel();
+
+	player().clearLoop();
+	player().setCuePoint (1.0);
+	player().setPosition (1.0);
+
+	using Source = juce::MouseInputSource::InputSourceType;
+	juce::int64 time = 1000;
+	const auto send = [&] (Source type, int index, juce::Component& key, bool down)
+	{
+		const auto where = view.getLocalPoint (&key, key.getLocalBounds().getCentre()).toFloat();
+		const auto mods = down ? juce::ModifierKeys (juce::ModifierKeys::leftButtonModifier) : juce::ModifierKeys();
+		const auto pressure = type == Source::touch ? 1.0f : juce::MouseInputSource::defaultPressure;
+		peer->handleMouseEvent (type, where, mods, pressure, juce::MouseInputSource::defaultOrientation, time += 2, {}, index);
+		juce::MessageManager::getInstance()->runDispatchLoopUntil (10);
+	};
+
+	send (Source::touch, 0, panel.cueKey(), true);
+	send (Source::mouse, 0, panel.cueKey(), true);
+	ASSERT_TRUE (player().isPlaying()) << "held on the cue point, CUE previews";
+	renderBlocks (blocksFor (0.5));
+
+	send (Source::touch, 1, panel.playKey(), true);
+	send (Source::touch, 1, panel.playKey(), false);
+	EXPECT_TRUE (player().isPlaying()) << "PLAY while CUE is held plays on";
+
+	send (Source::touch, 0, panel.cueKey(), false);
+	send (Source::mouse, 0, panel.cueKey(), false);
+	EXPECT_TRUE (player().isPlaying()) << "letting go of CUE keeps it playing";
+	EXPECT_GT (player().getPosition(), 1.4) << "no jump back to the cue point";
+	EXPECT_DOUBLE_EQ (player().getCuePoint(), 1.0);
+
+	// And without PLAY the preview ends where it began.
+	player().pause();
+	player().setPosition (1.0);
+	send (Source::touch, 0, panel.cueKey(), true);
+	send (Source::mouse, 0, panel.cueKey(), true);
+	renderBlocks (blocksFor (0.3));
+	send (Source::touch, 0, panel.cueKey(), false);
+	send (Source::mouse, 0, panel.cueKey(), false);
+	EXPECT_FALSE (player().isPlaying());
+	EXPECT_NEAR (player().getPosition(), 1.0, 0.01);
+	view.removeFromDesktop();
 }
 
 //==============================================================================

@@ -109,17 +109,20 @@ namespace surface
 	};
 	// The transport in the column's foot (the two-deck screen), or placed by
 	// the window, which leaves the column's room to its other keys (the
-	// one-deck screen's foot row, oneDeckFoot).
+	// one-deck screen's foot row, oneDeckFoot); there LOOP OFF is the foot
+	// row's LOOP, and REPEAT has its row to itself.
 	enum class Transport { inColumn, elsewhere };
 	DeckColumn deckColumn (Rect local, bool gridOn, int deckIndex, Metrics metrics, Transport transport = Transport::inColumn);
 
-	// The one-deck screen's foot row (2026-10-28), in its own coordinates:
-	// the transport on its tile at the left, CUE | PLAY as tall as the row
-	// and the biggest keys, the track search (|< over >|) beside PLAY; the
-	// meters' card at the right, one bar each for MAIN, AUX and CUE.
+	// The one-deck screen's foot row, the transport band (2026-10-28), in its
+	// own coordinates, from the right: the meters' card, one bar each for
+	// MAIN, AUX and CUE; then on the transport's tile the loop block (LOOP on
+	// top, LOOP IN | LOOP OUT under it), the track search (|< over >|), and
+	// CUE | PLAY at the left, as tall as the row and the biggest keys.
 	struct TransportKeys
 	{
 		Rect tile, previous, cue, play, next;
+		Rect loop, loopIn, loopOut;   // the one-deck foot's only
 	};
 	struct OneDeckFoot
 	{

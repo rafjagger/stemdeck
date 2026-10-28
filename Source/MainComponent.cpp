@@ -142,8 +142,8 @@ MainComponent::MainComponent()
 
 	// Mixxx-like keys: D/L play, S/K cue (hold to preview), 1-4 / 7-0 stem mutes.
 	const auto bind = [this] (int key, std::function<void (bool)> action) { keyBindings.push_back ({ key, std::move (action) }); };
-	bind ('d', [this] (bool down) { if (down) deckA.togglePlay(); });
-	bind ('l', [this] (bool down) { if (down) deckB.togglePlay(); });
+	bind ('d', [this] (bool down) { if (down) deckA.playPressed(); });
+	bind ('l', [this] (bool down) { if (down) deckB.playPressed(); });
 	bind ('s', [this] (bool down) { down ? deckA.cuePressed() : deckA.cueReleased(); });
 	bind ('k', [this] (bool down) { down ? deckB.cuePressed() : deckB.cueReleased(); });
 
@@ -516,7 +516,7 @@ void MainComponent::handleController (int d, const scs3d::Event& e)
 	switch (e.type)
 	{
 		case Type::mute:    mixer.strip (d).toggleMute (e.stem); break;
-		case Type::play:    deck.togglePlay(); break;
+		case Type::play:    deck.playPressed(); break;
 		case Type::cueDown: deck.cuePressed(); break;
 		case Type::cueUp:   deck.cueReleased(); break;
 		case Type::master:  pressMaster (d); break;
@@ -532,34 +532,9 @@ void MainComponent::handleController (int d, const scs3d::Event& e)
 
 		// Loop on button 3: the first press marks in, the second loops from
 		// there to here. Button 4: loop off, and on again (back to its start).
-		case Type::loopInOut:
-		{
-			auto& in = controllerLoopIn[(size_t) d];
-			if (! player.isLoaded())
-				break;
-			if (in >= 0.0 && player.getPosition() > in + 0.05)
-			{
-				player.setLoop (in, player.getPosition());
-				controllerLoop[(size_t) d] = { in, player.getPosition() };
-				in = -1.0;
-			}
-			else
-			{
-				in = player.getPosition();
-			}
-			break;
-		}
-		case Type::loopToggle:
-			if (player.hasLoop())
-			{
-				controllerLoop[(size_t) d] = player.getLoop();
-				player.clearLoop();
-			}
-			else if (! controllerLoop[(size_t) d].isEmpty())
-			{
-				player.setLoop (controllerLoop[(size_t) d].getStart(), controllerLoop[(size_t) d].getEnd());
-			}
-			break;
+		// The deck's own loop keys (DeckLoop.h), as on the screen.
+		case Type::loopInOut:  deck.loopInOrOut(); break;
+		case Type::loopToggle: deck.toggleLoop(); break;
 
 		// Around the circle: the library. A tap in the centre loads -- but not
 		// over a deck that is playing: a stray touch must not stop the music.
@@ -567,11 +542,7 @@ void MainComponent::handleController (int d, const scs3d::Event& e)
 		case Type::next:     library.selectRelative (1); break;
 		case Type::load:
 			if (const auto* set = library.selectedSet(); set != nullptr && ! player.isPlaying())
-			{
-				loadSet (*set, d);
-				controllerLoopIn[(size_t) d] = -1.0;
-				controllerLoop[(size_t) d] = {};
-			}
+				loadSet (*set, d);   // the deck forgets its loop marks with the old track
 			break;
 
 		// The circle as the platter: touch holds, turning scratches, release lets go.
@@ -596,8 +567,8 @@ void MainComponent::showControllers()
 		for (int s = 0; s < StemSet::numStems; ++s)
 			leds.muted[(size_t) s] = mixer.strip (d).isMuted (s);
 		leds.looping = player.hasLoop();
-		leds.loopInSet = controllerLoopIn[(size_t) d] >= 0.0;
-		leds.loopStored = ! controllerLoop[(size_t) d].isEmpty();
+		leds.loopInSet = deck.isLoopInMarked();
+		leds.loopStored = deck.canReloop();
 		leds.playing = player.isPlaying();
 		leds.atCue = player.isLoaded() && std::abs (player.getPosition() - player.getCuePoint()) < 0.01;
 		leds.synced = deck.isSyncEnabled();
@@ -623,7 +594,7 @@ void MainComponent::handlePanel (const panel::Event& e)
 		case Type::route:   mixer.pressBus (e.deck, e.stem, e.bus); break;
 		case Type::cueDown: deck.cuePressed(); break;
 		case Type::cueUp:   deck.cueReleased(); break;
-		case Type::play:    deck.togglePlay(); break;
+		case Type::play:    deck.playPressed(); break;
 		case Type::stemCue: strip.toggleCue (e.stem); break;
 		case Type::gain:    strip.nudgeStemGain (e.stem, e.value); break;
 		case Type::mute:    strip.toggleMute (e.stem); break;

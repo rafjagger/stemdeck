@@ -19,15 +19,14 @@ def body(name):
 
 
 class CueKeyFollowsTheLight(unittest.TestCase):
-    def test_press_holds_and_updates_before_any_early_return(self):
+    # Held or not is CuePlay's (unit-tested in tests/CuePlay.cpp); the light follows it.
+    def test_press_holds_and_updates_the_light(self):
         pressed = body("cuePressed")
-        self.assertLess(pressed.index("cueHeld = true"), pressed.index("updateCueLight"))
-        self.assertLess(pressed.index("updateCueLight"), pressed.index("return"))
+        self.assertLess(pressed.index("cuePlay.cueDown"), pressed.index("updateCueLight"))
 
-    def test_release_lets_go_and_updates_before_any_condition(self):
+    def test_release_lets_go_and_updates_the_light(self):
         released = body("cueReleased")
-        self.assertLess(released.index("cueHeld = false"), released.index("updateCueLight"))
-        self.assertLess(released.index("updateCueLight"), released.index("if"))
+        self.assertLess(released.index("cuePlay.cueUp"), released.index("updateCueLight"))
 
     def test_the_light_is_set_without_notification(self):
         light = body("updateCueLight")
@@ -40,12 +39,12 @@ class CueKeyFollowsTheLight(unittest.TestCase):
         self.assertIn("cueButton.setColour (juce::TextButton::buttonOnColourId, Theme::cue)", TEXT)
         self.assertRegex(TEXT, r"cueButton\.setColour \(juce::TextButton::textColourOnId, [^)]+\)")
 
+    # Held while any finger is on it (HoldKey.h), not while juce::Button says down.
     def test_the_screen_key_still_calls_press_once(self):
-        wiring = TEXT[TEXT.index("cueButton.onStateChange"):TEXT.index("cueButton.setColour")]
+        wiring = TEXT[TEXT.index("cueButton.onHold"):TEXT.index("cueButton.setColour")]
         self.assertEqual(wiring.count("cuePressed()"), 1)
         self.assertEqual(wiring.count("cueReleased()"), 1)
-        self.assertIn("cueButtonWasDown", wiring)
-
+        self.assertIn("cueButton.onLetGo", wiring)
 
 if __name__ == "__main__":
     unittest.main()

@@ -139,6 +139,24 @@ TEST (PanelMapOneDeck, CueAndShiftReportReleaseToo)
 	EXPECT_TRUE (decoder.feed (idleFrame()).empty());
 }
 
+// CUE held and PLAY pressed on the panel (the CDJ-3000's play-on): PLAY comes
+// through while CUE stays down, and CUE's release only when it is let go.
+TEST (PanelMapOneDeck, PlayWhileCueIsHeldComesThroughAlone)
+{
+	InputDecoder decoder;
+	ASSERT_EQ (decoder.feed (pressing ({ 0, 0 })).at (0).type, Event::Type::cueDown);
+	auto both = pressing ({ 0, 0 });
+	both.buttons[(size_t) buttonAt ({ 1, 0 })] = KeyState::held;
+	auto events = decoder.feed (both);
+	ASSERT_EQ (events.size(), 1u);
+	EXPECT_EQ (events[0].type, Event::Type::play);
+	events = decoder.feed (pressing ({ 0, 0 }));
+	EXPECT_TRUE (events.empty()) << "PLAY reports no release";
+	events = decoder.feed (idleFrame());
+	ASSERT_EQ (events.size(), 1u);
+	EXPECT_EQ (events[0].type, Event::Type::cueUp);
+}
+
 TEST (PanelMapOneDeck, LengthStemCueAndMuteKeys)
 {
 	InputDecoder decoder;

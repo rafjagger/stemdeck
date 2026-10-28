@@ -4,7 +4,9 @@ The package writes only to /usr. postinst enables the user unit for every
 user and does nothing else -- no write into any home, no restart (spec
 app-packages, 2026-10-07). User data stays on purge."""
 
+import json
 import os
+import re
 import subprocess
 import tempfile
 import unittest
@@ -233,6 +235,24 @@ class TheStagedTree(unittest.TestCase):
         stage = self.stage()
         self.assertEqual((REPO / "data/links-aes67.json").read_bytes(),
                          (stage / "usr/share/stemdeck/links-aes67.json").read_bytes())
+
+    def test_deck_host_links_aes67_one_two_to_the_recorder(self):
+        """The Core's REC bus (CH1/CH2) is the recorder's rec_L/rec_R; StemDeck's
+        own linker applies this map, so no second linker lives in the PipeWire config."""
+        shipped = json.loads((self.stage() / "usr/share/stemdeck/links-aes67.json").read_text())
+        self.assertEqual(["AES67 a3nuc1 out:receive_CH1"], shipped["jack"]["rec_L"])
+        self.assertEqual(["AES67 a3nuc1 out:receive_CH2"], shipped["jack"]["rec_R"])
+
+    def test_no_a3_rec_loopback_in_the_package(self):
+        """The hand-made a3-rec loopback is replaced by the link map above."""
+        stage = self.stage()
+        loopback = re.compile(r"\ba3-rec(?![a-z])")
+        for path in stage.rglob("*"):
+            if not path.is_file():
+                continue
+            with self.subTest(file=str(path.relative_to(stage))):
+                self.assertNotIn("a3-rec", path.name)
+                self.assertIsNone(loopback.search(path.read_text(errors="replace")))
 
     def test_no_aes67_unit_is_enabled_by_the_package(self):
         """The deck-host role pulls them in; a3nuc1 carries the package too."""

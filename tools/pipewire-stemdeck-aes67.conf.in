@@ -16,7 +16,9 @@ context.properties = {
     # Errors only, as a3-core's instance: harmless warnings would bury the real ones.
     log.level = 1
 
-    # As a3-core's 10-a3-rate.conf: 44.1 kHz end to end, never below 128 samples.
+    # As a3-core's own AES67 instance carries them. This process joins the
+    # user's server: the graph's rate and smallest block are the server's,
+    # from 10-stemdeck-rate.conf, which the deck-host role installs.
     default.clock.rate          = 44100
     default.clock.allowed-rates = [ 44100 ]
     default.clock.quantum       = 128

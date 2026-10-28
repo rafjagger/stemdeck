@@ -55,6 +55,8 @@ files() {
         install -D -m 644 "$src/tools/$template" "$stage/usr/share/stemdeck/$template"
     done
     install -D -m 644 "$src/data/links-aes67.json" "$stage/usr/share/stemdeck/links-aes67.json"
+    # The deck host's server rate; the deck-host role installs it into the user's PipeWire.
+    install -D -m 644 "$src/data/10-stemdeck-rate.conf" "$stage/usr/share/stemdeck/10-stemdeck-rate.conf"
     install -D -m 644 "$src/packaging/$EEE" "$stage/$EEE"
     install -D -m 644 "$src/packaging/lib/udev/rules.d/90-stemdeck-usb.rules" \
         "$stage/usr/lib/udev/rules.d/90-stemdeck-usb.rules"

@@ -26,6 +26,20 @@ AES67_UNITS = ("a3-aes67-deck@.service", "stemdeck-aes67.service")
 AES67_TEMPLATES = ("pipewire-aes67-deck.conf.in", "pipewire-stemdeck-aes67.conf.in")
 EEE = "etc/systemd/network/99-default.link.d/stemdeck-eee.conf"
 USB_RULE = "usr/lib/udev/rules.d/90-stemdeck-usb.rules"
+RATE_DROP_IN = "usr/share/stemdeck/10-stemdeck-rate.conf"
+A3_CORE_RATE = (REPO / "third_party/a3-core/platform-config/debian-x86_64/a3-core/home/aaa/.local/share"
+                "/a3-core/config/pipewire/pipewire.conf.d/10-a3-rate.conf")
+
+
+def clock_settings(text):
+    """The default.clock.* keys of a PipeWire config, comments ignored."""
+    found = {}
+    for line in text.splitlines():
+        line = line.split("#", 1)[0].strip()
+        if line.startswith("default.clock."):
+            key, _, value = line.partition("=")
+            found[key.strip()] = value.strip()
+    return found
 
 
 def fields(text):
@@ -135,6 +149,7 @@ class TheStagedTree(unittest.TestCase):
         *(f"usr/lib/systemd/user/{unit}" for unit in AES67_UNITS),
         *(f"usr/share/stemdeck/{template}" for template in AES67_TEMPLATES),
         "usr/share/stemdeck/links-aes67.json",
+        RATE_DROP_IN,
         EEE,
         USB_RULE,
         "usr/share/doc/stemdeck/copyright",
@@ -235,6 +250,26 @@ class TheStagedTree(unittest.TestCase):
         stage = self.stage()
         self.assertEqual((REPO / "data/links-aes67.json").read_bytes(),
                          (stage / "usr/share/stemdeck/links-aes67.json").read_bytes())
+
+    def test_package_ships_the_deck_hosts_server_rate(self):
+        """The deck-host role copies it into ~/.config/pipewire/pipewire.conf.d/:
+        the user's PipeWire server, not the base instance, sets the graph's rate
+        and smallest block (P32)."""
+        stage = self.stage()
+        self.assertEqual((REPO / "data/10-stemdeck-rate.conf").read_bytes(),
+                         (stage / RATE_DROP_IN).read_bytes())
+        self.assertEqual({
+            "default.clock.rate": "44100",
+            "default.clock.allowed-rates": "[ 44100 ]",
+            "default.clock.quantum": "128",
+            "default.clock.min-quantum": "128",
+        }, clock_settings((stage / RATE_DROP_IN).read_text()))
+
+    @unittest.skipUnless(A3_CORE_RATE.is_file(), "third_party/a3-core is not checked out")
+    def test_server_rate_is_the_cores(self):
+        """One rig, one rate: the deck host runs what a3-core sets on the Core."""
+        self.assertEqual(clock_settings(A3_CORE_RATE.read_text()),
+                         clock_settings((REPO / "data/10-stemdeck-rate.conf").read_text()))
 
     def test_deck_host_links_aes67_one_two_to_the_recorder(self):
         """The Core's REC bus (CH1/CH2) is the recorder's rec_L/rec_R; StemDeck's

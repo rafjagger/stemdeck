@@ -19,6 +19,12 @@ if(CCACHE_PROGRAM)
     set(CMAKE_CXX_COMPILER_LAUNCHER ${CCACHE_LAUNCHER})
 endif()
 
+# Round as x86-64 does on every machine: GCC on aarch64 (a Raspberry Pi 5)
+# fuses a*b+c by default, and IEM's StereoEncoder then lands a rounding step
+# off its stored quaternion, so its listeners run -- and allocate -- on the
+# audio thread (tools/tests/test_float_contraction.py).
+add_compile_options(-ffp-contract=off)
+
 find_package(JUCE CONFIG REQUIRED)
 
 # Distro JUCE packages (e.g. Debian's "+ds" build) strip the bundled FLAC/Ogg

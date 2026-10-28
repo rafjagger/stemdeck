@@ -2,6 +2,7 @@
 
 #include "ProcessGroup.h"
 
+#include <algorithm>
 #include <chrono>
 #include <fcntl.h>
 #include <sys/socket.h>

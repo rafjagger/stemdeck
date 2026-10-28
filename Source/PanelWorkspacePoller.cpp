@@ -29,7 +29,11 @@ void PanelWorkspacePoller::run()
 		const auto name = focusedWorkspaceName (listWorkspaces (i3));
 		{
 			const juce::ScopedLock guard (lock);
-			focusedName = name;
+			if (name != focusedName)
+			{
+				focusedName = name;
+				++changes;
+			}
 		}
 		wait (500);
 	}

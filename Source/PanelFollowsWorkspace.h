@@ -6,6 +6,11 @@
 #include <string>
 #include <vector>
 
+// How fast a release follows a focus change: the i3 poll, then one tick of the
+// message thread. Must stay below the other side's take delay (0.75 s).
+inline constexpr double panelPollSeconds = 0.5;
+inline constexpr double panelReactSeconds = 1.0 / 60.0;
+
 struct PanelFollow
 {
 	enum class Action

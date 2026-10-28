@@ -159,11 +159,6 @@ namespace panel
 		return *storedPreference && ownership.claimIfFree();
 	}
 
-	bool startFollowing (Ownership&)
-	{
-		return false;
-	}
-
 	bool applyFollow (Ownership& ownership, PanelFollow::Action action)
 	{
 		using Action = PanelFollow::Action;
@@ -172,5 +167,19 @@ namespace panel
 		else if (action == Action::takeAfterDelay)
 			ownership.take();
 		return ownership.holds();
+	}
+
+	void PanelGain::update (bool holds)
+	{
+		if (holds && ! wasHolding)
+			onGained();
+		wasHolding = holds;
+	}
+
+	ToggleFace toggleFace (bool followsWorkspace, bool holds)
+	{
+		if (followsWorkspace)
+			return { "Panel follows workspace", false, holds };
+		return { "Panel: this deck", true, holds };
 	}
 }

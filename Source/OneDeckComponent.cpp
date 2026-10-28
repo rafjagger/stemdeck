@@ -358,7 +358,6 @@ void OneDeckComponent::startPanel()
 	if (panelFollow)
 	{
 		// Released at start: the tty is touched only once this workspace has been in front.
-		panel::startFollowing (panelOwnership);
 		workspacePoller = std::make_unique<PanelWorkspacePoller>();
 		updatePanelOwner();
 		return;
@@ -377,13 +376,18 @@ void OneDeckComponent::followWorkspace()
 {
 	if (! panelFollow || workspacePoller == nullptr)
 		return;
-	panel::applyFollow (panelOwnership, panelFollow->update (workspacePoller->focused(), nowSeconds(), panelOwnership.holds()));
+	seenWorkspaceChanges = workspacePoller->generation();
+	const auto focused = workspacePoller->focused();
+	if (focused.empty())
+		return;   // no answer from i3: leave everything as it is
+	panel::applyFollow (panelOwnership, panelFollow->update (focused, nowSeconds(), panelOwnership.holds()));
 }
 
 void OneDeckComponent::updatePanelOwner()
 {
 	followWorkspace();
 	const auto holds = panelOwnership.holds();
+	panelGain.update (holds);
 	if (! holds)
 	{
 		panelDevice.reset();
@@ -395,7 +399,6 @@ void OneDeckComponent::updatePanelOwner()
 	auto decoder = std::make_unique<PanelDevice::MappedDecoder<panel1::InputDecoder, panel1::Event>>();
 	decoder->onEvent = [this] (const panel1::Event& e) { handlePanel (e); };
 	panelDevice = std::make_unique<PanelDevice> (std::move (decoder));
-	rearmPotPickups();   // the panel was gained
 }
 
 // Every press goes through the screen's own control: the panel does what a
@@ -478,6 +481,7 @@ void OneDeckComponent::showSettings()
 	values.tipsShown = tips::shown (settings().getValue (tips::settingKey).toStdString());
 	values.phonesMode = phonesMode;
 	values.panelHere = panelOwnership.holds();
+	values.panelFollowsWorkspace = panelFollow.has_value();
 
 	SettingsPanel::Actions actions;
 	actions.onLibraryFolder = [this] (const juce::File& folder) { library.setFolder (folder); };
@@ -525,6 +529,9 @@ void OneDeckComponent::timerCallback()
 	}
 	showSyncStatus();
 	updatePhonesDecoder();
+	// A change of workspace is looked at at once, so a release comes within the poll plus this tick.
+	if (workspacePoller != nullptr && workspacePoller->generation() != seenWorkspaceChanges)
+		updatePanelOwner();
 	if (--panelCountdown <= 0)
 	{
 		panelCountdown = refreshHz / 2;

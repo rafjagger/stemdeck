@@ -6,6 +6,7 @@
 
 #include <juce_core/juce_core.h>
 
+#include <atomic>
 #include <string>
 
 // Asks i3 every 500 ms which workspace is in front (plan R9). Its own thread,
@@ -19,6 +20,8 @@ public:
 
 	// "2:STEMDECK", the way the variable and i3's config spell it; "" without an answer.
 	std::string focused() const;
+	// Counts up whenever the answer changed, so the message thread can look every tick without a lock.
+	unsigned generation() const { return changes.load(); }
 
 	void run() override;
 
@@ -26,6 +29,7 @@ private:
 	I3Runner i3;
 	mutable juce::CriticalSection lock;
 	std::string focusedName;
+	std::atomic<unsigned> changes { 0 };
 };
 
 // The focused workspace spelled like the variable; "" when none is.

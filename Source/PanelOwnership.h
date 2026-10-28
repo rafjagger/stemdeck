@@ -3,7 +3,9 @@
 #pragma once
 
 #include <filesystem>
+#include <functional>
 #include <optional>
+#include <string>
 
 #include "PanelFollowsWorkspace.h"
 
@@ -53,12 +55,24 @@ namespace panel
 	// the instance holds it afterwards.
 	bool claimAtStart (Ownership&, std::optional<bool> storedPreference);
 
-	// Follow mode (R9, STEMDECK_PANEL_WORKSPACE): the instance starts without
-	// the panel and without touching its lock -- two readers never share the
-	// tty. Always false.
-	bool startFollowing (Ownership&);
-
 	// Acts on the rule's answer and returns whether the instance holds the
-	// panel afterwards (the lock's real state, not an assumed one).
+	// panel afterwards (the lock's real state, not an assumed one). In follow
+	// mode (R9) the instance never claims the panel at start; only this takes it.
 	bool applyFollow (Ownership&, PanelFollow::Action);
+
+	// Calls onGained on every change from not holding to holding (R13: the pots re-arm).
+	class PanelGain
+	{
+	public:
+		explicit PanelGain (std::function<void()> onGainedCallback) : onGained (std::move (onGainedCallback)) {}
+		void update (bool holds);
+
+	private:
+		std::function<void()> onGained;
+		bool wasHolding = false;
+	};
+
+	// How the settings' panel toggle looks: in follow mode it shows the state and says why it is inert.
+	struct ToggleFace { std::string text; bool enabled; bool on; };
+	ToggleFace toggleFace (bool followsWorkspace, bool holds);
 }

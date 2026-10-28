@@ -67,22 +67,50 @@ TEST (PanelFollowsWorkspace, WithoutTheVariableNothingChanges)
 }
 
 // The wiring through the real lock: the seam the component calls.
-TEST (PanelFollowsWorkspace, StartingInFollowModeNeverTouchesTheLock)
-{
-	TempLock lock;
-	panel::Ownership ownership (lock.path, 'B');
-	EXPECT_FALSE (panel::startFollowing (ownership));
-	EXPECT_FALSE (std::filesystem::exists (lock.path));
-}
-
 TEST (PanelFollowsWorkspace, ActionsTakeAndReleaseTheRealLock)
 {
 	TempLock lock;
 	panel::Ownership ownership (lock.path, 'B');
 	EXPECT_FALSE (panel::applyFollow (ownership, Action::none));
+	EXPECT_FALSE (std::filesystem::exists (lock.path));   // nothing touched without a reason
 	EXPECT_TRUE (panel::applyFollow (ownership, Action::takeAfterDelay));
 	EXPECT_TRUE (ownership.holds());
 	EXPECT_TRUE (panel::applyFollow (ownership, Action::none));
 	EXPECT_FALSE (panel::applyFollow (ownership, Action::release));
 	EXPECT_FALSE (ownership.holds());
+}
+
+// Motion may open the tty 0.75 s after its workspace came to the front; this
+// side must have closed it by then: the poll plus one tick of the message thread.
+TEST (PanelFollowsWorkspace, ReleaseIsFasterThanTheOtherSidesTakeDelay)
+{
+	EXPECT_LT (panelPollSeconds + panelReactSeconds, 0.75);
+}
+
+TEST (PanelFollowsWorkspace, GainingThePanelRearmsThePots)
+{
+	int rearmed = 0;
+	panel::PanelGain gain ([&] { ++rearmed; });
+	gain.update (false);
+	EXPECT_EQ (rearmed, 0);
+	gain.update (true);
+	EXPECT_EQ (rearmed, 1);
+	gain.update (true);
+	EXPECT_EQ (rearmed, 1);   // still the same holding
+	gain.update (false);
+	gain.update (true);
+	EXPECT_EQ (rearmed, 2);   // gained again
+}
+
+TEST (PanelFollowsWorkspace, TheToggleShowsWhyItIsInertInFollowMode)
+{
+	const auto follow = panel::toggleFace (true, true);
+	EXPECT_FALSE (follow.enabled);
+	EXPECT_TRUE (follow.on);
+	EXPECT_NE (follow.text.find ("workspace"), std::string::npos);
+
+	const auto plain = panel::toggleFace (false, false);
+	EXPECT_TRUE (plain.enabled);
+	EXPECT_FALSE (plain.on);
+	EXPECT_EQ (plain.text, "Panel: this deck");
 }

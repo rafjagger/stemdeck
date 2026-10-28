@@ -53,8 +53,8 @@ public:
 	bool isRecording() const { return recording.load(); }
 	juce::File getFile() const { return file; }
 	double getSeconds() const;
-	bool hasDropped() const { return dropped.load(); }
-	void markDroppedForTest() { dropped = true; }   // the disk could not keep up at some point
+	bool hasDropped() const { return dropped.load(); }   // the disk could not keep up at some point
+	void markDroppedForTest() { dropped = true; }
 
 	float popPeak (int channel) { return peaks[(size_t) channel].exchange (0.0f); }
 

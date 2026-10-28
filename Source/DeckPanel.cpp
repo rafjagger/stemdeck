@@ -51,7 +51,7 @@ DeckPanel::DeckPanel (StemDeckPlayer& p, StemThumbnails& thumbnails, int index)
 	loopInButton.onClick = [this] { loopIn(); };
 	loopInButton.setTooltip ("Loop in: the loop starts here");
 	loopOutButton.onClick = [this] { loopOut(); };
-	loopOutButton.setTooltip ("Loop out: the loop ends here and plays");
+	loopOutButton.setTooltip ("Loop out: the loop ends here and plays; while looping, out of it, playing on");
 	for (auto* key : { &loopButton, &loopInButton, &loopOutButton })
 	{
 		key->setColour (juce::TextButton::buttonOnColourId, Theme::loop);

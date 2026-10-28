@@ -14,34 +14,29 @@ void DeckLoop::in (TransportDeck& deck)
 		return;
 	inPoint = deck.position();
 	inMarked = true;
+	freshIn = true;
 }
 
 void DeckLoop::out (TransportDeck& deck)
 {
-	if (! canCloseAt (deck.position()))
-		return;
-	deck.setLoop (inPoint, deck.position());
-	inMarked = false;
+	if (! freshIn && deck.hasLoop())
+		exit (deck);
+	else
+		close (deck);
 }
 
 void DeckLoop::toggle (TransportDeck& deck)
 {
 	if (deck.hasLoop())
-	{
-		storedStart = deck.loopStart();
-		storedEnd = deck.loopEnd();
-		hasStored = true;
-		deck.clearLoop();
-		return;
-	}
-	if (hasStored && deck.isLoaded())
+		exit (deck);
+	else if (hasStored && deck.isLoaded())
 		deck.setLoop (storedStart, storedEnd);
 }
 
 void DeckLoop::inOrOut (TransportDeck& deck)
 {
-	if (canCloseAt (deck.position()))
-		out (deck);
+	if (freshIn && canCloseAt (deck.position()))
+		close (deck);
 	else
 		in (deck);
 }
@@ -49,7 +44,26 @@ void DeckLoop::inOrOut (TransportDeck& deck)
 void DeckLoop::reset()
 {
 	inMarked = false;
+	freshIn = false;
 	hasStored = false;
+}
+
+// The loop from the mark to the playhead; the mark stays for the next OUT.
+void DeckLoop::close (TransportDeck& deck)
+{
+	if (! canCloseAt (deck.position()))
+		return;
+	deck.setLoop (inPoint, deck.position());
+	freshIn = false;
+}
+
+// Out of the loop, playing on; LOOP goes back into it.
+void DeckLoop::exit (TransportDeck& deck)
+{
+	storedStart = deck.loopStart();
+	storedEnd = deck.loopEnd();
+	hasStored = true;
+	deck.clearLoop();
 }
 
 bool DeckLoop::canCloseAt (double position) const

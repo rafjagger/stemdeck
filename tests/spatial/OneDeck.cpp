@@ -725,6 +725,19 @@ TEST_F (OneDeck, TheLoopKeysLoopTheDeck)
 	EXPECT_NEAR (player().getLoop().getStart(), 0.5, 1e-3);
 	EXPECT_NEAR (player().getPosition(), 0.5, 0.01);
 
+	// OUT is a toggle: out of the loop, playing on; again, the loop from
+	// the same IN to the new playhead, on the beat.
+	panel.loopOutKey().onClick();
+	EXPECT_FALSE (player().hasLoop()) << "OUT exits";
+	EXPECT_TRUE (player().isPlaying());
+	panel.loopKey().onClick();
+	panel.loopKey().onClick();   // RELOOP and EXIT: LOOP keeps its role
+	player().setPosition (2.48);
+	panel.loopOutKey().onClick();
+	ASSERT_TRUE (player().hasLoop()) << "OUT again closes a loop";
+	EXPECT_NEAR (player().getLoop().getStart(), 0.5, 1e-3) << "from the same IN";
+	EXPECT_NEAR (player().getLoop().getEnd(), 2.5, 1e-3) << "to the new playhead, on the beat";
+	EXPECT_NEAR (player().getPosition(), 0.5, 0.01);
 }
 
 // The maintainer's case on the screen (2026-10-28): one finger holds CUE --

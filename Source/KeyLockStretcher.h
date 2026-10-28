@@ -47,23 +47,14 @@ public:
 	// it, so the first block already plays from there.
 	void restart (std::int64_t position, double playbackRate, Input& input);
 
-	// The same start spread over several calls, for a stretcher made ready
-	// ahead of time (a loop's start, while the loop plays): beginRestart()
-	// does none of the work, each prime() up to `budget` frames of it (at
-	// least one step), the start delay's discard included. Afterwards the
-	// first render() costs what any other does.
-	void beginRestart (std::int64_t position, double playbackRate);
-	bool prime (Input& input, int budget);
-	bool isPrimed() const { return ! padding && toDiscard == 0; }
-
-	// Frames handed to Rubber Band so far: the stretcher's work, for tests.
-	std::int64_t framesProcessed() const { return processed; }
-
 	// `numSamples` frames at `playbackRate` into `out`.
 	void render (float* const* out, int numSamples, double playbackRate, Input& input);
 
 	// The playhead: where the output is in the track, latency taken off.
 	double position() const { return map.position() - keylock::lagCorrection (alignment, rate, startRate); }
+	// Frames handed to Rubber Band so far: the stretcher's work, for tests.
+	std::int64_t framesProcessed() const { return processed; }
+
 	// The reader is past the track's end; what comes now is silence.
 	bool hasEnded() const { return ended; }
 
@@ -78,8 +69,6 @@ private:
 	void process (int count);
 	void setRate (double newRate);
 	void discardStartDelay (Input& input);
-	int padStep (Input& input);
-	int discardStep (Input& input);
 
 	static constexpr int chunk = 1024;   // frames per process() call at most
 
@@ -96,8 +85,5 @@ private:
 	std::int64_t cursor = 0;   // where the reader goes on
 	bool ended = false;
 	std::size_t toDiscard = 0;
-	// A start in progress: the audio before it still going in, up to padTo.
-	bool padding = false;
-	std::int64_t padAt = 0, padTo = 0;
 	std::int64_t processed = 0;
 };

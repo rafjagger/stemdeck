@@ -134,8 +134,8 @@ public:
 	// AudioSource: the buffer must have at least numOutputChannels channels.
 	void prepareToPlay (int samplesPerBlockExpected, double sampleRate) override;
 
-	// Frames the key lock stretchers have processed so far, standby included:
-	// their work, for the tests. Audio thread, or a test's own.
+	// Frames the key lock stretchers have processed so far: their work, for
+	// the tests. Audio thread, or a test's own.
 	std::int64_t stretcherWork() const;
 	void getNextAudioBlock (const juce::AudioSourceChannelInfo& bufferToFill) override;
 	void releaseResources() override;
@@ -169,14 +169,12 @@ private:
 		const int stem;
 	};
 
-	// A deck's stretchers, one per stem, built and swapped as one; and as
-	// many on standby, made ready at a loop's start while the loop plays,
-	// that take over at the seam.
+	// A deck's stretchers, one per stem, built and swapped as one.
 	struct Stretchers
 	{
 		explicit Stretchers (double fileRate);
 		double sampleRate;
-		std::array<std::unique_ptr<KeyLockStretcher>, numStems> stems, standby;
+		std::array<std::unique_ptr<KeyLockStretcher>, numStems> stems;
 	};
 
 	// What the key lock path's resampler pulls from: the stretchers' output.
@@ -191,10 +189,7 @@ private:
 
 	void readStems (const juce::AudioSourceChannelInfo& info);
 	juce::int64 inLoop (juce::int64 position) const;
-	void crossfadeSeam (const juce::AudioBuffer<float>& tail, int& tailDone, float* const* dest, int count);
-	void renderStretchedRun (float* const* dest, int count, double rate);
-	void cutStretchersAtSeam (double rate);
-	void primeStandby (double rate);
+	void readStemLooped (int stem, float* const* dest, int count, juce::int64 position, juce::int64 start, juce::int64 end);
 	void readRun (float* const* dest, int count, juce::int64 position);
 	void readStemRun (int stem, float* const* dest, int count, juce::int64 position);
 	void renderPreMute (int stem, const juce::AudioSourceChannelInfo& info);
@@ -270,16 +265,13 @@ private:
 	int fadeRemaining = 0, fadeLength = 1;
 	juce::AudioBuffer<float> fadeBuffer;
 
-	// The loop's seam: a cut at the sample, with the track as it would go on
-	// behind the loop's end faded out under the loop's start over
-	// seamLength (equal power, 64 samples: 1.5 ms at 44.1 kHz) -- both sides
-	// playing, no dip. Audio thread only, one tail per path; tailDone ==
-	// seamLength: no seam fading.
-	static constexpr int seamLength = 64;
-	juce::AudioBuffer<float> plainTail { numOutputChannels, seamLength }, stretchedTail { numOutputChannels, seamLength };
-	int plainTailDone = seamLength, stretchedTailDone = seamLength;
-	// The loop start the standby stretchers are made ready at; -1: none yet.
-	juce::int64 standbyAt = -1;
+	// The loop's seam, in what is read -- before the stretchers, so they see
+	// one continuous signal: the last seamLength frames before the loop's
+	// end crossfade (equal power) into the frames before its start, and the
+	// read goes on from the start. 128 frames, 2.9 ms at 44.1 kHz. Audio
+	// thread only: the frames before the start, one stem at a time.
+	static constexpr int seamLength = 128;
+	juce::AudioBuffer<float> seamScratch { 2, seamLength };
 	std::array<KeyLockInput, numStems> keyLockInputs { { { *this, 0 }, { *this, 1 }, { *this, 2 }, { *this, 3 } } };
 	KeyLockSource keyLockSource { *this };
 	juce::ResamplingAudioSource keyLockResampler { &keyLockSource, false, numOutputChannels };

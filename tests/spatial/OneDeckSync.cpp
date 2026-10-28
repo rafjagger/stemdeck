@@ -8,6 +8,7 @@
 #include "OneDeckSync.h"
 #include "OneDeckView.h"
 #include "ProLinkPackets.h"
+#include "ProLinkPresence.h"
 #include "ProLinkReceiver.h"
 #include "ProLinkSender.h"
 #include "TwoDeckFixture.h"
@@ -239,6 +240,118 @@ TEST (ProLinkOnOneHost, ANonMasterWithoutATrackStillSendsStatus)
 	EXPECT_FALSE (statuses.back().isMaster);
 	EXPECT_DOUBLE_EQ (statuses.back().bpm, 0.0) << "no track";
 	sender.stop();
+}
+
+// The combination, as the apps start it (prolink::presence): an idle deck --
+// no SYNC, no MASTER, no track -- is on the link from the start, announces
+// its number and sends a status, but no beat. MASTER on a playing deck adds
+// the beats.
+TEST (ProLinkOnOneHost, AnIdleDeckIsOnTheLinkAndOnlyAPlayingMasterBeats)
+{
+	juce::ScopedJuceInitialiser_GUI juce;
+	juce::File folder = juce::File::getSpecialLocation (juce::File::tempDirectory).getNonexistentChildFile ("stemdeck-presence", "");
+	ASSERT_TRUE (folder.createDirectory().wasOk());
+	juce::AudioFormatManager formats;
+	formats.registerBasicFormats();
+	StemDeckPlayer player (formats);
+	StemSet set;
+	set.name = "noise";
+	for (int s = 0; s < StemDeckPlayer::numStems; ++s)
+	{
+		set.files[(size_t) s] = folder.getChildFile ("stem" + juce::String (s) + ".wav");
+		twodeck::writeNoiseStem (set.files[(size_t) s], 5 + s);
+	}
+
+	// What reaches the announce port from deck B: claims, then keep-alives.
+	const auto announceFd = socket (AF_INET, SOCK_DGRAM, 0);
+	ASSERT_GE (announceFd, 0);
+	const int on = 1;
+	setsockopt (announceFd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof (on));
+	sockaddr_in address {};
+	address.sin_family = AF_INET;
+	address.sin_port = htons ((uint16_t) testPorts().announce);
+	address.sin_addr.s_addr = htonl (INADDR_ANY);
+	ASSERT_EQ (bind (announceFd, reinterpret_cast<sockaddr*> (&address), sizeof (address)), 0);
+	timeval timeout { 0, 200000 };
+	setsockopt (announceFd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof (timeout));
+
+	const auto presence = prolink::presence (true);
+	ASSERT_TRUE (presence.receiver && presence.sender) << "neither SYNC nor MASTER: on the link all the same";
+
+	ProLinkReceiver deck, listener;
+	ASSERT_TRUE (startOnLoopback (deck, deckB)) << deck.error();
+	ASSERT_TRUE (startOnLoopback (listener, 7)) << listener.error();
+	ProLinkSender sender;
+	ASSERT_TRUE (sender.start (deckB, loopbackBroadcast, testPorts(), "StemDeck B", &deck));
+
+	int announced = 0, keptAlive = 0;
+	// The claim takes 3.6 s, the first keep-alive follows it.
+	const auto until = std::chrono::steady_clock::now() + std::chrono::seconds (6);
+	while (keptAlive == 0 && std::chrono::steady_clock::now() < until)
+	{
+		uint8_t buffer[600];
+		const auto n = recv (announceFd, buffer, sizeof (buffer), 0);
+		if (n <= 0)
+			continue;
+		const auto heardAnnouncement = prolink::parseAnnouncement (buffer, (size_t) n);
+		if (! heardAnnouncement || heardAnnouncement->device != deckB)
+			continue;
+		using Type = prolink::Announcement::Type;
+		announced += heardAnnouncement->type == Type::claim || heardAnnouncement->type == Type::finalClaim;
+		keptAlive += heardAnnouncement->type == Type::keepAlive;
+	}
+	close (announceFd);
+	EXPECT_GT (announced, 0) << "the idle deck claims its number";
+	EXPECT_GT (keptAlive, 0) << "and keeps it";
+	ASSERT_TRUE (deck.isOnline());
+
+	heard<prolink::BeatPacket> (listener, 0.1);   // drop what came before
+	const auto idleStatuses = heard<prolink::StatusPacket> (listener, 1.0);
+	ASSERT_GE (idleStatuses.size(), 3u) << "a status about every 200 ms";
+	EXPECT_EQ (idleStatuses.back().device, deckB);
+	EXPECT_FALSE (idleStatuses.back().isMaster);
+	EXPECT_DOUBLE_EQ (idleStatuses.back().bpm, 0.0) << "no track";
+
+	ASSERT_EQ (player.load (set), juce::String());
+	player.setBeatGrid ({ 120.0, 0.0 });   // load() clears the grid
+	player.prepareToPlay (twodeck::block, twodeck::rate);
+	juce::AudioBuffer<float> out (StemDeckPlayer::numOutputChannels, twodeck::block);
+	// The read head moves as the audio thread would move it: in real time.
+	double rendered = 0.0;
+	const auto playFor = [&] (double seconds)
+	{
+		std::vector<prolink::BeatPacket> beats;
+		const auto start = std::chrono::steady_clock::now();
+		const auto startRendered = rendered;
+		for (;;)
+		{
+			const std::chrono::duration<double> elapsed = std::chrono::steady_clock::now() - start;
+			if (elapsed.count() >= seconds)
+				return beats;
+			while (rendered - startRendered < elapsed.count())
+			{
+				player.getNextAudioBlock (juce::AudioSourceChannelInfo (&out, 0, twodeck::block));
+				rendered += twodeck::block / twodeck::rate;
+			}
+			for (auto& event : listener.drain())
+				if (const auto* beat = std::get_if<prolink::BeatPacket> (&event.packet))
+					beats.push_back (*beat);
+			std::this_thread::sleep_for (std::chrono::milliseconds (2));
+		}
+	};
+	player.play();
+	sender.setReported (&player);
+	EXPECT_TRUE (playFor (1.0).empty()) << "playing, but not MASTER: no beat";
+
+	sender.setMaster (&player);
+	deck.wantMaster (true);
+	const auto beats = playFor (1.5);
+	ASSERT_GE (beats.size(), 2u) << "MASTER and playing: a beat every 500 ms";
+	EXPECT_EQ (beats.front().device, deckB);
+	EXPECT_NEAR (beats.front().effectiveBpm, 120.0, 0.01);
+
+	sender.stop();
+	folder.deleteRecursively();
 }
 
 // D3 over the sockets, two instances on one host: deck A is master; MASTER on

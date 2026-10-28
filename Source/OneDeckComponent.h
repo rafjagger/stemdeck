@@ -18,6 +18,7 @@
 #include "PanelWorkspacePoller.h"
 #include "AuxPots.h"
 #include "ProLinkReceiver.h"
+#include "ProLinkPresence.h"
 #include "ProLinkSender.h"
 #include "RecorderControls.h"
 #include "Session.h"

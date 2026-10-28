@@ -287,10 +287,12 @@ void OneDeckComponent::masterChanged()
 	updateLink();
 }
 
-// On the link while SYNC or MASTER is on, as the two-deck app; off it otherwise.
+// On the link from the start, as a CDJ: SYNC and MASTER change what is sent, not
+// whether the player is there.
 void OneDeckComponent::updateLink()
 {
-	if (! sync.wantsLink())
+	const auto presence = prolink::presence (linkPorts.complete(), sync.isMaster());
+	if (! presence.receiver)
 	{
 		linkSender.stop();
 		link.stop();
@@ -301,10 +303,10 @@ void OneDeckComponent::updateLink()
 	if (! link.isRunning() && link.start (device, linkPorts, instance.title()))
 		sync.joined (nowSeconds());
 
-	if (sync.isMaster() && link.isRunning() && ! linkSender.isRunning())
+	if (presence.sender && link.isRunning() && ! linkSender.isRunning())
 		linkSender.start (device, link.broadcastAddress(), linkPorts, instance.title(),
 						  [this] { return link.isOnline(); });
-	else if (! sync.isMaster())
+	else if (! presence.sender)
 		linkSender.stop();
 }
 
@@ -329,7 +331,7 @@ void OneDeckComponent::showSyncStatus()
 
 	const auto now = nowSeconds();
 	const auto& clock = sync.clock();
-	const auto text = ! sync.wantsLink()   ? syncLabels::sourceButton (true)
+	const auto text = ! sync.syncOrMaster() ? syncLabels::sourceButton (true)
 					: ! link.isRunning() || ! link.error().empty() ? syncLabels::error (link.error())
 					: sync.isMaster()    ? syncLabels::sendingMaster (instance.letter - 'A')
 					: clock.bpm() <= 0.0 ? syncLabels::nothingHeard()
@@ -520,8 +522,8 @@ void OneDeckComponent::timerCallback()
 	sync.hear (link.drain());
 	if (sync.update (nowSeconds()))
 		masterChanged();   // another deck took MASTER
-	// SYNC or MASTER on but not on the link (no network yet, ports busy): again every two seconds.
-	if (sync.wantsLink() && ! link.isRunning() && --linkRetryCountdown <= 0)
+	// Not on the link (no network yet, ports busy): again every two seconds.
+	if (linkPorts.complete() && ! link.isRunning() && --linkRetryCountdown <= 0)
 	{
 		linkRetryCountdown = 2 * refreshHz;
 		updateLink();

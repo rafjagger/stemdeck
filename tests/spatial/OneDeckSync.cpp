@@ -263,11 +263,11 @@ protected:
 
 TEST_F (OneDeckSyncTest, SyncFollowsTheOtherInstancesMaster)
 {
-	EXPECT_FALSE (sync.wantsLink()) << "off the link until SYNC or MASTER";
+	EXPECT_FALSE (sync.syncOrMaster());
 	view.deckPanel().setSyncAvailable (true);   // as the owner does with the link's ports
 	view.deckPanel().setSyncEnabled (true);     // the key pressed ...
 	sync.setSynced (true);                      // ... and its onSyncToggled
-	EXPECT_TRUE (sync.wantsLink());
+	EXPECT_TRUE (sync.syncOrMaster());
 
 	hearMaster (126.0, 10.0);
 	sync.update (10.05);
@@ -347,7 +347,7 @@ TEST_F (OneDeckSyncTest, SyncOffReleasesTheNudge)
 	player().setSyncNudge (1.01);
 	sync.setSynced (false);
 	EXPECT_DOUBLE_EQ (player().getEffectiveRate(), 1.0);
-	EXPECT_FALSE (sync.wantsLink());
+	EXPECT_FALSE (sync.syncOrMaster());
 }
 
 // The S4.4b minor: a session restores SYNC lit only where SYNC can work. With
@@ -375,7 +375,7 @@ TEST_F (OneDeckSyncTest, MasterWithoutAGridIsRefused)
 	sync.pressMaster (9.0);
 	EXPECT_FALSE (sync.isMaster());
 	EXPECT_FALSE (view.deckPanel().isMasterLit());
-	EXPECT_FALSE (sync.wantsLink()) << "no claim, no link";
+	EXPECT_FALSE (sync.syncOrMaster()) << "refused: nothing to publish";
 
 	player().setBeatGrid ({ 120.0, 0.0 });
 	sync.pressMaster (10.0);

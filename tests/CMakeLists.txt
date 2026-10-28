@@ -28,6 +28,7 @@ add_executable(stemdeck-tests
     ${CMAKE_SOURCE_DIR}/Source/ProLinkPackets.cpp
     ProLinkAnnouncer.cpp
     ${CMAKE_SOURCE_DIR}/Source/ProLinkAnnouncer.cpp
+    ProLinkPresence.cpp
     OscTruth.cpp
     ${CMAKE_SOURCE_DIR}/Source/OscTruth.cpp
     Remote.cpp

@@ -380,9 +380,9 @@ void MainComponent::followPioneer()
 
 void MainComponent::updatePioneerStatus()
 {
-	// PIO chosen but not listening -- the network was not up yet at start-up,
-	// or the ports were busy: try again every two seconds, and say why meanwhile.
-	if ((pioSource || masterDeck >= 0) && ! proLink.isRunning() && --pioRetryCountdown <= 0)
+	// Not on the link -- the network was not up yet at start-up, or the ports
+	// were busy: try again every two seconds, and say why meanwhile.
+	if (proLinkPorts.complete() && ! proLink.isRunning() && --pioRetryCountdown <= 0)
 	{
 		pioRetryCountdown = 120;
 		updateNetwork();
@@ -946,14 +946,15 @@ void MainComponent::setMasterDeck (int deckIndex)
 	updateNetwork();
 }
 
-// On the Pioneer network while following (PIO) or sending (a master deck):
-// the receiver announces our player on the link and listens, the sender sends the
-// master deck's beat. Off the network when neither.
+// On the Pioneer network from the start, as a CDJ: the receiver announces our
+// player on the link and listens, the sender sends the master deck's beat.
+// PIO and MASTER change what is sent, not whether the player is there.
 void MainComponent::updateNetwork()
 {
 	const auto device = appProperties.getUserSettings()->getIntValue ("pioDevice", 6);
+	const auto presence = prolink::presence (proLinkPorts.complete(), masterDeck >= 0);
 
-	if (! pioSource && masterDeck < 0)
+	if (! presence.receiver)
 	{
 		pioSender.stop();
 		proLink.stop();
@@ -963,10 +964,10 @@ void MainComponent::updateNetwork()
 	if (! proLink.isRunning())
 		proLink.start (device, proLinkPorts);
 
-	if (masterDeck >= 0 && proLink.isRunning() && ! pioSender.isRunning())
+	if (presence.sender && proLink.isRunning() && ! pioSender.isRunning())
 		pioSender.start (device, proLink.broadcastAddress(), proLinkPorts, "StemDeck",
 						 [this] { return proLink.isOnline(); });
-	else if (masterDeck < 0)
+	else if (! presence.sender)
 		pioSender.stop();
 }
 

@@ -34,6 +34,7 @@
 #include "PioneerClock.h"
 #include "OscTruth.h"
 #include "ProLinkReceiver.h"
+#include "ProLinkPresence.h"
 #include "ProLinkSender.h"
 #include "MasterDeck.h"
 #include "StemCreator.h"

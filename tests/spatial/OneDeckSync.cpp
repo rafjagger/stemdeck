@@ -270,6 +270,15 @@ TEST (ProLinkOnOneHost, MasterPassesBetweenTwoInstances)
 		return condition();
 	};
 	ASSERT_TRUE (waitFor ([&a] { return a.masterState().master; }, 5.0)) << "alone, A takes it";
+	// B asks only a master it has heard (a status every 200 ms).
+	bool masterHeard = false;
+	ASSERT_TRUE (waitFor ([&b, &masterHeard]
+	{
+		for (const auto& event : b.drain())
+			if (const auto* status = std::get_if<prolink::StatusPacket> (&event.packet); status && status->isMaster)
+				masterHeard = true;
+		return masterHeard;
+	}, 1.0));
 
 	senderB.setMaster (&playerB);
 	b.wantMaster (true);

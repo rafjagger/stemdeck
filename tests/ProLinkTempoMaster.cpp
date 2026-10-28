@@ -267,3 +267,68 @@ TEST (ProLinkTempoMaster, ItsOwnStatusIsNotAnotherPlayer)
 	EXPECT_TRUE (m.isMaster());
 	EXPECT_EQ (m.takeChange(), Change::none);
 }
+
+// Review round: without a track there is nothing to lead with -- MASTER is
+// not taken, and a DJM's command waits for one.
+TEST (ProLinkTempoMaster, WithoutATrackMasterIsNotTaken)
+{
+	prolink::TempoMaster m (us, "StemDeck B", 0.0);
+	m.setLocal (false, false, false);
+	m.want (true, 0.0);
+	m.tick (0.6);
+	EXPECT_FALSE (m.isMaster());
+
+	hearEvery200ms (m, player (2, true), 0.6, 1.0);
+	EXPECT_TRUE (m.tick (1.0).empty()) << "nobody is asked either";
+	m.setLocal (true, false, false);
+	EXPECT_EQ (m.tick (1.1).size(), 1u) << "a track: now it asks";
+}
+
+// A master that has agreed (its response) but is slow to name us in Mh gets
+// longer before it is overtaken -- two masters are worse than a wait.
+TEST (ProLinkTempoMaster, AnAgreedHandoffIsWaitedForLonger)
+{
+	prolink::TempoMaster m (us, "StemDeck B", 0.0);
+	m.setLocal (true, true, false);
+	hearEvery200ms (m, player (2, true), 0.0, 0.6);
+	m.want (true, 0.5);
+	m.tick (0.6);
+	m.hear (control (Type::masterResponse, 2, 1), 0.65);
+	hearEvery200ms (m, player (2, true), 0.6, 2.0);
+	m.tick (2.0);
+	EXPECT_FALSE (m.isMaster()) << "agreed 1.35 s ago: still waiting";
+	m.tick (0.65 + prolink::TempoMaster::agreedWait);
+	EXPECT_TRUE (m.isMaster());
+}
+
+// A requester that never takes the role it asked for: Mh is cleared again.
+TEST (ProLinkTempoMaster, AnAskedHandoffNotTakenIsWithdrawn)
+{
+	auto m = settledAlone();
+	m.hear (control (Type::masterRequest, 3), 1.0);
+	ASSERT_EQ (m.state().handoffTo, 3);
+	hearEvery200ms (m, player (3, false, true, true), 1.0, 5.0);
+	m.tick (1.0 + prolink::TempoMaster::agreedWait - 0.1);
+	EXPECT_EQ (m.state().handoffTo, 3);
+	m.tick (1.0 + prolink::TempoMaster::agreedWait + 0.1);
+	EXPECT_EQ (m.state().handoffTo, 0xff);
+	EXPECT_TRUE (m.isMaster());
+}
+
+// Two players taking master at once, each before hearing the other (within a
+// status interval): exactly one keeps it -- the lower number, an assumption
+// in lieu of a capture -- instead of both letting go.
+TEST (ProLinkTempoMaster, ClaimsAtOnceLeaveOneMaster)
+{
+	auto lower = settledAlone();               // player 5, master since 0.5
+	lower.hear (player (6, true), 0.6);        // 6 took it at about the same time
+	EXPECT_TRUE (lower.isMaster());
+
+	prolink::TempoMaster higher (6, "StemDeck A", 0.0);
+	higher.setLocal (true, true, false);
+	higher.want (true, 0.0);
+	higher.tick (0.5);
+	higher.hear (player (us, true), 0.6);
+	EXPECT_FALSE (higher.isMaster());
+	EXPECT_EQ (higher.takeChange(), Change::yielded);
+}

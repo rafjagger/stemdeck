@@ -84,6 +84,7 @@ bool ProLinkReceiver::start (int number, const osctruth::ProLinkPorts& truthPort
 	addresses.clear();
 	ownIp = self.ip;
 	lastWantsMaster = false;
+	localTrack = localPlaying = localSynced = false;   // the sender reports afresh
 	currentDevice = number;
 	online = false;
 
@@ -168,7 +169,9 @@ prolink::TempoMaster::Change ProLinkReceiver::takeMasterChange()
 
 // Port 50001, unicast to the device as a CDJ does -- except to a device on
 // this host, which shares the port with us and beat-analyzer: a unicast would
-// reach only the socket bound last, so it goes out as broadcast (#70).
+// reach only the socket bound last, so it goes out as broadcast (#70). Those
+// packets name only the sender: any master on the link hears the request, and
+// with more than one master (a fault already) more than one may answer.
 void ProLinkReceiver::sendControl (const std::vector<prolink::TempoMaster::Send>& packets)
 {
 	for (const auto& packet : packets)

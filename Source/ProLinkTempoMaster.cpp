@@ -3,6 +3,7 @@
 #include "ProLinkTempoMaster.h"
 
 #include <algorithm>
+#include <cmath>
 #include <utility>
 
 namespace prolink
@@ -61,6 +62,7 @@ namespace prolink
 		masterSince = now;
 		handoffTo = noHandoff;
 		requestedFrom = 0;
+		agreed = false;
 		commanded = false;
 	}
 
@@ -105,8 +107,11 @@ namespace prolink
 
 		// Another master asserting itself: the one we handed to, or a newer
 		// claim made without the handoff. An older one is still letting go.
-		if (master && status.handoffTo == noHandoff
-			&& (handoffTo == status.device || peer.claimSince > masterSince))
+		if (! master || status.handoffTo != noHandoff)
+			return {};
+		const auto atOnce = std::abs (peer.claimSince - masterSince) <= concurrent;
+		const auto newer = peer.claimSince > masterSince && ! atOnce;
+		if (handoffTo == status.device || newer || (atOnce && status.device < self))
 			yield();
 		return {};
 	}
@@ -121,11 +126,15 @@ namespace prolink
 					return {};
 				handoffTo = control.device;
 				handoffAsked = true;
+				handoffSince = now;
 				return { { masterResponse (self, name), control.device } };
 
 			case Type::masterResponse:
 				if (control.device == requestedFrom)
-					requestedAt = now;   // agreed: Mh follows in its next status
+				{
+					agreed = true;   // Mh follows in its status -- maybe on its downbeat
+					requestedAt = now;
+				}
 				return {};
 
 			case Type::syncCommand:
@@ -146,7 +155,8 @@ namespace prolink
 			const auto gone = found == peers.end() || ! isFresh (found->second, now);
 			const auto offerLapsed = ! handoffAsked
 									 && (! stopped || ! found->second.status.isPlaying || ! found->second.status.isSynced);
-			if (gone || offerLapsed)
+			const auto askNotTaken = handoffAsked && now - handoffSince > agreedWait;
+			if (gone || offerLapsed || askNotTaken)
 				handoffTo = noHandoff;
 		}
 
@@ -171,7 +181,7 @@ namespace prolink
 			return {};
 		}
 
-		if (! wantsMaster() || now - startedAt < settle)
+		if (! wantsMaster() || ! hasTrack || now - startedAt < settle)
 			return {};
 
 		const auto* current = currentMaster (now);
@@ -186,10 +196,11 @@ namespace prolink
 		{
 			requestedFrom = holder;
 			requestedAt = now;
+			agreed = false;
 			return { { masterRequest (self, name), holder } };
 		}
 
-		if (now - requestedAt >= answerWait)
+		if (now - requestedAt >= (agreed ? agreedWait : answerWait))
 			becomeMaster (now);   // no answer: the newest claim wins
 		return {};
 	}

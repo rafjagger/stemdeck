@@ -163,6 +163,8 @@ void ProLinkSender::run()
 		const auto heard = deck != nullptr ? deckAt (*deck, t, pathLatency.load()) : DeckNow {};
 		const auto state = playerState (heard, synced.load());
 		if (role != nullptr)
+			// Playing as the DJ set it: a scratch while playing must not hand
+			// master away (the paused-master handoff).
 			role->reportLocal (state.hasTrack, state.hasTrack && heard.playing, state.synced);
 
 		if (t - lastStatus >= statusEvery)

@@ -299,7 +299,7 @@ void OneDeckComponent::updateLink()
 
 	const auto device = instance.proLinkDevice();
 	if (! link.isRunning())
-		pinLinkToControlLan (link);
+		pinLinkToControlLan (link, truth.path);
 	if (! link.isRunning() && link.start (device, linkPorts, instance.title()))
 		sync.joined (nowSeconds());
 

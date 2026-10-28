@@ -81,10 +81,10 @@ namespace linkinterface
 		return mac;
 	}
 
-	std::string controlNetwork()
+	std::string controlNetwork (const std::string& truthPath)
 	{
 		std::string error;
-		return osctruth::readControlNetwork (osctruth::liveTruthPath(), error);
+		return osctruth::readControlNetwork (truthPath, error);
 	}
 
 	std::optional<Addresses> controlLan (const std::string& subnet)

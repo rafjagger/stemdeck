@@ -38,8 +38,8 @@ namespace linkinterface
 	// Zeros when the interface has none.
 	std::array<uint8_t, 6> hardwareAddress (const std::string& interfaceName);
 
-	// The control LAN as the truth names it (network.address); empty when it does not.
-	std::string controlNetwork();
+	// The control LAN as the truth at `truthPath` names it (network.address); empty when it does not.
+	std::string controlNetwork (const std::string& truthPath);
 
 	// The up, broadcast-capable, non-loopback interface in `subnet`; nothing for an empty one.
 	std::optional<Addresses> controlLan (const std::string& subnet);
@@ -47,8 +47,8 @@ namespace linkinterface
 
 // Pin the receiver (and so the sender's broadcast) to the control LAN; without
 // one in the truth or up here, it keeps finding its own interface at start().
-inline void pinLinkToControlLan (ProLinkReceiver& receiver)
+inline void pinLinkToControlLan (ProLinkReceiver& receiver, const std::string& truthPath)
 {
-	if (const auto lan = linkinterface::controlLan (linkinterface::controlNetwork()))
+	if (const auto lan = linkinterface::controlLan (linkinterface::controlNetwork (truthPath)))
 		receiver.useInterface (lan->local, lan->broadcast, lan->mac);
 }

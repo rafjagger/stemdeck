@@ -962,7 +962,7 @@ void MainComponent::updateNetwork()
 
 	if (! proLink.isRunning())
 	{
-		pinLinkToControlLan (proLink);
+		pinLinkToControlLan (proLink, truthPath);
 		proLink.start (device, proLinkPorts);
 	}
 

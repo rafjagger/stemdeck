@@ -251,10 +251,23 @@ TEST (RecorderControls, AGapShowsInTheColourAndTheLongestFaceFits)
 		controls.button.setButtonText (juce::String (clock) + " LOCAL");
 		EXPECT_TRUE (fits (controls.button)) << clock;
 	}
-	for (const auto* face : { "WRITE ERR", "100 GB FULL", "STICK GONE", "REC USB RO", "REC LOCAL" })
+	for (const auto cause : { Recorder::StopCause::writeFailed, Recorder::StopCause::limitReached, Recorder::StopCause::targetGone })
+	{
+		controls.button.setButtonText (RecorderControls::stopFace (cause));
+		EXPECT_TRUE (fits (controls.button)) << RecorderControls::stopFace (cause);
+	}
+	for (const auto* face : { "REC USB RO", "REC LOCAL" })
 	{
 		controls.button.setButtonText (face);
 		EXPECT_TRUE (fits (controls.button)) << face;
 	}
 	controls.toggle (44100.0);
+}
+
+// The limit's face is spelled from the limit itself, not a second time.
+TEST (RecorderControlsFace, TheLimitFaceNamesTheLimit)
+{
+	EXPECT_EQ (RecorderControls::stopFace (Recorder::StopCause::limitReached),
+			   juce::String (RecordTarget::localLimitBytes / 1'000'000'000) + " GB FULL");
+	EXPECT_EQ (RecorderControls::stopFace (Recorder::StopCause::none), juce::String());
 }

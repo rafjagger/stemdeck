@@ -45,6 +45,9 @@ public:
 	static constexpr juce::uint32 stoppedFaceMillis = 20000;
 	// m:ss, and h:mmh past 99 minutes: never wider than five characters.
 	static juce::String takeClock (int seconds);
+	// What the button says when a take ended by itself: a few characters that
+	// survive the 9 % slot, readable at a glance. Empty for an ordinary stop.
+	static juce::String stopFace (Recorder::StopCause cause);
 
 	juce::TextButton button { "REC" };
 	LevelMeter left, right;

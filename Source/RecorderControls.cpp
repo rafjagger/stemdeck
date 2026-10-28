@@ -4,21 +4,16 @@
 
 #include "Theme.h"
 
-namespace
-{
-// What the button says when a take ended by itself: a few characters that
-// survive the 9 % slot, readable at a glance.
-juce::String faceFor (Recorder::StopCause cause)
+juce::String RecorderControls::stopFace (Recorder::StopCause cause)
 {
 	switch (cause)
 	{
 		case Recorder::StopCause::writeFailed:  return "WRITE ERR";
-		case Recorder::StopCause::limitReached: return "100 GB FULL";
+		case Recorder::StopCause::limitReached: return juce::String (RecordTarget::localLimitBytes / 1'000'000'000) + " GB FULL";
 		case Recorder::StopCause::targetGone:   return "STICK GONE";
 		case Recorder::StopCause::none:         break;
 	}
 	return {};
-}
 }
 
 RecorderControls::RecorderControls (Recorder& r) : recorder (r)
@@ -132,7 +127,7 @@ void RecorderControls::update (const juce::String& clientName)
 	if (recorder.poll())
 	{
 		lastTake = "Recorded: " + recorder.getFile().getFullPathName();
-		showStopped (faceFor (recorder.stopCause()), recorder.stopReason());
+		showStopped (stopFace (recorder.stopCause()), recorder.stopReason());
 	}
 
 	if (stoppedFace.isNotEmpty() && clock() - stoppedAt >= stoppedFaceMillis)

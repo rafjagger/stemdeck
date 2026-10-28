@@ -234,6 +234,9 @@ TEST (OneDeckCore, HeardWithinFiveSeconds)
 namespace
 {
 constexpr int screenWidth = 768, viewHeight = 760;   // the rig's width; the deck part of its 1024
+// What OneDeckComponent at the rig's 768 x 1024 gives its view: the window less
+// its gap all round, the top bar and the library.
+constexpr int rigViewWidth = 756, rigViewHeight = 718;
 
 // How much a snapshot varies: a screen that painted only its ground is flat.
 double lumaVariance (const juce::Image& image)
@@ -332,6 +335,47 @@ TEST_F (OneDeck, PaintsEveryState)
 		if (i > 0)
 			EXPECT_GT (differingPixels (shots[i - 1].second, image), 0) << state << " looks like " << shots[i - 1].first;
 	}
+	view.setLookAndFeel (nullptr);
+}
+
+// For the maintainer's eye: with STEMDECK_SNAPSHOT_DIR set, the deck part at
+// the rig's real size as PNGs -- loaded and stopped, then playing with a stem
+// cued and sent to AUX, so the meters stand lit.
+TEST_F (OneDeck, WritesTheRigSizedScreenForReview)
+{
+	const auto directory = juce::SystemStats::getEnvironmentVariable ("STEMDECK_SNAPSHOT_DIR", {});
+	if (directory.isEmpty())
+		GTEST_SKIP() << "STEMDECK_SNAPSHOT_DIR not set";
+
+	DJLookAndFeel look;
+	OneDeckView view (audio, formats, 0);
+	view.setLookAndFeel (&look);
+	view.setSize (rigViewWidth, rigViewHeight);
+	view.setSet (set);
+	player().setBeatGrid ({ 120.0, 0.0 });
+	const auto write = [&] (const char* name)
+	{
+		const auto file = juce::File (directory).getChildFile (juce::String (name) + ".png");
+		ASSERT_TRUE (file.getParentDirectory().createDirectory().wasOk());
+		file.deleteFile();
+		juce::FileOutputStream stream (file);
+		ASSERT_TRUE (stream.openedOk());
+		const auto image = snapshotOf (view);
+		EXPECT_GT (lumaVariance (image), 50.0) << name;
+		ASSERT_TRUE (juce::PNGImageFormat().writeImageToStream (image, stream));
+	};
+	write ("one-deck-stopped");
+
+	setAllStems (false, false, 1.0f);
+	view.column (1).cue().setToggleState (true, juce::sendNotificationSync);
+	view.column (0).aux().setValue (0.8, juce::sendNotificationSync);
+	player().play();
+	for (int i = 0; i < blocksFor (0.3); ++i)
+	{
+		renderBlock();
+		view.refresh();
+	}
+	write ("one-deck-playing");
 	view.setLookAndFeel (nullptr);
 }
 

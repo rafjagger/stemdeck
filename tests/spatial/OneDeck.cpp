@@ -124,8 +124,9 @@ TEST_F (OneDeck, VolumeMinimaAreExactSilence)
 	setAllStems (false, true, 1.0f);
 	player().play();
 	renderBlocks (blocksFor (0.3));
-	// The stereo aux port is not rendered until B3 lays out the 16-channel aux bus.
-	for (const auto ch : { layout.bformat, layout.cue, layout.phones })
+	// The aux and cue pairs are not rendered until B3 lays out the 16-channel
+	// aux bus and the 9-channel cue; meanwhile the cue is heard on the phones.
+	for (const auto ch : { layout.bformat, layout.phones })
 		ASSERT_GT (peakOver (ch, 0.05), 0.0f) << "the deck plays: " << outputs::oneDeck::portName (ch);
 
 	// GAIN at the knob's minimum: every one of the 22.
@@ -133,17 +134,16 @@ TEST_F (OneDeck, VolumeMinimaAreExactSilence)
 	renderBlocks (blocksFor (0.5));
 	expectExactlySilentFor (0, layout.channels, 0.2, "GAIN at its minimum");
 
-	// MUTE: the B-format and the AUX; the cue is pre-mute and plays on.
+	// MUTE: the B-format and the AUX; the cue is pre-mute and plays on in the phones.
 	setAllStems (true, true, 1.0f);
 	renderBlocks (blocksFor (0.5));
-	EXPECT_GT (peakOver (layout.cue, 0.05), 0.0f) << "the cue is pre-mute";
+	EXPECT_GT (peakOver (layout.phones, 0.05), 0.0f) << "the cue is pre-mute";
 	expectExactlySilentFor (layout.bformat, outputs::bformatChannels, 0.2, "MUTE");
 	expectExactlySilentFor (layout.aux, 2, 0.2, "MUTE");
 
 	// CUE<->MIX at MIX: the cue's weight is exactly 0, and the muted deck's mix is silence.
 	audio.setPhones (1.0f, 1.0f);
 	renderBlocks (blocksFor (0.5));
-	ASSERT_GT (peakOver (layout.cue, 0.05), 0.0f);
 	expectExactlySilentFor (layout.phones, 2, 0.2, "CUE<->MIX at MIX");
 
 	// CUE<->MIX at CUE with nothing cued: the deck plays, the phones are silent.
@@ -157,7 +157,7 @@ TEST_F (OneDeck, VolumeMinimaAreExactSilence)
 	setAllStems (false, true, 1.0f);
 	audio.setPhones (0.0f, 0.5f);
 	renderBlocks (blocksFor (0.5));
-	ASSERT_GT (peakOver (layout.cue, 0.05), 0.0f);
+	ASSERT_GT (peakOver (layout.bformat, 0.05), 0.0f);
 	expectExactlySilentFor (layout.phones, 2, 0.2, "phones LEVEL 0");
 }
 

@@ -17,12 +17,14 @@ class SteadyBed;
 
 // One deck's spatial engine (design spec §2, §5-§7): per stem a StereoEncoder
 // fed the moving share g·x and the steady share (1-g)·x into the main bed, so
-// the deck leaves as 16-channel B-format; the cued stems through a cue bed and
-// a BinauralDecoder; AUX as a second 16-channel bus of the stems' own sends (their
-// encoder output plus their steady share through a third bed); phones for standalone use.
+// the deck leaves as 16-channel B-format; the cued stems through a cue bed,
+// leaving as 2nd-order B-format (M4: the first 9 ACN channels of the 3rd-order
+// cue sum, so Core decodes it once); AUX as a second 16-channel bus of the stems'
+// own sends (their encoder output plus their steady share through a third bed);
+// phones for standalone use, through the deck's one BinauralDecoder.
 // The encoders are fed pre-MUTE and MUTE applies to their output (ruling R5),
 // so the cue stays pre-mute. Every gain ramps over 10 ms; every volume at its
-// minimum is exact silence (R4). The decoders run only while used (R12), and a
+// minimum is exact silence (R4). The decoder runs only while used (R12), and a
 // standing deck runs no encoder and no bed at all (R14).
 class DeckSpatial
 {
@@ -41,22 +43,27 @@ public:
 		std::atomic<bool> playing { true };   // false, silent and settled, the deck stands (R14)
 	};
 
-	// A null entry: that output is not rendered.
+	static constexpr int cueChannels = 9;   // ACN 0..8: 2nd order
+
+	// A null entry: that output is not rendered. binauralCue is two-deck mode's
+	// (ruling R2): the phones decoder's output at cue 1, mix 0.
 	struct Outputs
 	{
 		std::array<float*, spatial::bformatChannels> bformat {}, aux {};
-		std::array<float*, 2> cue {}, phones {};
+		std::array<float*, cueChannels> cue {};
+		std::array<float*, 2> binauralCue {}, phones {};
 	};
 
 	// Mean µs per process() call (S1.4 calls with 128-sample blocks) since resetTiming();
 	// 0 for a node never called. Audio thread only. The phones decoder's figure and
 	// sample count include its priming blocks after a reconnect (one per chunk, for
 	// 2048 samples): real work on the audio thread, so it counts.
-	struct Timing { double encoders, bed, cueBed, cueDecoder, phonesDecoder; };
-	// Samples each decoder, and the aux bed, ran since resetTiming(). Audio thread only.
-	struct DecoderRuns { std::int64_t cue, phones, auxBed; };
+	struct Timing { double encoders, bed, cueBed, phonesDecoder; };
+	// Samples the phones decoder, and the aux bed, ran since resetTiming(). Audio thread only.
+	struct DecoderRuns { std::int64_t phones, auxBed; };
 
 	static std::unique_ptr<DeckSpatial> create (juce::String& error);
+	static int binauralDecodersCreated();   // in this process, by create(); for tests
 	~DeckSpatial();
 
 	void prepare (double sampleRate, int blockSize);   // allocates; IEM nodes at blockSize, longer calls chunked
@@ -86,7 +93,8 @@ private:
 	void renderAux (const Outputs&, int offset, int count);
 	bool auxWanted() const;
 	void renderCue (const Outputs&, int offset, int count, bool wanted);
-	void renderPhones (const Outputs&, int offset, int count);
+	void renderPhones (const Outputs&, int offset, int count, bool cueInUse);
+	void setPhonesTargets (bool binauralCue);
 	void primePhonesDecoderOneBlock();
 	bool cueWanted() const;
 
@@ -94,18 +102,20 @@ private:
 	bool deckPlaying = true;   // state.playing, as read for this chunk
 	std::array<std::unique_ptr<Stem>, stems> stemNodes;
 	std::unique_ptr<SteadyBed> mainBed, cueBed, auxBed;
-	std::unique_ptr<a3::IemNode> cueDecoder, phonesDecoder;
-	DecoderGate cueGate, phonesGate, auxGate;
+	std::unique_ptr<a3::IemNode> phonesDecoder;
+	DecoderGate phonesGate, auxGate;
+	spatial::PhonesWeights phonesSettings {};   // LEVEL and CUE<->MIX, as read for this chunk
+	bool phonesDecoderOn = false;               // state.phonesDecoderOn, as read for this chunk
 	bool phonesDecoding = false;       // the phones decoder ran in the last chunk
 	bool phonesDecoderStale = false;   // it may hold a tail: stopped hard, before its hold-over ran out
 	int phonesPrimeRemaining = 0;      // silence still to run through it before it decodes the deck again
 	Ramp phonesCueWeight, phonesMixWeight;
 
 	// Prepared at blockSize: 16-ch sums and decoder io, stereo bed inputs, per-sample gains.
-	juce::AudioBuffer<float> mainSum, cueSum, auxSum, bedOut, auxBedOut, cueDecoderIo, phonesDecoderIo;
-	juce::AudioBuffer<float> bedIn, cueBedIn, auxBedIn, cueOut, scratch;
+	juce::AudioBuffer<float> mainSum, cueSum, auxSum, bedOut, auxBedOut, phonesDecoderIo;
+	juce::AudioBuffer<float> bedIn, cueBedIn, auxBedIn, scratch;
 	int blockSize = 0;
 
-	Clock encoderClock, bedClock, cueBedClock, cueDecoderClock, phonesDecoderClock;
-	std::int64_t timedBlocks = 0, cueDecoderSamples = 0, phonesDecoderSamples = 0, auxBedSamples = 0;
+	Clock encoderClock, bedClock, cueBedClock, phonesDecoderClock;
+	std::int64_t timedBlocks = 0, phonesDecoderSamples = 0, auxBedSamples = 0;
 };

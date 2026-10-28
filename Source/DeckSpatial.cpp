@@ -96,8 +96,11 @@ void runNode (a3::IemNode& node, juce::AudioBuffer<float>& buffer, int count)
 	node.process (chunk);
 }
 
+std::atomic<int> decodersCreated { 0 };
+
 std::unique_ptr<a3::IemNode> binauralDecoder (juce::String& error)
 {
+	++decodersCreated;
 	auto decoder = a3::IemNode::create (a3::IemKind::binauralDecoder, busChannels, 2);
 	if (decoder == nullptr)
 	{
@@ -170,11 +173,15 @@ std::unique_ptr<DeckSpatial> DeckSpatial::create (juce::String& error)
 	deck->auxBed = deck->cueBed != nullptr ? SteadyBed::create (error) : nullptr;
 	if (deck->auxBed == nullptr)
 		return nullptr;
-	deck->cueDecoder = binauralDecoder (error);
-	deck->phonesDecoder = deck->cueDecoder != nullptr ? binauralDecoder (error) : nullptr;
+	deck->phonesDecoder = binauralDecoder (error);
 	if (deck->phonesDecoder == nullptr)
 		return nullptr;
 	return deck;
+}
+
+int DeckSpatial::binauralDecodersCreated()
+{
+	return decodersCreated.load();
 }
 
 DeckSpatial::Controls& DeckSpatial::controls()
@@ -209,11 +216,10 @@ void DeckSpatial::prepare (double sampleRate, int newBlockSize)
 	mainBed->prepare (sampleRate, blockSize);
 	cueBed->prepare (sampleRate, blockSize);
 	auxBed->prepare (sampleRate, blockSize);
-	cueDecoder->prepare (sampleRate, blockSize);
 	phonesDecoder->prepare (sampleRate, blockSize);
-	for (auto* buffer : { &mainSum, &cueSum, &auxSum, &bedOut, &auxBedOut, &cueDecoderIo, &phonesDecoderIo })
+	for (auto* buffer : { &mainSum, &cueSum, &auxSum, &bedOut, &auxBedOut, &phonesDecoderIo })
 		buffer->setSize (busChannels, blockSize);
-	for (auto* buffer : { &bedIn, &cueBedIn, &auxBedIn, &cueOut })
+	for (auto* buffer : { &bedIn, &cueBedIn, &auxBedIn })
 		buffer->setSize (2, blockSize);
 	scratch.setSize (scratchRows, blockSize);
 	phonesCueWeight.reset (sampleRate, rampSeconds);
@@ -229,9 +235,9 @@ void DeckSpatial::prepare (double sampleRate, int newBlockSize)
 		stem->cue.setCurrentAndTargetValue (0.0f);
 		stem->aux.setCurrentAndTargetValue (stem->aux.getTargetValue());
 	}
+	setPhonesTargets (false);
 	phonesCueWeight.setCurrentAndTargetValue (phonesCueWeight.getTargetValue());
 	phonesMixWeight.setCurrentAndTargetValue (phonesMixWeight.getTargetValue());
-	cueGate.reset();
 	phonesGate.reset();
 	auxGate.reset();
 	phonesDecoderStale = false;
@@ -265,10 +271,24 @@ void DeckSpatial::readControls()
 		stem.encoder->setStereoPose (pose);
 	}
 	deckPlaying = state.playing.load (std::memory_order_relaxed);
-	const auto weights = spatial::phonesWeights (state.phonesLevel.load (std::memory_order_relaxed),
-	                                             state.phonesMix.load (std::memory_order_relaxed));
-	phonesCueWeight.setTargetValue (weights.cue);
-	phonesMixWeight.setTargetValue (state.phonesDecoderOn.load (std::memory_order_relaxed) ? weights.mix : 0.0f);
+	phonesSettings = spatial::phonesWeights (state.phonesLevel.load (std::memory_order_relaxed),
+	                                         state.phonesMix.load (std::memory_order_relaxed));
+	phonesDecoderOn = state.phonesDecoderOn.load (std::memory_order_relaxed);
+}
+
+// Two-deck mode's binaural cue is the decoder at cue 1, mix 0 (R2), whatever
+// the phones settings; otherwise the phones' own, and with the decoder off
+// both ramp to 0, so it stops through its hold-over.
+void DeckSpatial::setPhonesTargets (bool binauralCue)
+{
+	if (binauralCue)
+	{
+		phonesCueWeight.setTargetValue (1.0f);
+		phonesMixWeight.setTargetValue (0.0f);
+		return;
+	}
+	phonesCueWeight.setTargetValue (phonesDecoderOn ? phonesSettings.cue : 0.0f);
+	phonesMixWeight.setTargetValue (phonesDecoderOn ? phonesSettings.mix : 0.0f);
 }
 
 void DeckSpatial::process (const float* const* stemsPreMute, const Outputs& out, int numSamples)
@@ -319,7 +339,7 @@ void DeckSpatial::processChunk (const float* const* stemsPreMute, const Outputs&
 		renderAux (out, offset, count);
 	}
 	renderCue (out, offset, count, cueInUse);
-	renderPhones (out, offset, count);
+	renderPhones (out, offset, count, cueInUse);
 }
 
 // R14: not playing, every stem's pre-mute input exactly 0.0f, no gain ramp
@@ -394,7 +414,8 @@ void DeckSpatial::encodeStem (Stem& stem, const float* left, const float* right,
 	for (int c = 0; c < busChannels; ++c)
 	{
 		addScaled (mainSum.getWritePointer (c), stem.io.getReadPointer (c), mute, muteSpan, count);
-		addScaled (cueSum.getWritePointer (c), stem.io.getReadPointer (c), cue, cueSpan, count);
+		if (c < cueChannels)
+			addScaled (cueSum.getWritePointer (c), stem.io.getReadPointer (c), cue, cueSpan, count);
 		addScaled (auxSum.getWritePointer (c), stem.io.getReadPointer (c), send, sendSpan, count);
 	}
 	for (int side = 0; side < 2; ++side)
@@ -437,58 +458,52 @@ void DeckSpatial::renderAux (const Outputs& out, int offset, int count)
 	}
 }
 
-// The cued stems in isolation, binaural. Idle, the decoder is not called and
-// the cue is 0.0f; after the last cue it runs a hold-over on silence (R12).
+// The cued stems in isolation, 2nd order: SN3D's ACN 0..8 of the 3rd-order cue
+// sum are the 2nd-order signal, so this truncates, it does not re-encode (M4).
+// Nothing cued, the cue bed is not run and the sum is 0.0f.
 void DeckSpatial::renderCue (const Outputs& out, int offset, int count, bool wanted)
 {
-	if (! cueGate.next (wanted, count))
+	if (wanted)
+		timed (cueBedClock.ticks, [&] { cueBed->process (cueBedIn.getReadPointer (0), cueBedIn.getReadPointer (1), bedOut, count); });
+	for (int c = 0; c < cueChannels; ++c)
 	{
-		cueOut.clear (0, count);
-	}
-	else
-	{
+		float* sum = cueSum.getWritePointer (c);
 		if (wanted)
 		{
-			timed (cueBedClock.ticks, [&] { cueBed->process (cueBedIn.getReadPointer (0), cueBedIn.getReadPointer (1), bedOut, count); });
-			for (int c = 0; c < busChannels; ++c)
-				FVO::add (cueDecoderIo.getWritePointer (c), cueSum.getReadPointer (c), bedOut.getReadPointer (c), count);
+			FVO::add (sum, bedOut.getReadPointer (c), count);
+			FVO::multiply (sum, spatial::trim, count);
 		}
-		else
-		{
-			cueDecoderIo.clear (0, count);
-		}
-		timed (cueDecoderClock.ticks, [&] { runNode (*cueDecoder, cueDecoderIo, count); });
-		cueDecoderSamples += count;
-		for (int side = 0; side < 2; ++side)
-			FVO::multiply (cueOut.getWritePointer (side), cueDecoderIo.getReadPointer (side), spatial::trim, count);
+		copyIfWanted (out.cue[(size_t) c] == nullptr ? nullptr : out.cue[(size_t) c] + offset, sum, count);
 	}
-	for (int side = 0; side < 2; ++side)
-		copyIfWanted (out.cue[(size_t) side] == nullptr ? nullptr : out.cue[(size_t) side] + offset, cueOut.getReadPointer (side), count);
 }
 
-// Standalone phones: the cue's share plus the deck's B-format, binaural. The
-// decoder runs only while both phones outputs are rendered and the mix share
-// is above 0; turned off or mixed out it gets the cue's hold-over, unplugged it
-// stops at once (R12). Its next start after such a hard stop first primes it
-// with silence, a block per chunk, before it decodes the deck again.
-void DeckSpatial::renderPhones (const Outputs& out, int offset, int count)
+// The deck's one decoder: mixWeight * main16 + cueWeight * cue9, ACN 9..15 of
+// the cue left out. It runs only while a rendered pair (phones, or two-deck's
+// binaural cue) takes it and it has something to decode; turned off or
+// emptied it gets a hold-over, unplugged it stops at once (R12). Its next
+// start after such a hard stop first primes it with silence, a block per
+// chunk, before it decodes the deck again.
+void DeckSpatial::renderPhones (const Outputs& out, int offset, int count, bool cueInUse)
 {
-	float* cueWeight = scratch.getWritePointer (movingRow);
-	float* mixWeight = scratch.getWritePointer (muteRow);
-	const bool connected = out.phones[0] != nullptr && out.phones[1] != nullptr;
-	if (! connected)
+	const auto both = [] (const std::array<float*, 2>& pair) { return pair[0] != nullptr && pair[1] != nullptr; };
+	const bool binauralCue = both (out.binauralCue);
+	if (! binauralCue && ! both (out.phones))
 	{
 		phonesCueWeight.skip (count);
 		phonesMixWeight.skip (count);
 		phonesGate.reset();
 		phonesDecoding = false;
-		for (auto* phones : out.phones)
-			if (phones != nullptr)
-				FVO::clear (phones + offset, count);
+		for (const auto* pair : { &out.phones, &out.binauralCue })
+			for (auto* port : *pair)
+				if (port != nullptr)
+					FVO::clear (port + offset, count);
 		return;
 	}
 
-	const bool wanted = active (phonesMixWeight);
+	setPhonesTargets (binauralCue);
+	const bool wanted = active (phonesMixWeight) || (cueInUse && active (phonesCueWeight));
+	float* cueWeight = scratch.getWritePointer (movingRow);
+	float* mixWeight = scratch.getWritePointer (muteRow);
 	const GainSpan cueSpan = fill (phonesCueWeight, cueWeight, count);
 	const GainSpan mixSpan = fill (phonesMixWeight, mixWeight, count);
 	const bool decoding = phonesGate.next (wanted, count);
@@ -510,24 +525,31 @@ void DeckSpatial::renderPhones (const Outputs& out, int offset, int count)
 	}
 	else if (decoding)
 	{
+		phonesDecoderIo.clear (0, count);
 		if (wanted)
+		{
 			for (int c = 0; c < busChannels; ++c)
-				FVO::copy (phonesDecoderIo.getWritePointer (c), mainSum.getReadPointer (c), count);
-		else
-			phonesDecoderIo.clear (0, count);
+				addScaled (phonesDecoderIo.getWritePointer (c), mainSum.getReadPointer (c), mixWeight, mixSpan, count);
+			if (cueInUse)
+				for (int c = 0; c < cueChannels; ++c)
+					addScaled (phonesDecoderIo.getWritePointer (c), cueSum.getReadPointer (c), cueWeight, cueSpan, count);
+		}
 		timed (phonesDecoderClock.ticks, [&] { runNode (*phonesDecoder, phonesDecoderIo, count); });
 		phonesDecoderSamples += count;
 		phonesDecoderStale = true;   // until a hold-over runs out
 		decodedTheDeck = wanted;
 	}
-	for (int side = 0; side < 2; ++side)
-	{
-		float* phones = out.phones[(size_t) side] + offset;
-		FVO::clear (phones, count);
-		addScaled (phones, cueOut.getReadPointer (side), cueWeight, cueSpan, count);
-		if (decodedTheDeck)
-			addScaled (phones, phonesDecoderIo.getReadPointer (side), mixWeight, mixSpan, count);
-	}
+	for (const auto* pair : { &out.phones, &out.binauralCue })
+		for (int side = 0; side < 2; ++side)
+		{
+			float* port = (*pair)[(size_t) side];
+			if (port == nullptr)
+				continue;
+			if (decodedTheDeck)
+				FVO::copy (port + offset, phonesDecoderIo.getReadPointer (side), count);
+			else
+				FVO::clear (port + offset, count);
+		}
 }
 
 // After a hard stop the decoder still holds the tail of what it last heard: a
@@ -550,20 +572,19 @@ DeckSpatial::Timing DeckSpatial::timing() const
 			return 0.0;
 		return juce::Time::highResolutionTicksToSeconds (clock.ticks) * 1.0e6 / (double) timedBlocks;
 	};
-	return { mean (encoderClock), mean (bedClock), mean (cueBedClock), mean (cueDecoderClock), mean (phonesDecoderClock) };
+	return { mean (encoderClock), mean (bedClock), mean (cueBedClock), mean (phonesDecoderClock) };
 }
 
 DeckSpatial::DecoderRuns DeckSpatial::decoderRuns() const
 {
-	return { cueDecoderSamples, phonesDecoderSamples, auxBedSamples };
+	return { phonesDecoderSamples, auxBedSamples };
 }
 
 void DeckSpatial::resetTiming()
 {
-	for (auto* clock : { &encoderClock, &bedClock, &cueBedClock, &cueDecoderClock, &phonesDecoderClock })
+	for (auto* clock : { &encoderClock, &bedClock, &cueBedClock, &phonesDecoderClock })
 		clock->ticks = 0;
 	timedBlocks = 0;
-	cueDecoderSamples = 0;
 	phonesDecoderSamples = 0;
 	auxBedSamples = 0;
 }

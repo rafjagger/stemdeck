@@ -41,10 +41,11 @@ namespace outputs
 	}
 
 	// Where a deck's spatial ports lie among its own channels; aux -1: not rendered.
-	struct SpatialLayout { int channels, bformat, cue, aux, phones; };
+	// binauralCue: the cue pair at `cue` is the binaural cue (two-deck, ruling R2).
+	struct SpatialLayout { int channels, bformat, cue, aux, phones; bool binauralCue; };
 	inline SpatialLayout twoDeckSpatialLayout()
 	{
-		return { spatialChannelsPerDeck(), bformatOffset, binauralCueOffset, -1, phonesOffset };
+		return { spatialChannelsPerDeck(), bformatOffset, binauralCueOffset, -1, phonesOffset, true };
 	}
 
 	// A -bformat instance (spec section 8): one deck, its own JACK client
@@ -52,7 +53,7 @@ namespace outputs
 	namespace oneDeck
 	{
 		inline constexpr int channels = bformatChannels + 6;   // B-format, cue, AUX, phones
-		inline SpatialLayout layout() { return { channels, 0, bformatChannels, bformatChannels + 2, bformatChannels + 4 }; }
+		inline SpatialLayout layout() { return { channels, 0, bformatChannels, bformatChannels + 2, bformatChannels + 4, false }; }
 		inline int channelCount() { return layout().channels; }
 
 		inline std::string portName (int channel)

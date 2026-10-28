@@ -61,10 +61,14 @@ struct StemInputs
 	std::array<Signal, 8> channels;
 };
 
+using Bformat = std::array<Signal, spatial::bformatChannels>;
+using Stereo = std::array<Signal, 2>;
+
 struct Rendered
 {
-	std::array<Signal, spatial::bformatChannels> bformat, aux;
-	std::array<Signal, 2> cue, phones;
+	Bformat bformat, aux;
+	std::array<Signal, DeckSpatial::cueChannels> cue;
+	Stereo binauralCue, phones;
 };
 
 struct RenderOptions
@@ -72,6 +76,7 @@ struct RenderOptions
 	int callSize = block;
 	bool phones = true;
 	std::function<void (int firstSample)> beforeCall;   // may change the controls
+	bool binauralCue = false;                           // two-deck mode's pair (R2)
 };
 
 inline Rendered render (DeckSpatial& deck, const StemInputs& in, const RenderOptions& options = {})
@@ -81,7 +86,9 @@ inline Rendered render (DeckSpatial& deck, const StemInputs& in, const RenderOpt
 	for (auto* bus : { &out.bformat, &out.aux })
 		for (auto& channel : *bus)
 			channel = silence (frames);
-	for (auto* pair : { &out.cue, &out.phones })
+	for (auto& channel : out.cue)
+		channel = silence (frames);
+	for (auto* pair : { &out.binauralCue, &out.phones })
 		for (auto& channel : *pair)
 			channel = silence (frames);
 
@@ -99,9 +106,11 @@ inline Rendered render (DeckSpatial& deck, const StemInputs& in, const RenderOpt
 			outputs.bformat[c] = out.bformat[c].data() + offset;
 			outputs.aux[c] = out.aux[c].data() + offset;
 		}
+		for (size_t c = 0; c < outputs.cue.size(); ++c)
+			outputs.cue[c] = out.cue[c].data() + offset;
 		for (size_t side = 0; side < 2; ++side)
 		{
-			outputs.cue[side] = out.cue[side].data() + offset;
+			outputs.binauralCue[side] = options.binauralCue ? out.binauralCue[side].data() + offset : nullptr;
 			outputs.phones[side] = options.phones ? out.phones[side].data() + offset : nullptr;
 		}
 		deck.process (stems.data(), outputs, count);
@@ -204,5 +213,44 @@ inline std::array<Signal, spatial::bformatChannels> encoderReference (const Sign
 			all.copyFrom (c, offset, io, c, 0, count);
 	}
 	return scaled (all, frames, spatial::trim);
+}
+
+// A lone BinauralDecoder set as DeckSpatial's (order 3, SN3D, no headphone EQ)
+// on a 16-channel input, in 128-sample blocks; no trim (the input carries it).
+inline Stereo decoderReference (const Bformat& in)
+{
+	auto decoder = a3::IemNode::create (a3::IemKind::binauralDecoder, spatial::bformatChannels, 2);
+	if (decoder == nullptr)
+		throw std::runtime_error ("no BinauralDecoder");
+	auto* parameters = new juce::DynamicObject();
+	parameters->setProperty ("inputOrderSetting", 4.0f);
+	parameters->setProperty ("useSN3D", 1.0f);
+	parameters->setProperty ("applyHeadphoneEq", 0.0f);
+	if (decoder->setParameters (juce::var (parameters)).failed())
+		throw std::runtime_error ("BinauralDecoder parameters");
+	decoder->prepare (rate, block);
+	const int frames = (int) in[0].size();
+	Stereo out { silence (frames), silence (frames) };
+	juce::AudioBuffer<float> io (spatial::bformatChannels, block);
+	for (int offset = 0; offset < frames; offset += block)
+	{
+		const int count = std::min (block, frames - offset);
+		juce::AudioBuffer<float> view (io.getArrayOfWritePointers(), spatial::bformatChannels, count);
+		for (int c = 0; c < spatial::bformatChannels; ++c)
+			view.copyFrom (c, 0, in[(size_t) c].data() + offset, count);
+		decoder->process (view);
+		for (size_t side = 0; side < 2; ++side)
+			std::copy (view.getReadPointer ((int) side), view.getReadPointer ((int) side) + count, out[side].begin() + offset);
+	}
+	return out;
+}
+
+// The 9-channel cue as a 16-channel input: ACN 9..15 zero.
+inline Bformat padded (const std::array<Signal, DeckSpatial::cueChannels>& cue)
+{
+	Bformat out;
+	for (size_t c = 0; c < out.size(); ++c)
+		out[c] = c < cue.size() ? cue[c] : silence ((int) cue[0].size());
+	return out;
 }
 }

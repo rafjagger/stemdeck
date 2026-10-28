@@ -323,8 +323,8 @@ namespace surface
 		const auto halfHeight = (keys.h - m.gap) / 2;
 
 		// Two rows of equal height in each block: over and under.
-		auto loopBlock = keys.removeFromRight (share (width, loopBlockShare));
-		keys.removeFromRight (m.gap);
+		auto loopBlock = keys.removeFromLeft (share (width, loopBlockShare));
+		keys.removeFromLeft (m.gap);
 		t.loop = loopBlock.removeFromTop (halfHeight);
 		splitPair (loopBlock.removeFromBottom (halfHeight), m.gap, t.loopIn, t.loopOut);
 

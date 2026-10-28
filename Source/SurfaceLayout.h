@@ -115,10 +115,10 @@ namespace surface
 	DeckColumn deckColumn (Rect local, bool gridOn, int deckIndex, Metrics metrics, Transport transport = Transport::inColumn);
 
 	// The one-deck screen's foot row, the transport band (2026-10-28), in its
-	// own coordinates, from the right: the meters' card, one bar each for
-	// MAIN, AUX and CUE; then on the transport's tile the loop block (LOOP on
-	// top, LOOP IN | LOOP OUT under it), the track search (|< over >|), and
-	// CUE | PLAY at the left, as tall as the row and the biggest keys.
+	// own coordinates, left to right: on the transport's tile the loop block
+	// (LOOP on top, LOOP IN | LOOP OUT under it), CUE | PLAY, as tall as the
+	// row and the biggest keys, and the track search (|< over >|); then the
+	// meters' card at the right, one bar each for MAIN, AUX and CUE.
 	struct TransportKeys
 	{
 		Rect tile, previous, cue, play, next;

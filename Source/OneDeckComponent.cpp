@@ -408,6 +408,9 @@ void OneDeckComponent::handlePanel (const panel1::Event& e)
 		case Type::cueDown:   deck.cuePressed(); return;
 		case Type::cueUp:     deck.cueReleased(); return;
 		case Type::play:      deck.playPressed(); return;
+		case Type::loop:      deck.toggleLoop(); return;
+		case Type::loopIn:    deck.loopIn(); return;
+		case Type::loopOut:   deck.loopOut(); return;
 		case Type::shiftDown: view.shift().setToggleState (true, juce::dontSendNotification); return;
 		case Type::shiftUp:   view.shift().setToggleState (false, juce::dontSendNotification); return;
 		default: break;
@@ -464,6 +467,9 @@ void OneDeckComponent::showPanel()
 	state.playing = player.isPlaying();
 	state.atCue = player.isLoaded() && ! player.isPlaying() && std::abs (player.getPosition() - player.getCuePoint()) < 0.01;
 	state.shift = view.shift().getToggleState();
+	state.loopColour = panel::rgbOf (Theme::loop);
+	state.looping = player.hasLoop();
+	state.loopInMarked = view.deckPanel().isLoopInMarked();
 	panelDevice->show (panel1::leds (state, nowSeconds()));
 }
 

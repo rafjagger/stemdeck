@@ -23,6 +23,7 @@ TOOLS = ("a3-wait-for-the-screen", "rig-keep-the-screen.sh", "setup-separator.sh
 AES67_UNITS = ("a3-aes67-deck@.service", "stemdeck-aes67.service")
 AES67_TEMPLATES = ("pipewire-aes67-deck.conf.in", "pipewire-stemdeck-aes67.conf.in")
 EEE = "etc/systemd/network/99-default.link.d/stemdeck-eee.conf"
+USB_RULE = "usr/lib/udev/rules.d/90-stemdeck-usb.rules"
 
 
 def fields(text):
@@ -133,6 +134,7 @@ class TheStagedTree(unittest.TestCase):
         *(f"usr/share/stemdeck/{template}" for template in AES67_TEMPLATES),
         "usr/share/stemdeck/links-aes67.json",
         EEE,
+        USB_RULE,
         "usr/share/doc/stemdeck/copyright",
     }
 
@@ -199,6 +201,33 @@ class TheStagedTree(unittest.TestCase):
                                  (stage / "usr/share/stemdeck" / template).read_bytes())
         eee = (stage / EEE).read_text()
         self.assertIn("[EnergyEfficientEthernet]\nEnable=false\n", eee)
+
+    def test_package_ships_the_usb_rule(self):
+        """A USB block device with a filesystem is mounted for the recorder.
+
+        Pinned: the match keys, the mount point, --collect. Nothing here runs
+        udev or mount."""
+        stage = self.stage()
+        rule = stage / USB_RULE
+        self.assertEqual((REPO / "packaging/lib/udev/rules.d/90-stemdeck-usb.rules").read_bytes(),
+                         rule.read_bytes())
+        rules = [line for line in rule.read_text().splitlines()
+                 if line.strip() and not line.startswith("#")]
+        self.assertTrue(rules)
+        for line in rules:
+            with self.subTest(rule=line):
+                self.assertIn('SUBSYSTEM=="block"', line)
+                self.assertIn('ENV{ID_BUS}=="usb"', line)
+                self.assertIn('ENV{ID_FS_USAGE}=="filesystem"', line)
+                self.assertIn("systemd-mount --no-block --automount=yes --collect", line)
+                self.assertIn("--timeout-idle-sec=", line)
+                self.assertTrue(line.rstrip().endswith('$devnode /media/a3-usb"'), line)
+        owned = [line for line in rules if "uid=1000" in line]
+        self.assertEqual(1, len(owned), "one rule owns the files")
+        self.assertIn('ENV{ID_FS_TYPE}=="vfat|exfat"', owned[0])
+        for line in rules:
+            if line not in owned:
+                self.assertIn('ENV{ID_FS_TYPE}!="vfat|exfat"', line)
 
     def test_package_ships_the_aes67_link_map(self):
         stage = self.stage()

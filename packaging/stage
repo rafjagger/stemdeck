@@ -56,6 +56,8 @@ files() {
     done
     install -D -m 644 "$src/data/links-aes67.json" "$stage/usr/share/stemdeck/links-aes67.json"
     install -D -m 644 "$src/packaging/$EEE" "$stage/$EEE"
+    install -D -m 644 "$src/packaging/lib/udev/rules.d/90-stemdeck-usb.rules" \
+        "$stage/usr/lib/udev/rules.d/90-stemdeck-usb.rules"
     # .reuse/dep5 is already in Debian's machine-readable copyright format.
     install -D -m 644 "$src/.reuse/dep5" "$stage/usr/share/doc/stemdeck/copyright"
 }

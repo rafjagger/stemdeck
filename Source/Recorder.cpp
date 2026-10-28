@@ -1,5 +1,32 @@
 #include "Recorder.h"
 #include "RecordingName.h"
+#include "RecordTarget.h"
+
+namespace
+{
+// Notices what the writer thread cannot say: a write that failed (disk full,
+// stick pulled) and how many bytes went out.
+class WatchedStream : public juce::OutputStream
+{
+public:
+	WatchedStream (std::unique_ptr<juce::OutputStream> inner_, std::function<void (bool, juce::int64)> report_)
+		: inner (std::move (inner_)), report (std::move (report_)) {}
+
+	bool write (const void* data, size_t number) override
+	{
+		const auto ok = inner->write (data, number);
+		report (ok, ok ? (juce::int64) number : 0);
+		return ok;
+	}
+	void flush() override { inner->flush(); }
+	bool setPosition (juce::int64 position) override { return inner->setPosition (position); }
+	juce::int64 getPosition() override { return inner->getPosition(); }
+
+private:
+	std::unique_ptr<juce::OutputStream> inner;
+	std::function<void (bool, juce::int64)> report;
+};
+}
 
 Recorder::Recorder()
 {
@@ -14,7 +41,21 @@ Recorder::~Recorder()
 
 juce::String Recorder::start (const juce::File& folder, double sampleRate)
 {
+	return start (folder, sampleRate, TakeRules{});
+}
+
+juce::String Recorder::start (const juce::File& folder, double sampleRate, TakeRules newRules)
+{
 	stop();
+
+	juce::int64 base = 0;
+	if (newRules.localLimitBytes > 0)
+	{
+		base = RecordTarget::folderBytes (folder.getFullPathName().toStdString());
+		if (base >= newRules.localLimitBytes)
+			return "The local recordings folder holds its limit of " + juce::String (newRules.localLimitBytes / 1'000'000'000)
+				   + " GB: nothing was deleted, free some space or plug in a USB stick";
+	}
 
 	if (! folder.createDirectory())
 		return "Cannot create the folder: " + folder.getFullPathName();
@@ -24,12 +65,31 @@ juce::String Recorder::start (const juce::File& folder, double sampleRate)
 														  now.getHours(), now.getMinutes(), now.getSeconds()));
 	target = target.getNonexistentSibling();
 
-	std::unique_ptr<juce::OutputStream> stream = std::make_unique<juce::FileOutputStream> (target);
-	if (static_cast<juce::FileOutputStream*> (stream.get())->failedToOpen())
+	auto stream = std::make_unique<juce::FileOutputStream> (target);
+	if (stream->failedToOpen())
 		return "Cannot write the file: " + target.getFullPathName();
 
+	folderBytesAtStart = base;
+	return startOn (std::move (stream), target, sampleRate, std::move (newRules));
+}
+
+juce::String Recorder::startOn (std::unique_ptr<juce::OutputStream> stream, const juce::File& target, double sampleRate, TakeRules newRules)
+{
+	stop();
+	if (newRules.localLimitBytes <= 0)
+		folderBytesAtStart = 0;
+
+	auto newWatch = std::make_shared<WriteWatch>();
+	std::unique_ptr<juce::OutputStream> watched = std::make_unique<WatchedStream> (std::move (stream),
+		[newWatch] (bool ok, juce::int64 bytes)
+		{
+			if (! ok)
+				newWatch->failed = true;
+			newWatch->bytes += bytes;
+		});
+
 	juce::FlacAudioFormat flac;
-	auto flacWriter = flac.createWriterFor (stream, juce::AudioFormatWriterOptions{}
+	auto flacWriter = flac.createWriterFor (watched, juce::AudioFormatWriterOptions{}
 														.withSampleRate (sampleRate)
 														.withNumChannels (2)
 														.withBitsPerSample (24));
@@ -41,12 +101,36 @@ juce::String Recorder::start (const juce::File& folder, double sampleRate)
 
 	const juce::SpinLock::ScopedLockType sl (writerLock);
 	writer = std::move (threaded);
+	watch = std::move (newWatch);
+	rules = std::move (newRules);
 	file = target;
+	reason = {};
 	rate = sampleRate;
 	samplesWritten = 0;
 	dropped = false;
 	recording = true;
 	return {};
+}
+
+bool Recorder::poll()
+{
+	if (! recording.load())
+		return false;
+
+	juce::String why;
+	if (watch->failed.load())
+		why = "The disk stopped taking data (full, or the stick was pulled): the take ends here";
+	else if (rules.localLimitBytes > 0 && folderBytesAtStart + watch->bytes.load() >= rules.localLimitBytes)
+		why = "The local recordings folder reached its limit of " + juce::String (rules.localLimitBytes / 1'000'000'000)
+			  + " GB: the take ends here, nothing was deleted";
+	else if (rules.targetStillThere && ! rules.targetStillThere())
+		why = "The USB stick was removed: the take ends here";
+	else
+		return false;
+
+	stop();
+	reason = why;
+	return true;
 }
 
 void Recorder::stop()
@@ -55,6 +139,7 @@ void Recorder::stop()
 	{
 		const juce::SpinLock::ScopedLockType sl (writerLock);
 		recording = false;
+		reason = {};
 		finishing = std::move (writer);
 	}
 	finishing.reset();   // flushes the FIFO and closes the file

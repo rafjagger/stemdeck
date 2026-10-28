@@ -18,6 +18,8 @@ add_executable(stemdeck-tests
     StemHandover.cpp
     ${CMAKE_SOURCE_DIR}/Source/StemHandover.cpp
     RecordingName.cpp
+    RecordTarget.cpp
+    ${CMAKE_SOURCE_DIR}/Source/RecordTarget.cpp
     Scs3d.cpp
     ${CMAKE_SOURCE_DIR}/Source/Scs3d.cpp
     ${CMAKE_SOURCE_DIR}/Source/AutoDj.cpp
@@ -194,6 +196,12 @@ add_executable(stemdeck-spatial-tests
     spatial/OneDeckSync.cpp
     spatial/StemCreatorLock.cpp
     spatial/AnalysisCache.cpp
+    spatial/Recorder.cpp
+    spatial/RecorderControls.cpp
+    ${CMAKE_SOURCE_DIR}/Source/Recorder.cpp
+    ${CMAKE_SOURCE_DIR}/Source/RecorderControls.cpp
+    ${CMAKE_SOURCE_DIR}/Source/RecordTarget.cpp
+    ${CMAKE_SOURCE_DIR}/Source/DataPaths.cpp
     ${CMAKE_SOURCE_DIR}/Source/SteadyBed.cpp
     ${CMAKE_SOURCE_DIR}/Source/DeckSpatial.cpp
     ${CMAKE_SOURCE_DIR}/Source/DeckSpatialPorts.cpp

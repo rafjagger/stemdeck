@@ -156,6 +156,7 @@ target_sources(StemDeck PRIVATE
     Source/StemHandover.cpp
     Source/StemLevels.cpp
     Source/Recorder.cpp
+    Source/RecordTarget.cpp
     Source/DataPaths.cpp
     Source/Scs3d.cpp
     Source/Scs3dDevice.cpp

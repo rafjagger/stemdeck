@@ -47,11 +47,14 @@ public:
 	// stopReason() says why; what was written stays a playable FLAC.
 	bool poll();
 	juce::String stopReason() const { return reason; }   // empty after an ordinary stop
+	enum class StopCause { none, writeFailed, limitReached, targetGone };
+	StopCause stopCause() const { return cause; }
 
 	bool isRecording() const { return recording.load(); }
 	juce::File getFile() const { return file; }
 	double getSeconds() const;
-	bool hasDropped() const { return dropped.load(); }   // the disk could not keep up at some point
+	bool hasDropped() const { return dropped.load(); }
+	void markDroppedForTest() { dropped = true; }   // the disk could not keep up at some point
 
 	float popPeak (int channel) { return peaks[(size_t) channel].exchange (0.0f); }
 
@@ -64,6 +67,7 @@ private:
 	std::unique_ptr<juce::AudioFormatWriter::ThreadedWriter> writer;
 	juce::File file;
 	juce::String reason;
+	StopCause cause = StopCause::none;
 	TakeRules rules;
 	juce::int64 folderBytesAtStart = 0;
 	struct WriteWatch { std::atomic<bool> failed { false }; std::atomic<juce::int64> bytes { 0 }; };

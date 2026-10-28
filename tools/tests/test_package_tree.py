@@ -224,10 +224,10 @@ class TheStagedTree(unittest.TestCase):
                 self.assertTrue(line.rstrip().endswith('$devnode /media/a3-usb"'), line)
         owned = [line for line in rules if "uid=1000" in line]
         self.assertEqual(1, len(owned), "one rule owns the files")
-        self.assertIn('ENV{ID_FS_TYPE}=="vfat|exfat"', owned[0])
+        self.assertIn('ENV{ID_FS_TYPE}=="vfat|exfat|ntfs|ntfs3"', owned[0])
         for line in rules:
             if line not in owned:
-                self.assertIn('ENV{ID_FS_TYPE}!="vfat|exfat"', line)
+                self.assertIn('ENV{ID_FS_TYPE}!="vfat|exfat|ntfs|ntfs3"', line)
 
     def test_package_ships_the_aes67_link_map(self):
         stage = self.stage()

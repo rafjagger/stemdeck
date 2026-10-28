@@ -52,7 +52,7 @@ juce::String Recorder::start (const juce::File& folder, double sampleRate, TakeR
 	if (newRules.localLimitBytes > 0)
 	{
 		base = RecordTarget::folderBytes (folder.getFullPathName().toStdString());
-		if (base >= newRules.localLimitBytes)
+		if (! RecordTarget::localHasRoom (base, newRules.localLimitBytes))
 			return "The local recordings folder holds its limit of " + juce::String (newRules.localLimitBytes / 1'000'000'000)
 				   + " GB: nothing was deleted, free some space or plug in a USB stick";
 	}
@@ -105,6 +105,7 @@ juce::String Recorder::startOn (std::unique_ptr<juce::OutputStream> stream, cons
 	rules = std::move (newRules);
 	file = target;
 	reason = {};
+	cause = StopCause::none;
 	rate = sampleRate;
 	samplesWritten = 0;
 	dropped = false;
@@ -117,19 +118,30 @@ bool Recorder::poll()
 	if (! recording.load())
 		return false;
 
-	juce::String why;
+	StopCause why = StopCause::none;
+	juce::String text;
 	if (watch->failed.load())
-		why = "The disk stopped taking data (full, or the stick was pulled): the take ends here";
-	else if (rules.localLimitBytes > 0 && folderBytesAtStart + watch->bytes.load() >= rules.localLimitBytes)
-		why = "The local recordings folder reached its limit of " + juce::String (rules.localLimitBytes / 1'000'000'000)
-			  + " GB: the take ends here, nothing was deleted";
+	{
+		why = StopCause::writeFailed;
+		text = "The disk stopped taking data (full, or the stick was pulled): the take ends here";
+	}
+	else if (rules.localLimitBytes > 0 && ! RecordTarget::localHasRoom (folderBytesAtStart + watch->bytes.load(), rules.localLimitBytes))
+	{
+		why = StopCause::limitReached;
+		text = "The local recordings folder reached its limit of " + juce::String (rules.localLimitBytes / 1'000'000'000)
+			   + " GB: the take ends here, nothing was deleted";
+	}
 	else if (rules.targetStillThere && ! rules.targetStillThere())
-		why = "The USB stick was removed: the take ends here";
+	{
+		why = StopCause::targetGone;
+		text = "The USB stick was removed: the take ends here";
+	}
 	else
 		return false;
 
 	stop();
-	reason = why;
+	reason = text;
+	cause = why;
 	return true;
 }
 
@@ -140,6 +152,7 @@ void Recorder::stop()
 		const juce::SpinLock::ScopedLockType sl (writerLock);
 		recording = false;
 		reason = {};
+		cause = StopCause::none;
 		finishing = std::move (writer);
 	}
 	finishing.reset();   // flushes the FIFO and closes the file

@@ -5,7 +5,7 @@
 # StemDeck's recorder looks for it (A3-recordings/). systemd-mount creates
 # the mount and an automount that lets go a few seconds after the last
 # write; --collect removes the units again when the device is pulled.
-# vfat/exfat have no owners, so they are mounted as uid 1000, the rig's user;
+# vfat/exfat/ntfs have no owners, so they are mounted as uid 1000, the rig's user;
 # other filesystems keep their own ownership.
-ACTION=="add|change", SUBSYSTEM=="block", ENV{ID_BUS}=="usb", ENV{ID_FS_USAGE}=="filesystem", ENV{ID_FS_TYPE}=="vfat|exfat", RUN+="/usr/bin/systemd-mount --no-block --automount=yes --collect --timeout-idle-sec=5 -o uid=1000,gid=1000 $devnode /media/a3-usb"
-ACTION=="add|change", SUBSYSTEM=="block", ENV{ID_BUS}=="usb", ENV{ID_FS_USAGE}=="filesystem", ENV{ID_FS_TYPE}!="vfat|exfat", RUN+="/usr/bin/systemd-mount --no-block --automount=yes --collect --timeout-idle-sec=5 $devnode /media/a3-usb"
+ACTION=="add|change", SUBSYSTEM=="block", ENV{ID_BUS}=="usb", ENV{ID_FS_USAGE}=="filesystem", ENV{ID_FS_TYPE}=="vfat|exfat|ntfs|ntfs3", RUN+="/usr/bin/systemd-mount --no-block --automount=yes --collect --timeout-idle-sec=5 -o uid=1000,gid=1000 $devnode /media/a3-usb"
+ACTION=="add|change", SUBSYSTEM=="block", ENV{ID_BUS}=="usb", ENV{ID_FS_USAGE}=="filesystem", ENV{ID_FS_TYPE}!="vfat|exfat|ntfs|ntfs3", RUN+="/usr/bin/systemd-mount --no-block --automount=yes --collect --timeout-idle-sec=5 $devnode /media/a3-usb"

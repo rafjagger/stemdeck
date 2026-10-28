@@ -27,7 +27,7 @@ void writeBytes (const fs::path& file, size_t count)
 
 TEST (RecordTarget, UsesTheStickWhenMountedAndWritable)
 {
-	const auto target = RecordTarget::choose ("/media/a3-usb", "/home/x/recordings", true);
+	const auto target = RecordTarget::choose ("/media/a3-usb", "/home/x/recordings", RecordTarget::Stick::writable);
 	EXPECT_EQ (target.kind, RecordTarget::Kind::usb);
 	EXPECT_EQ (target.folder, "/media/a3-usb/A3-recordings");
 	EXPECT_EQ (target.label(), "USB");
@@ -35,22 +35,35 @@ TEST (RecordTarget, UsesTheStickWhenMountedAndWritable)
 
 TEST (RecordTarget, FallsBackToLocalWhenAbsent)
 {
-	const auto target = RecordTarget::choose ("/media/a3-usb", "/home/x/recordings", false);
+	const auto target = RecordTarget::choose ("/media/a3-usb", "/home/x/recordings", RecordTarget::Stick::absent);
 	EXPECT_EQ (target.kind, RecordTarget::Kind::local);
 	EXPECT_EQ (target.folder, "/home/x/recordings");
 	EXPECT_EQ (target.label(), "LOCAL");
 }
 
-// "Mounted and writable" is one flag: a stick mounted read-only is not a target.
+// A stick that is there but mounted read-only is not a target, and is not "no stick" either.
 TEST (RecordTarget, FallsBackToLocalWhenReadOnly)
 {
-	const auto folder = freshFolder ("readonly");
-	EXPECT_FALSE (RecordTarget::isMountedAndWritable (folder.string(), "other /media/a3-usb vfat rw 0 0\n"))
-		<< "not in the mount table";
-	EXPECT_FALSE (RecordTarget::isMountedAndWritable (folder.string(), "dev " + folder.string() + " vfat ro,relatime 0 0\n"))
-		<< "mounted read-only";
-	EXPECT_TRUE (RecordTarget::isMountedAndWritable (folder.string(), "dev " + folder.string() + " vfat rw,relatime 0 0\n"));
-	fs::remove_all (folder);
+	const auto target = RecordTarget::choose ("/media/a3-usb", "/home/x/recordings", RecordTarget::Stick::readOnly);
+	EXPECT_EQ (target.kind, RecordTarget::Kind::local);
+	EXPECT_EQ (target.folder, "/home/x/recordings");
+	EXPECT_TRUE (target.stickReadOnly);
+	EXPECT_EQ (target.label(), "USB RO");
+}
+
+TEST (RecordTarget, ReadsTheStickFromTheMountTableAlone)
+{
+	const std::string point = "/media/a3-usb";
+	using Stick = RecordTarget::Stick;
+	EXPECT_EQ (RecordTarget::stickState (point, "other /media/other vfat rw 0 0\n"), Stick::absent);
+	EXPECT_EQ (RecordTarget::stickState (point, ""), Stick::absent);
+	EXPECT_EQ (RecordTarget::stickState (point, "dev " + point + " vfat ro,relatime 0 0\n"), Stick::readOnly);
+	EXPECT_EQ (RecordTarget::stickState (point, "dev " + point + " vfat rw,relatime 0 0\n"), Stick::writable);
+	// systemd's automount line first, the real mount over it later: the last one says.
+	EXPECT_EQ (RecordTarget::stickState (point, "systemd-1 " + point + " autofs rw,fd=1 0 0\n/dev/sdb1 " + point + " vfat ro 0 0\n"),
+			   Stick::readOnly);
+	EXPECT_EQ (RecordTarget::stickState (point, "systemd-1 " + point + " autofs rw,fd=1 0 0\n"), Stick::writable)
+		<< "not mounted yet: present, and not ours to wake up";
 }
 
 TEST (RecordTarget, RefusesLocalAtTheLimit)
@@ -60,6 +73,7 @@ TEST (RecordTarget, RefusesLocalAtTheLimit)
 	EXPECT_TRUE (RecordTarget::localHasRoom (RecordTarget::localLimitBytes - 1));
 	EXPECT_FALSE (RecordTarget::localHasRoom (RecordTarget::localLimitBytes));
 	EXPECT_FALSE (RecordTarget::localHasRoom (RecordTarget::localLimitBytes + 1));
+	EXPECT_FALSE (RecordTarget::localHasRoom (1000, 1000)) << "the limit can be given";
 }
 
 TEST (RecordTarget, MeasuresAFolderRecursively)
@@ -82,8 +96,9 @@ TEST (RecordTarget, NeverDeletesAnything)
 
 	const auto bytes = RecordTarget::folderBytes (folder.string());
 	EXPECT_FALSE (RecordTarget::localHasRoom (RecordTarget::localLimitBytes + bytes));
-	RecordTarget::choose ("/media/a3-usb", folder.string(), false);
-	RecordTarget::isMountedAndWritable (folder.string(), "");
+	RecordTarget::choose ("/media/a3-usb", folder.string(), RecordTarget::Stick::absent);
+	RecordTarget::stickState (folder.string(), "");
+	RecordTarget::canWrite (folder.string());
 
 	EXPECT_TRUE (fs::exists (folder / "a.flac"));
 	EXPECT_TRUE (fs::exists (folder / "b.flac"));

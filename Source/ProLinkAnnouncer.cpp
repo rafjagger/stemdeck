@@ -44,6 +44,13 @@ namespace prolink
 			started = true;
 			nextAt = now;
 		}
+		if (assigningMixer != 0)
+		{
+			if (now - assigningSince < mixerWait)
+				return {};
+			assigningMixer = 0;   // never assigned: the own claim goes on
+			nextAt = now;
+		}
 		if (now < nextAt)
 			return {};
 
@@ -96,6 +103,13 @@ namespace prolink
 
 		if (phase == Phase::claiming)
 		{
+			if (heard->type == Type::mixerIntention)
+				return expectAssignment (heard->ip != 0 ? heard->ip : from, now);
+			if (heard->type == Type::numberAssigned && assigningMixer != 0 && from == assigningMixer)
+			{
+				takeAssigned (heard->device, now);
+				return {};
+			}
 			if ((heard->type == Type::conflict && heard->device == self.device) || (claimsOurs && heard->type == Type::keepAlive))
 				refuse (heard->ip != 0 ? heard->ip : from);
 			else if (heard->type == Type::assignmentFinished && sent > finalStageStart)
@@ -108,6 +122,25 @@ namespace prolink
 		if (heard->type == Type::finalClaim)
 			return { { assignmentFinished (self), from } };
 		return {};
+	}
+
+	// startup.html: the request goes straight to the mixer; the own claim
+	// waits for its answer.
+	std::vector<Announcer::Send> Announcer::expectAssignment (uint32_t mixer, double now)
+	{
+		assigningMixer = mixer;
+		assigningSince = now;
+		return { { numberRequest (self, 1), mixer } };
+	}
+
+	// The assigned number, announced with the final-stage claim; the mixer's
+	// "assignment finished" cuts that stage short as usual.
+	void Announcer::takeAssigned (int device, double now)
+	{
+		self.device = device;
+		assigningMixer = 0;
+		sent = finalStageStart;
+		nextAt = now;
 	}
 
 	int Announcer::peers (double now) const

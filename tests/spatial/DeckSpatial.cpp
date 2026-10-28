@@ -199,6 +199,30 @@ TEST (DeckSpatial, VolumeMinimaAreExactSilence)
 	}
 }
 
+TEST (DeckSpatial, PhonesAtMixZeroCarryNoMainBus)
+{
+	juce::ScopedJuceInitialiser_GUI juceInitialiser;
+	const auto in = noiseOnAllStems();
+	// cue is pre-mute and the main bus post-mute, so muting every stem removes the main bus alone
+	auto phonesWith = [&] (bool muted)
+	{
+		auto deck = preparedDeck (block, [muted] (DeckSpatial::Controls& c)
+		{
+			busyDeck (c);
+			c.phonesMix = 0.0f;
+			c.phonesLevel = 1.0f;
+			for (int s = 0; s < DeckSpatial::stems; ++s)
+				c.muted[(size_t) s] = muted;
+		});
+		return render (*deck, in);
+	};
+	const auto playing = phonesWith (false), muted = phonesWith (true);
+	EXPECT_FALSE (exactlySilent (playing.bformat[0], settled)) << "a main bus to keep out";
+	EXPECT_FALSE (exactlySilent (playing.phones[0], settled)) << "the cue in the phones";
+	for (int side = 0; side < 2; ++side)
+		EXPECT_EQ (maxDifference (playing.phones[(size_t) side], muted.phones[(size_t) side], settled), 0.0f) << "mix 0 carries no main bus, side " << side;
+}
+
 TEST (DeckSpatial, CueIsTheCuedStemsInIsolation)
 {
 	juce::ScopedJuceInitialiser_GUI juceInitialiser;

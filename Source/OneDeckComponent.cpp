@@ -27,10 +27,12 @@ constexpr int refreshHz = 60;   // the rolling waveform's
 constexpr float topBarShare = 0.035f, libraryShare = 0.24f;
 }
 
-OneDeckComponent::OneDeckComponent (DeckInstance deck, double pathLatencySeconds)
+OneDeckComponent::OneDeckComponent (DeckInstance deck, double pathLatencySeconds, std::optional<std::string> panelWorkspace)
 	: instance (deck), truth (coretruth::choose()),
 	  panelOwnership (appsettings::panelLockFile().getFullPathName().toStdString(), deck.letter)
 {
+	if (panelWorkspace)
+		panelFollow.emplace (*panelWorkspace);
 	setLookAndFeel (&lookAndFeel);
 	sync.setPathLatency (pathLatencySeconds);
 	linkSender.setPathLatency (pathLatencySeconds);
@@ -123,6 +125,7 @@ OneDeckComponent::OneDeckComponent (DeckInstance deck, double pathLatencySeconds
 OneDeckComponent::~OneDeckComponent()
 {
 	stopTimer();
+	workspacePoller.reset();
 	linkSender.stop();   // before the player it reads
 	link.stop();
 	deckLink.reset();   // before the deck whose 3D it writes
@@ -352,6 +355,14 @@ juce::String OneDeckComponent::panelPreferenceKey() const
 
 void OneDeckComponent::startPanel()
 {
+	if (panelFollow)
+	{
+		// Released at start: the tty is touched only once this workspace has been in front.
+		panel::startFollowing (panelOwnership);
+		workspacePoller = std::make_unique<PanelWorkspacePoller>();
+		updatePanelOwner();
+		return;
+	}
 	const auto key = panelPreferenceKey();
 	std::optional<bool> stored;
 	if (instanceSettings().containsKey (key))
@@ -362,8 +373,16 @@ void OneDeckComponent::startPanel()
 
 // The lock names the instance with the panel; another instance taking it
 // (its toggle) takes it from here: this one lets the port go.
+void OneDeckComponent::followWorkspace()
+{
+	if (! panelFollow || workspacePoller == nullptr)
+		return;
+	panel::applyFollow (panelOwnership, panelFollow->update (workspacePoller->focused(), nowSeconds(), panelOwnership.holds()));
+}
+
 void OneDeckComponent::updatePanelOwner()
 {
+	followWorkspace();
 	const auto holds = panelOwnership.holds();
 	if (! holds)
 	{
@@ -473,6 +492,8 @@ void OneDeckComponent::showSettings()
 
 	actions.onPanelHere = [this] (bool here)
 	{
+		if (panelFollow)
+			return;   // the workspace decides
 		instanceSettings().setValue (panelPreferenceKey(), here);
 		if (here)
 			panelOwnership.take();

@@ -168,6 +168,8 @@ target_sources(StemDeck PRIVATE
     Source/PotPickup.cpp
     Source/AuxPots.cpp
     Source/PanelOwnership.cpp
+    Source/PanelFollowsWorkspace.cpp
+    Source/PanelWorkspacePoller.cpp
     Source/PanelLink.cpp
     Source/PanelDevice.cpp
     Source/SpatialLaw.cpp

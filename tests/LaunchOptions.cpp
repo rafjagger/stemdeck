@@ -109,3 +109,11 @@ TEST (LaunchOptions, PathLatencyFromEnvironment)
 		EXPECT_NE (std::get<std::string> (r).find ("STEMDECK_PATH_LATENCY_MS"), std::string::npos) << bad;
 	}
 }
+
+TEST (LaunchOptions, PanelWorkspaceComesFromTheVariable)
+{
+	EXPECT_FALSE (ok (parseLaunch ({ "-bformat" })).panelWorkspace.has_value());
+	EXPECT_FALSE (ok (parseLaunch ({ "-bformat" }, std::nullopt, std::string())).panelWorkspace.has_value());
+	EXPECT_EQ (ok (parseLaunch ({ "-bformat" }, std::nullopt, std::string ("2:STEMDECK"))).panelWorkspace,
+			   std::optional<std::string> ("2:STEMDECK"));
+}

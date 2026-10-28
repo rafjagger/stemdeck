@@ -5,6 +5,8 @@
 #include <filesystem>
 #include <optional>
 
+#include "PanelFollowsWorkspace.h"
+
 // Which StemDeck instance holds the A³ Motion panel (-bformat: one instance a
 // deck, one panel). A lock file in the runtime directory (cleared at boot) holds
 // "<letter> <pid>" of the instance that has it. Pure: no JUCE, the path is a
@@ -50,4 +52,13 @@ namespace panel
 	// the panel if free, off never does, absent leaves it to deck A. True if
 	// the instance holds it afterwards.
 	bool claimAtStart (Ownership&, std::optional<bool> storedPreference);
+
+	// Follow mode (R9, STEMDECK_PANEL_WORKSPACE): the instance starts without
+	// the panel and without touching its lock -- two readers never share the
+	// tty. Always false.
+	bool startFollowing (Ownership&);
+
+	// Acts on the rule's answer and returns whether the instance holds the
+	// panel afterwards (the lock's real state, not an assumed one).
+	bool applyFollow (Ownership&, PanelFollow::Action);
 }

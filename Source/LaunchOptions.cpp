@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "LaunchOptions.h"
 
+#include "PanelFollowsWorkspace.h"
+
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
@@ -28,7 +30,8 @@ namespace
 }
 
 std::variant<LaunchOptions, std::string> parseLaunch (const std::vector<std::string>& argv,
-                                                       const std::optional<std::string>& pathLatencyEnv)
+                                                       const std::optional<std::string>& pathLatencyEnv,
+                                                       const std::optional<std::string>& panelWorkspaceEnv)
 {
 	LaunchOptions options;
 	bool deckGiven = false;
@@ -71,6 +74,9 @@ std::variant<LaunchOptions, std::string> parseLaunch (const std::vector<std::str
 			return "STEMDECK_PATH_LATENCY_MS=" + *pathLatencyEnv + " is not 0 to 200 (milliseconds)";
 		options.pathLatencyMs = *latency;
 	}
+
+	if (panelWorkspaceEnv)
+		options.panelWorkspace = panelWorkspaceFromEnvironment (*panelWorkspaceEnv);
 
 	return options;
 }

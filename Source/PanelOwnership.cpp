@@ -158,4 +158,19 @@ namespace panel
 			return ownership.claimByDefault();
 		return *storedPreference && ownership.claimIfFree();
 	}
+
+	bool startFollowing (Ownership&)
+	{
+		return false;
+	}
+
+	bool applyFollow (Ownership& ownership, PanelFollow::Action action)
+	{
+		using Action = PanelFollow::Action;
+		if (action == Action::release)
+			ownership.release();
+		else if (action == Action::takeAfterDelay)
+			ownership.take();
+		return ownership.holds();
+	}
 }

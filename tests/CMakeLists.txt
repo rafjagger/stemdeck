@@ -83,6 +83,8 @@ add_executable(stemdeck-tests
     PotPickup.cpp
     ${CMAKE_SOURCE_DIR}/Source/PotPickup.cpp
     PanelOwnership.cpp
+    PanelFollowsWorkspace.cpp
+    ${CMAKE_SOURCE_DIR}/Source/PanelFollowsWorkspace.cpp
     AppSettings.cpp
     ${CMAKE_SOURCE_DIR}/Source/AppSettings.cpp
     ${CMAKE_SOURCE_DIR}/Source/PanelOwnership.cpp

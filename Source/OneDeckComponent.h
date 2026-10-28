@@ -13,7 +13,9 @@
 #include "OneDeckView.h"
 #include "PanelDevice.h"
 #include "PanelMapOneDeck.h"
+#include "PanelFollowsWorkspace.h"
 #include "PanelOwnership.h"
+#include "PanelWorkspacePoller.h"
 #include "AuxPots.h"
 #include "ProLinkReceiver.h"
 #include "ProLinkSender.h"
@@ -43,7 +45,8 @@ class OneDeckComponent : public juce::Component,
 {
 public:
 	// `pathLatencySeconds`: audio in flight to the ears (STEMDECK_PATH_LATENCY_MS).
-	explicit OneDeckComponent (DeckInstance, double pathLatencySeconds = 0.0);
+	// `panelWorkspace` (STEMDECK_PANEL_WORKSPACE): the panel is held while that i3 workspace is in front (R9).
+	explicit OneDeckComponent (DeckInstance, double pathLatencySeconds = 0.0, std::optional<std::string> panelWorkspace = std::nullopt);
 	~OneDeckComponent() override;
 
 	juce::PropertiesFile& settings() { return *appProperties.getUserSettings(); }
@@ -68,6 +71,7 @@ private:
 	juce::String panelPreferenceKey() const;
 	void startPanel();
 	void updatePanelOwner();
+	void followWorkspace();   // R9: one step of the rule, then the lock follows
 	void handlePanel (const panel1::Event&);
 	void showPanel();
 	// R13: the pots find their values again. After a session, a set load and a restore; B8 calls it
@@ -112,6 +116,8 @@ private:
 	panel::Ownership panelOwnership;
 	std::unique_ptr<PanelDevice> panelDevice;
 	int panelCountdown = 0;
+	std::optional<PanelFollowsWorkspace> panelFollow;   // set: the panel follows the i3 workspace
+	std::unique_ptr<PanelWorkspacePoller> workspacePoller;
 	AuxPots auxPots { [this] (int stem) -> StemColumn& { return view.column (stem); } };
 
 	OneDeckView view { deckAudio, formatManager, instance.letter - 'A' };

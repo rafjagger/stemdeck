@@ -24,10 +24,14 @@ namespace decklinks
 // ~/.config/StemDeck/links-<X>.json; without it the file envMapFile names,
 // with every "{X}" in a peer replaced by the letter; without either, the
 // default map (decklinks::installedCoreMap), and with no default, no links.
+// The first found replaces the others whole: a user file without rec_L/R
+// leaves the recorder unlinked.
 // nullopt + error: a file that is named or there but wrong or missing.
 std::optional<a3::links::LinkMap> deckLinkMap (char letter, const std::string& home, const char* envMapFile,
 											   const juce::File& defaultMapFile, juce::String& error);
 
 // The two-deck player's links: its rec_L/R from the default map, no links
-// without one (a build that is not installed).
+// without one (a build that is not installed). STEMDECK_LINK_MAP and the
+// user's links-<X>.json are not read: they are one-deck maps, naming ports
+// (bformat_*, aux_*, cue_*) the two-deck player does not have.
 std::optional<a3::links::LinkMap> recorderLinkMap (const juce::File& defaultMapFile, juce::String& error);

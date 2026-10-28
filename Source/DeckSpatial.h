@@ -66,7 +66,8 @@ public:
 	static int binauralDecodersCreated();   // in this process, by create(); for tests
 	~DeckSpatial();
 
-	void prepare (double sampleRate, int blockSize);   // allocates; IEM nodes at blockSize, longer calls chunked
+	// allocates; IEM nodes at blockSize, longer calls chunked. A block of 0 is refused: false, nothing changed.
+	bool prepare (double sampleRate, int blockSize);
 	// stemsPreMute: 8 channels, stem s at 2s and 2s+1, post GAIN, pre MUTE.
 	void process (const float* const* stemsPreMute, const Outputs&, int numSamples);
 	Controls& controls();

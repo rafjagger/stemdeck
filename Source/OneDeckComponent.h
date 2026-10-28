@@ -24,7 +24,7 @@
 #include "WorkspaceSwitch.h"
 
 // The content of a -bformat instance (ruling R10): one deck, its JACK client
-// StemDeck-<X> with the 22 one-deck ports and rec_L/R, its own session
+// StemDeck-<X> with the 43 one-deck ports and rec_L/R, its own session
 // (~/.config/StemDeck/<X>/session.xml, imported once from the two-deck one),
 // the library, the stem creator and the recorder as the two-deck screen has
 // them. No buses, no Auto DJ (B15). SYNC and MASTER meet the other

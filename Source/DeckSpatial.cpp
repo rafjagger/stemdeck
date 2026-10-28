@@ -197,8 +197,10 @@ a3::StereoPose DeckSpatial::poseOf (int stem) const
 	         finiteOr (state.width[s].load (std::memory_order_relaxed), spatial::Pose{}.width) };
 }
 
-void DeckSpatial::prepare (double sampleRate, int newBlockSize)
+bool DeckSpatial::prepare (double sampleRate, int newBlockSize)
 {
+	if (newBlockSize <= 0)
+		return false;
 	blockSize = newBlockSize;
 	for (int s = 0; s < stems; ++s)
 	{
@@ -244,6 +246,7 @@ void DeckSpatial::prepare (double sampleRate, int newBlockSize)
 	phonesDecoding = false;
 	phonesPrimeRemaining = 0;
 	resetTiming();
+	return true;
 }
 
 void DeckSpatial::readControls()

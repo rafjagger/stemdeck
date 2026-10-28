@@ -317,7 +317,7 @@ void OneDeckComponent::showSyncStatus()
 //==============================================================================
 void OneDeckComponent::updateDeviceStatus()
 {
-	// Without JACK only the phones play on a device short of all 22 outputs.
+	// Without JACK only the phones play on a device short of all 43 outputs.
 	const auto status = audio->status (outputs::oneDeck::channelCount());
 	deviceStatus.setText (AudioOutput::withSpatialError (status.text, spatialError), juce::dontSendNotification);
 	deviceStatus.setColour (juce::Label::textColourId, AudioOutput::colourOf (status.health));

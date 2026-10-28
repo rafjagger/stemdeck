@@ -663,6 +663,38 @@ TEST (DeckSpatial, AuxZeroIsExactSilence)
 	EXPECT_EQ (deck->decoderRuns().auxBed, 0) << "no aux, no aux bed";
 }
 
+// D23: a send that goes 1 -> 0 ends in exact 0.0f -- after its 10 ms ramp and
+// the aux bed's 2048-sample hold-over, on every aux channel.
+TEST (DeckSpatial, AuxTurnedToZeroSettlesToExactSilence)
+{
+	juce::ScopedJuceInitialiser_GUI juceInitialiser;
+	auto deck = preparedDeck (block, [] (DeckSpatial::Controls& c) { c.threeD[0] = 0.5f; c.aux[0] = 1.0f; });
+	const int turnedOff = oneSecond / 4;
+	const auto out = render (*deck, noiseOnStem (0), { block, true, [&] (int first)
+	{
+		deck->controls().aux[0] = first >= turnedOff ? 0.0f : 1.0f;
+	} });
+	constexpr int bedHoldOver = 2048;
+	const int settledAt = turnedOff + block + rampSamples + bedHoldOver + block;
+	ASSERT_LT (settledAt, oneSecond);
+	EXPECT_FALSE (exactlySilent (out.aux[0], 0, turnedOff)) << "aux before it is turned off";
+	for (int c = 0; c < spatial::bformatChannels; ++c)
+		EXPECT_TRUE (exactlySilent (out.aux[(size_t) c], settledAt)) << "aux " << c;
+}
+
+// PipeWire calls the sample-rate callback before a block size is known.
+TEST (DeckSpatial, PrepareWithBlockSizeZeroIsRefused)
+{
+	juce::ScopedJuceInitialiser_GUI juceInitialiser;
+	juce::String error;
+	auto deck = DeckSpatial::create (error);
+	ASSERT_NE (deck, nullptr) << error;
+	EXPECT_FALSE (deck->prepare (rate, 0));
+	EXPECT_TRUE (deck->prepare (rate, block));
+	const auto out = render (*deck, noiseOnAllStems());
+	EXPECT_FALSE (exactlySilent (out.bformat[0])) << "a later prepare 128 works";
+}
+
 TEST (DeckSpatial, OneStemSentIsThatStemOnly)
 {
 	juce::ScopedJuceInitialiser_GUI juceInitialiser;

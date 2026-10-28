@@ -124,10 +124,12 @@ void OneDeckOutputs::refresh()
 	const auto layout = outputs::oneDeck::layout();
 	for (int ch = 0; ch < bformatMeters.size(); ++ch)
 		bformatMeters[ch]->setLevel (audio.popPeak (layout.bformat + ch));
+	// Both bars of each pair show the bus's W channel (ACN 0) until the meters are redrawn (B4).
+	const auto cueW = audio.popPeak (layout.cue), auxW = audio.popPeak (layout.aux);
 	for (int side = 0; side < 2; ++side)
 	{
-		cueMeters[side]->setLevel (audio.popPeak (layout.cue + side));
-		auxMeters[side]->setLevel (audio.popPeak (layout.aux + side));
+		cueMeters[side]->setLevel (cueW);
+		auxMeters[side]->setLevel (auxW);
 	}
 
 	// Which stems are in the cue, by name; and whether StemDeck's own phones run (R12).

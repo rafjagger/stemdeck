@@ -11,7 +11,7 @@
 
 #include <vector>
 
-// A -bformat instance's audio (S4.4a): one DeckHost on the 22 one-deck
+// A -bformat instance's audio (S4.4a): one DeckHost on the 43 one-deck
 // channels, through the AudioSource the JACK client pulls.
 namespace
 {
@@ -92,6 +92,12 @@ protected:
 		}
 	}
 
+	void setAllAux (float aux)
+	{
+		for (auto& send : settings().aux)
+			send.store (aux);
+	}
+
 	void setAllStems (bool muted, bool cued, float gain)
 	{
 		for (int s = 0; s < stems; ++s)
@@ -124,22 +130,24 @@ TEST_F (OneDeck, VolumeMinimaAreExactSilence)
 	setAllStems (false, true, 1.0f);
 	player().play();
 	renderBlocks (blocksFor (0.3));
-	// The aux and cue pairs are not rendered until B3 lays out the 16-channel
-	// aux bus and the 9-channel cue; meanwhile the cue is heard on the phones.
-	for (const auto ch : { layout.bformat, layout.phones })
+	setAllAux (1.0f);
+	renderBlocks (blocksFor (0.3));
+	for (const auto ch : { layout.bformat, layout.aux, layout.cue, layout.phones })
 		ASSERT_GT (peakOver (ch, 0.05), 0.0f) << "the deck plays: " << outputs::oneDeck::portName (ch);
 
-	// GAIN at the knob's minimum: every one of the 22.
+	// GAIN at the knob's minimum: every one of the 43.
 	setAllStems (false, true, juce::Decibels::decibelsToGain (stemKnobMinimumDb, stemKnobMinimumDb));
 	renderBlocks (blocksFor (0.5));
 	expectExactlySilentFor (0, layout.channels, 0.2, "GAIN at its minimum");
 
-	// MUTE: the B-format and the AUX; the cue is pre-mute and plays on in the phones.
+	// MUTE: the B-format and the AUX; the cue is pre-mute and plays on, in its
+	// own 9 channels and in the phones.
 	setAllStems (true, true, 1.0f);
 	renderBlocks (blocksFor (0.5));
+	EXPECT_GT (peakOver (layout.cue, 0.05), 0.0f) << "the cue is pre-mute";
 	EXPECT_GT (peakOver (layout.phones, 0.05), 0.0f) << "the cue is pre-mute";
 	expectExactlySilentFor (layout.bformat, outputs::bformatChannels, 0.2, "MUTE");
-	expectExactlySilentFor (layout.aux, 2, 0.2, "MUTE");
+	expectExactlySilentFor (layout.aux, outputs::bformatChannels, 0.2, "MUTE");
 
 	// CUE<->MIX at MIX: the cue's weight is exactly 0, and the muted deck's mix is silence.
 	audio.setPhones (1.0f, 1.0f);
@@ -157,6 +165,14 @@ TEST_F (OneDeck, VolumeMinimaAreExactSilence)
 	setAllStems (false, true, 1.0f);
 	audio.setPhones (0.0f, 0.5f);
 	renderBlocks (blocksFor (0.5));
+	ASSERT_GT (peakOver (layout.bformat, 0.05), 0.0f);
+	expectExactlySilentFor (layout.phones, 2, 0.2, "LEVEL 0");
+
+	// AUX 0: the send, settled, leaves the aux bus exactly 0.0f.
+	setAllStems (false, true, 1.0f);
+	setAllAux (0.0f);
+	renderBlocks (blocksFor (0.5));
+	expectExactlySilentFor (layout.aux, outputs::bformatChannels, 0.2, "AUX 0");
 	ASSERT_GT (peakOver (layout.bformat, 0.05), 0.0f);
 	expectExactlySilentFor (layout.phones, 2, 0.2, "phones LEVEL 0");
 }

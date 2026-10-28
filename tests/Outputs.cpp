@@ -98,28 +98,55 @@ TEST (Outputs, SpatialChannelsAreNeverSummedDown)
 	EXPECT_EQ (outputs::foldsInto (0, 0), -1);
 }
 
-// A -bformat instance (spec section 8): its own JACK client with 22 outputs,
-// the deck's B-format in ACN order, its binaural cue, its AUX and its phones
-// -- none of today's bus ports.
-TEST (Outputs, OneDeckPortsAreSDsSection8)
+// A -bformat instance (spec M1/P10): its own JACK client with 43 outputs --
+// the deck's B-format, its 16-channel AUX bus, its 2nd-order cue and its
+// phones. None of today's bus ports, and no cue_L/R or aux_L/R pairs.
+TEST (Outputs, OneDeckHasFortyThreePorts)
 {
 	std::vector<std::string> expected;
 	for (int c = 1; c <= 16; ++c)
 		expected.push_back ("bformat_" + std::to_string (c));
-	for (const auto* pair : { "cue", "aux", "phones" })
-		for (const auto* side : { "_L", "_R" })
-			expected.push_back (std::string (pair) + side);
+	for (int c = 1; c <= 16; ++c)
+		expected.push_back ("aux_" + std::to_string (c));
+	for (int c = 1; c <= 9; ++c)
+		expected.push_back ("cue_" + std::to_string (c));
+	expected.push_back ("phones_L");
+	expected.push_back ("phones_R");
 
-	ASSERT_EQ (outputs::oneDeck::channelCount(), 22);
+	ASSERT_EQ (outputs::oneDeck::channelCount(), 43);
 	for (int ch = 0; ch < outputs::oneDeck::channelCount(); ++ch)
 		EXPECT_EQ (outputs::oneDeck::portName (ch), expected[(size_t) ch]) << ch;
 
 	const auto layout = outputs::oneDeck::layout();
-	EXPECT_EQ (layout.channels, 22);
-	EXPECT_EQ (outputs::oneDeck::portName (layout.bformat), "bformat_1");
-	EXPECT_EQ (outputs::oneDeck::portName (layout.cue), "cue_L");
-	EXPECT_EQ (outputs::oneDeck::portName (layout.aux), "aux_L");
-	EXPECT_EQ (outputs::oneDeck::portName (layout.phones), "phones_L");
+	EXPECT_EQ (layout.channels, 43);
+	EXPECT_EQ (layout.bformat, 0);
+	EXPECT_EQ (layout.aux, 16);
+	EXPECT_EQ (layout.cue, 32);
+	EXPECT_EQ (layout.phones, 41);
+	EXPECT_FALSE (layout.binauralCue);
+	for (int ch = 0; ch < 43; ++ch)
+	{
+		EXPECT_NE (outputs::oneDeck::portName (ch), "cue_L");
+		EXPECT_NE (outputs::oneDeck::portName (ch), "aux_L");
+	}
+}
+
+// The two-deck names are the rig's: byte for byte what main lists.
+TEST (Outputs, TwoDeckPortsUnchanged)
+{
+	std::vector<std::string> expected = { "deck1_L", "deck1_R", "deck2_L", "deck2_R", "deck3_L", "deck3_R",
+										  "deck4_L", "deck4_R", "aux_L", "aux_R", "cue_L", "cue_R" };
+	for (const auto* deck : { "A_", "B_" })
+	{
+		for (int c = 1; c <= 16; ++c)
+			expected.push_back (std::string (deck) + "bformat_" + std::to_string (c));
+		for (const auto* name : { "bcue_L", "bcue_R", "phones_L", "phones_R" })
+			expected.push_back (std::string (deck) + name);
+	}
+	ASSERT_EQ (outputs::channelCount(), 52);
+	ASSERT_EQ (expected.size(), 52u);
+	for (int ch = 0; ch < 52; ++ch)
+		EXPECT_EQ (outputs::portName (ch), expected[(size_t) ch]) << ch;
 }
 
 // Two-deck mode keeps its 20 spatial channels per deck and renders no AUX
@@ -134,15 +161,15 @@ TEST (Outputs, TwoDeckSpatialLayoutIsUnchanged)
 	EXPECT_EQ (layout.phones, outputs::phonesOffset);
 }
 
-// Without JACK: on a device with all 22 outputs each channel has its own; on
+// Without JACK: on a device with all 43 outputs each channel has its own; on
 // a smaller one (a laptop's stereo) only the phones play, on its first pair --
 // a B-format summed into stereo is no mix anyone could listen to.
-TEST (Outputs, OneDeckWithoutJackOnlyThePhonesFoldOntoStereo)
+TEST (Outputs, OneDeckFoldsOnlyPhonesOntoAStereoDevice)
 {
 	using outputs::oneDeck::foldsInto;
 	const auto phones = outputs::oneDeck::layout().phones;
-	for (int ch = 0; ch < 22; ++ch)
-		EXPECT_EQ (foldsInto (ch, 22), ch) << ch;
+	for (int ch = 0; ch < 43; ++ch)
+		EXPECT_EQ (foldsInto (ch, 43), ch) << ch;
 	EXPECT_EQ (foldsInto (phones, 2), 0);
 	EXPECT_EQ (foldsInto (phones + 1, 2), 1);
 	for (int ch = 0; ch < phones; ++ch)

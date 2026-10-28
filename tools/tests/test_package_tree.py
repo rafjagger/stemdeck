@@ -228,8 +228,9 @@ class TheStagedTree(unittest.TestCase):
         rule = stage / USB_RULE
         self.assertEqual((REPO / "packaging/lib/udev/rules.d/90-stemdeck-usb.rules").read_bytes(),
                          rule.read_bytes())
-        rules = [line for line in rule.read_text().splitlines()
+        lines = [line for line in rule.read_text().splitlines()
                  if line.strip() and not line.startswith("#")]
+        rules = [line for line in lines if "RUN+=" in line]
         self.assertTrue(rules)
         for line in rules:
             with self.subTest(rule=line):
@@ -239,12 +240,28 @@ class TheStagedTree(unittest.TestCase):
                 self.assertIn("systemd-mount --no-block --automount=yes --collect", line)
                 self.assertIn("--timeout-idle-sec=", line)
                 self.assertTrue(line.rstrip().endswith('$devnode /media/a3-usb"'), line)
+        for line in rules:
+            with self.subTest(rule=line):
+                self.assertTrue(line.startswith('ACTION=="add", '),
+                                "a change event must not mount a mounted stick again")
         owned = [line for line in rules if "uid=1000" in line]
         self.assertEqual(1, len(owned), "one rule owns the files")
         self.assertIn('ENV{ID_FS_TYPE}=="vfat|exfat|ntfs|ntfs3"', owned[0])
         for line in rules:
             if line not in owned:
                 self.assertIn('ENV{ID_FS_TYPE}!="vfat|exfat|ntfs|ntfs3"', line)
+
+    def test_usb_rule_leaves_disks_fstab_names(self):
+        """A USB disk the machine mounts itself (fstab) is not the recorder's stick."""
+        lines = [line for line in (REPO / "packaging/lib/udev/rules.d/90-stemdeck-usb.rules").read_text().splitlines()
+                 if line.strip() and not line.startswith("#")]
+        skips = [i for i, line in enumerate(lines)
+                 if 'PROGRAM=="/usr/bin/findmnt --fstab --source $devnode"' in line
+                 and 'GOTO="stemdeck_usb_end"' in line]
+        self.assertEqual(1, len(skips))
+        mounts = [i for i, line in enumerate(lines) if "RUN+=" in line]
+        self.assertLess(skips[0], min(mounts), "the skip comes before every mount")
+        self.assertEqual('LABEL="stemdeck_usb_end"', lines[-1])
 
     def test_package_ships_the_aes67_link_map(self):
         stage = self.stage()

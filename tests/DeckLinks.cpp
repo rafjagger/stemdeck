@@ -37,6 +37,22 @@ namespace
 		juce::File dir;
 	};
 
+	const juce::File shippedCoreMap { STEMDECK_DATA_DIR "/links-core.json" };
+	const std::vector<std::string> enginePorts { "a3-engine:rec_L", "a3-engine:rec_R" };
+
+	// The links a client named `client` would make now, in a graph of its own rec ports and `peers`.
+	a3::links::ConnectionPlan planFor (const a3::links::LinkMap& map, const std::string& client, std::vector<std::string> peers)
+	{
+		peers.push_back (client + ":rec_L");
+		peers.push_back (client + ":rec_R");
+		return a3::links::planConnections (map, {}, {}, peers, decklinks::ownInputs(), client);
+	}
+
+	std::vector<a3::links::Link> recFrom (const std::string& client, const std::string& left, const std::string& right)
+	{
+		return { { left, client + ":rec_L" }, { right, client + ":rec_R" } };
+	}
+
 	juce::String userText (const juce::String& peer) { return R"({"jack": {"bformat_1": [")" + peer + R"("]}})"; }
 }
 
@@ -47,7 +63,7 @@ TEST (DeckLinks, UserFileWins)
 	const auto envFile = home.write ("env.json", userText ("env:in_1"));
 	juce::String error;
 
-	const auto map = deckLinkMap ('B', home.path(), envFile.getFullPathName().toRawUTF8(), error);
+	const auto map = deckLinkMap ('B', home.path(), envFile.getFullPathName().toRawUTF8(), shippedCoreMap, error);
 
 	ASSERT_TRUE (map.has_value()) << error;
 	EXPECT_EQ (map->jack.at ("bformat_1"), Peers { "user:in_1" });
@@ -60,19 +76,19 @@ TEST (DeckLinks, EnvFileWithLetterSubstituted)
 		R"({"jack": {"bformat_1": ["AES67 deck {X}:send_MAIN1"], "rec_L": ["deck {X} from {X}:out"]}})");
 	juce::String error;
 
-	const auto map = deckLinkMap ('B', home.path(), envFile.getFullPathName().toRawUTF8(), error);
+	const auto map = deckLinkMap ('B', home.path(), envFile.getFullPathName().toRawUTF8(), shippedCoreMap, error);
 
 	ASSERT_TRUE (map.has_value()) << error;
 	EXPECT_EQ (map->jack.at ("bformat_1"), Peers { "AES67 deck B:send_MAIN1" });
 	EXPECT_EQ (map->jack.at ("rec_L"), Peers { "deck B from B:out" });
 }
 
-TEST (DeckLinks, NoFileIsEmpty)
+TEST (DeckLinks, NoFileAndNoDefaultIsEmpty)
 {
 	const Home home ("none");
 	juce::String error;
 
-	const auto map = deckLinkMap ('A', home.path(), nullptr, error);
+	const auto map = deckLinkMap ('A', home.path(), nullptr, home.dir.getChildFile ("not-installed.json"), error);
 
 	ASSERT_TRUE (map.has_value()) << error;
 	EXPECT_TRUE (map->jack.empty());
@@ -85,7 +101,7 @@ TEST (DeckLinks, NamedEnvFileThatIsMissingIsRefused)
 	const Home home ("missing");
 	juce::String error;
 
-	const auto map = deckLinkMap ('B', home.path(), (home.path() + "/nowhere.json").c_str(), error);
+	const auto map = deckLinkMap ('B', home.path(), (home.path() + "/nowhere.json").c_str(), shippedCoreMap, error);
 
 	EXPECT_FALSE (map.has_value());
 	EXPECT_TRUE (error.contains ("nowhere.json")) << error;
@@ -97,7 +113,7 @@ TEST (DeckLinks, UnknownOwnPortIsRefused)
 	home.write (".config/StemDeck/links-B.json", R"({"jack": {"cue_10": ["x:y"]}})");
 	juce::String error;
 
-	const auto map = deckLinkMap ('B', home.path(), nullptr, error);
+	const auto map = deckLinkMap ('B', home.path(), nullptr, shippedCoreMap, error);
 
 	EXPECT_FALSE (map.has_value());
 	EXPECT_TRUE (error.contains ("cue_10")) << error;
@@ -108,7 +124,7 @@ TEST (DeckLinks, ShippedAes67MapHas43Links)
 	const Home home ("shipped");
 	juce::String error;
 
-	const auto map = deckLinkMap ('B', home.path(), STEMDECK_DATA_DIR "/links-aes67.json", error);
+	const auto map = deckLinkMap ('B', home.path(), STEMDECK_DATA_DIR "/links-aes67.json", shippedCoreMap, error);
 
 	ASSERT_TRUE (map.has_value()) << error;
 	const auto inputs = decklinks::ownInputs();
@@ -141,7 +157,7 @@ TEST (DeckLinks, ForeignLinkIsNeverRemoved)
 {
 	const Home home ("foreign");
 	juce::String error;
-	const auto map = deckLinkMap ('B', home.path(), STEMDECK_DATA_DIR "/links-aes67.json", error);
+	const auto map = deckLinkMap ('B', home.path(), STEMDECK_DATA_DIR "/links-aes67.json", shippedCoreMap, error);
 	ASSERT_TRUE (map.has_value()) << error;
 
 	const a3::links::Link foreign { "StemDeck-B:bformat_1", "somebody:in_1" };
@@ -151,4 +167,69 @@ TEST (DeckLinks, ForeignLinkIsNeverRemoved)
 	EXPECT_TRUE (plan.remove.empty());
 	ASSERT_EQ (plan.add.size(), 1u);
 	EXPECT_EQ (plan.add.front(), (a3::links::Link { "StemDeck-B:bformat_1", "AES67 deck B:send_MAIN1" }));
+}
+
+// Configuration 1: the two-deck player (client "StemDeck") on the Core records the engine's REC bus.
+TEST (RecorderLinks, Configuration1TwoDeckPlayerOnTheCoreRecordsTheRecBus)
+{
+	juce::String error;
+	const auto map = recorderLinkMap (shippedCoreMap, error);
+
+	ASSERT_TRUE (map.has_value()) << error;
+	const auto plan = planFor (*map, "StemDeck", enginePorts);
+	EXPECT_EQ (plan.add, recFrom ("StemDeck", "a3-engine:rec_L", "a3-engine:rec_R"));
+	EXPECT_TRUE (plan.missingPeers.empty());
+}
+
+// Configuration 2: deck A on the Core (no STEMDECK_LINK_MAP) takes the shipped default.
+TEST (RecorderLinks, Configuration2DeckAOnTheCoreRecordsTheRecBus)
+{
+	const Home home ("config2");
+	juce::String error;
+	const auto map = deckLinkMap ('A', home.path(), nullptr, shippedCoreMap, error);
+
+	ASSERT_TRUE (map.has_value()) << error;
+	EXPECT_EQ (planFor (*map, "StemDeck-A", enginePorts).add, recFrom ("StemDeck-A", "a3-engine:rec_L", "a3-engine:rec_R"));
+	EXPECT_EQ (map->jack.size(), 2u);   // only the recorder: deck A's sends are the engine's links
+}
+
+// Configuration 3: deck B on a deck host; the role's STEMDECK_LINK_MAP wins over the default.
+TEST (RecorderLinks, Configuration3DeckHostRecordsTheRecBusFromAes67)
+{
+	const Home home ("config3");
+	juce::String error;
+	const auto map = deckLinkMap ('B', home.path(), STEMDECK_DATA_DIR "/links-aes67.json", shippedCoreMap, error);
+
+	ASSERT_TRUE (map.has_value()) << error;
+	const auto plan = planFor (*map, "StemDeck-B", { "AES67 a3nuc1 out:receive_CH1", "AES67 a3nuc1 out:receive_CH2" });
+	EXPECT_EQ (plan.add, recFrom ("StemDeck-B", "AES67 a3nuc1 out:receive_CH1", "AES67 a3nuc1 out:receive_CH2"));
+}
+
+// Without the engine (a laptop) the default map is no error: nothing to link, the peers are missing.
+TEST (RecorderLinks, WithoutTheEngineTheDefaultLinksNothingAndIsNoError)
+{
+	const Home home ("laptop");
+	juce::String error;
+	const auto map = deckLinkMap ('A', home.path(), "", shippedCoreMap, error);
+
+	ASSERT_TRUE (map.has_value()) << error;
+	EXPECT_TRUE (error.isEmpty()) << error;
+	const auto plan = planFor (*map, "StemDeck-A", {});
+	EXPECT_TRUE (plan.add.empty());
+	EXPECT_EQ (plan.missingPeers, enginePorts);
+}
+
+TEST (RecorderLinks, TheTwoDeckPlayerWithoutTheShippedMapLinksNothing)
+{
+	const Home home ("two-deck-dev");
+	juce::String error;
+	const auto map = recorderLinkMap (home.dir.getChildFile ("not-installed.json"), error);
+
+	ASSERT_TRUE (map.has_value()) << error;
+	EXPECT_TRUE (map->jack.empty());
+}
+
+TEST (RecorderLinks, TheDefaultIsTheInstalledFile)
+{
+	EXPECT_STREQ (decklinks::installedCoreMap, "/usr/share/stemdeck/links-core.json");
 }

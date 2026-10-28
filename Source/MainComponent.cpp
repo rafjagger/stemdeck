@@ -1,6 +1,7 @@
 #include "MainComponent.h"
 #include "AppSettings.h"
 #include "CoreTruth.h"
+#include "DeckLinks.h"
 #include "LinkInterface.h"
 #include "AudioCpu.h"
 #include "StemJob.h"
@@ -1004,8 +1005,19 @@ void MainComponent::initialiseAudio()
 	audio->onDeviceChanged = [this] { updateDeviceStatus(); };
 	audio->open ("StemDeck", portNames, *this, { "rec_L", "rec_R" }, &recorder);
 	rec.button.setEnabled (audio->usingJack());
+	keepRecorderLinks();
 
 	updateDeviceStatus();
+}
+
+// P39: rec records the REC bus without a hand-made link.
+void MainComponent::keepRecorderLinks()
+{
+	juce::String error;
+	if (auto map = recorderLinkMap (juce::File (decklinks::installedCoreMap), error))
+		audio->keepLinks (std::move (*map));
+	else
+		std::cerr << "StemDeck: no links: " << error << std::endl;
 }
 
 void MainComponent::updateDeviceStatus()

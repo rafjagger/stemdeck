@@ -23,7 +23,7 @@ namespace
 		}
 	}
 
-	std::optional<a3::links::LinkMap> parseFile (const juce::File& file, juce::String& error)
+	std::optional<a3::links::LinkMap> parseFile (const juce::File& file, const std::vector<std::string>& ownOutputs, juce::String& error)
 	{
 		if (! file.existsAsFile())
 		{
@@ -36,10 +36,18 @@ namespace
 			error = file.getFullPathName() + ": " + result.getErrorMessage();
 			return std::nullopt;
 		}
-		auto map = a3::links::parseLinkMap (json, decklinks::ownInputs(), decklinks::ownOutputs(), error);
+		auto map = a3::links::parseLinkMap (json, decklinks::ownInputs(), ownOutputs, error);
 		if (! map)
 			error = file.getFullPathName() + ": " + error;
 		return map;
+	}
+
+	// Not installed (a build run from its tree): no links, as before P39.
+	std::optional<a3::links::LinkMap> defaultMap (const juce::File& file, const std::vector<std::string>& ownOutputs, juce::String& error)
+	{
+		if (! file.existsAsFile())
+			return a3::links::LinkMap {};
+		return parseFile (file, ownOutputs, error);
 	}
 }
 
@@ -53,18 +61,25 @@ std::vector<std::string> decklinks::ownOutputs()
 
 std::vector<std::string> decklinks::ownInputs() { return { "rec_L", "rec_R" }; }
 
-std::optional<a3::links::LinkMap> deckLinkMap (char letter, const std::string& home, const char* envMapFile, juce::String& error)
+std::optional<a3::links::LinkMap> deckLinkMap (char letter, const std::string& home, const char* envMapFile,
+											   const juce::File& defaultMapFile, juce::String& error)
 {
 	error = {};
 	const auto userFile = juce::File (juce::String (home)).getChildFile (".config/StemDeck/links-" + juce::String::charToString (letter) + ".json");
 	if (userFile.existsAsFile())
-		return parseFile (userFile, error);
+		return parseFile (userFile, decklinks::ownOutputs(), error);
 
 	if (envMapFile == nullptr || *envMapFile == '\0')
-		return a3::links::LinkMap {};
+		return defaultMap (defaultMapFile, decklinks::ownOutputs(), error);
 
-	auto map = parseFile (juce::File (juce::String (envMapFile)), error);
+	auto map = parseFile (juce::File (juce::String (envMapFile)), decklinks::ownOutputs(), error);
 	if (map)
 		substituteLetter (*map, letter);
 	return map;
+}
+
+std::optional<a3::links::LinkMap> recorderLinkMap (const juce::File& defaultMapFile, juce::String& error)
+{
+	error = {};
+	return defaultMap (defaultMapFile, {}, error);
 }

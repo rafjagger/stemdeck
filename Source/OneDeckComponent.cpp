@@ -139,13 +139,14 @@ OneDeckComponent::~OneDeckComponent()
 	setLookAndFeel (nullptr);
 }
 
-// Deck B on a3nuc2 links itself to its AES67 sender (ruling R8); deck A has
-// no map and the engine links it.
+// Deck B on a3nuc2 links itself to its AES67 sender (ruling R8); a deck on
+// the Core links only its recorder, from the engine's REC bus (P39), and the
+// engine links its sends.
 void OneDeckComponent::keepLinks()
 {
 	juce::String error;
 	const auto home = juce::File::getSpecialLocation (juce::File::userHomeDirectory).getFullPathName().toStdString();
-	if (auto map = deckLinkMap (instance.letter, home, std::getenv ("STEMDECK_LINK_MAP"), error))
+	if (auto map = deckLinkMap (instance.letter, home, std::getenv ("STEMDECK_LINK_MAP"), juce::File (decklinks::installedCoreMap), error))
 		audio->keepLinks (std::move (*map));
 	else
 		std::cerr << "StemDeck: no links: " << error << std::endl;

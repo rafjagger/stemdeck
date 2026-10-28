@@ -149,6 +149,7 @@ class TheStagedTree(unittest.TestCase):
         *(f"usr/lib/systemd/user/{unit}" for unit in AES67_UNITS),
         *(f"usr/share/stemdeck/{template}" for template in AES67_TEMPLATES),
         "usr/share/stemdeck/links-aes67.json",
+        "usr/share/stemdeck/links-core.json",
         RATE_DROP_IN,
         EEE,
         USB_RULE,
@@ -267,6 +268,17 @@ class TheStagedTree(unittest.TestCase):
         stage = self.stage()
         self.assertEqual((REPO / "data/links-aes67.json").read_bytes(),
                          (stage / "usr/share/stemdeck/links-aes67.json").read_bytes())
+
+    def test_package_ships_the_default_link_map_where_stemdeck_reads_it(self):
+        """P39: without STEMDECK_LINK_MAP every StemDeck on the Core links its own
+        rec_L/rec_R from the engine's REC bus with this map; the binary names the
+        installed path (Source/DeckLinks.h)."""
+        stage = self.stage()
+        installed = re.search(r'installedCoreMap = "/([^"]+)"', (REPO / "Source/DeckLinks.h").read_text())
+        self.assertIsNotNone(installed)
+        self.assertEqual((REPO / "data/links-core.json").read_bytes(), (stage / installed.group(1)).read_bytes())
+        shipped = json.loads((stage / installed.group(1)).read_text())
+        self.assertEqual({"jack": {"rec_L": ["a3-engine:rec_L"], "rec_R": ["a3-engine:rec_R"]}}, shipped)
 
     def test_package_ships_the_deck_hosts_server_rate(self):
         """The deck-host role copies it into ~/.config/pipewire/pipewire.conf.d/:

@@ -26,6 +26,8 @@ add_executable(stemdeck-tests
     ${CMAKE_SOURCE_DIR}/Source/GridEdit.cpp
     ProLinkPackets.cpp
     ${CMAKE_SOURCE_DIR}/Source/ProLinkPackets.cpp
+    ProLinkAnnouncer.cpp
+    ${CMAKE_SOURCE_DIR}/Source/ProLinkAnnouncer.cpp
     OscTruth.cpp
     ${CMAKE_SOURCE_DIR}/Source/OscTruth.cpp
     Remote.cpp
@@ -224,6 +226,7 @@ add_executable(stemdeck-spatial-tests
     ${CMAKE_SOURCE_DIR}/Source/MasterDeck.cpp
     ${CMAKE_SOURCE_DIR}/Source/PioneerClock.cpp
     ${CMAKE_SOURCE_DIR}/Source/ProLinkPackets.cpp
+    ${CMAKE_SOURCE_DIR}/Source/ProLinkAnnouncer.cpp
     ${CMAKE_SOURCE_DIR}/Source/ProLinkReceiver.cpp
     ${CMAKE_SOURCE_DIR}/Source/LinkInterface.cpp
     ${CMAKE_SOURCE_DIR}/Source/ProLinkSender.cpp

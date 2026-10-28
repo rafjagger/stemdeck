@@ -128,8 +128,9 @@ TEST (ProLinkOnOneHost, TwoInstancesHearOneAnothersBeat)
 	EXPECT_EQ (atB[0].device, 7);
 }
 
-// P4: pinning an interface must not blank the keep-alive's MAC (a detected
-// interface fills it); the announce port carries it to every listener.
+// P4: pinning an interface must not blank the MAC (a detected interface
+// fills it); the announce port carries it to every listener, from the first
+// claim on.
 TEST (ProLinkOnOneHost, APinnedInterfaceStillAnnouncesItsMac)
 {
 	const auto fd = socket (AF_INET, SOCK_DGRAM, 0);
@@ -154,7 +155,7 @@ TEST (ProLinkOnOneHost, APinnedInterfaceStillAnnouncesItsMac)
 	for (int tries = 0; tries < 5; ++tries)
 	{
 		const auto n = recv (fd, buffer, sizeof (buffer), 0);
-		if (n >= 0x2c && buffer[0x0a] == 0x06)   // keep-alive
+		if (n >= 0x2c && (buffer[0x0a] == 0x00 || buffer[0x0a] == 0x06))   // first-stage claim or keep-alive: MAC at 26
 		{
 			std::copy (buffer + 0x26, buffer + 0x2c, heardMac.begin());
 			break;
@@ -190,6 +191,33 @@ TEST (ProLinkOnOneHost, TheMasterInstancesSenderReachesBothListeners)
 		EXPECT_TRUE (statuses.front().isMaster);
 		EXPECT_NEAR (statuses.front().bpm, 126.0, 0.01);
 	}
+	sender.stop();
+}
+
+// A CDJ sends no status before its player number is claimed (three hellos,
+// nine claims, 300 ms apart): the MASTER instance's sender waits for its
+// receiver to be online.
+TEST (ProLinkOnOneHost, TheSenderWaitsForThePlayerNumber)
+{
+	juce::ScopedJuceInitialiser_GUI juce;
+	juce::AudioFormatManager formats;
+	StemDeckPlayer player (formats);
+	player.setBeatGrid ({ 126.0, 0.0 });
+
+	ProLinkReceiver deck, listener;
+	ASSERT_TRUE (startOnLoopback (deck, deckB)) << deck.error();
+	ASSERT_TRUE (startOnLoopback (listener, 7)) << listener.error();
+	EXPECT_FALSE (deck.isOnline()) << "claiming";
+
+	ProLinkSender sender;
+	sender.setMaster (&player);
+	ASSERT_TRUE (sender.start (deckB, loopbackBroadcast, testPorts(), "StemDeck", [&deck] { return deck.isOnline(); }));
+
+	EXPECT_TRUE (heard<prolink::StatusPacket> (listener, 3.0).empty()) << "nothing while the number is claimed";
+	const auto statuses = heard<prolink::StatusPacket> (listener, 1.5);
+	EXPECT_TRUE (deck.isOnline());
+	ASSERT_FALSE (statuses.empty()) << "the claim is done after 3.6 s";
+	EXPECT_EQ (statuses.front().device, deckB);
 	sender.stop();
 }
 

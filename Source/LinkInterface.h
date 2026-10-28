@@ -2,35 +2,49 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 
-#include "ProLinkReceiver.h"
-
 #include <array>
 #include <cstdint>
 #include <optional>
 #include <string>
 #include <vector>
 
-// Which network interface the Pro DJ Link goes out on. The link is broadcast
-// on the control LAN; the first interface that is up can be the audio NIC
-// instead (a3nuc2: enp5s0 before eno1).
+// Which network interface the Pro DJ Link goes out on. A CDJ has one port and
+// works on whatever network it is plugged into; a host can have several
+// (a3nuc2: control eno1, audio enp5s0, the audio NIC listed first). The rule:
+// the interface named in STEMDECK_PRODJLINK_INTERFACE if set; else the one the
+// default route leaves by -- the network the machine is plugged into, where a
+// closed audio network has no gateway; else the first that is up and can
+// broadcast. The subnet and broadcast address come from the chosen
+// interface's own address and netmask, never from a constant.
 namespace linkinterface
 {
+	inline constexpr const char* environmentVariable = "STEMDECK_PRODJLINK_INTERFACE";
+
+	// An interface's IPv4 address, network byte order.
 	struct Candidate
 	{
 		std::string name;
-		std::string ipv4;   // dotted quad
+		uint32_t local = 0, netmask = 0;
 	};
-
-	// The first candidate whose address lies in `subnet` ("a.b.c.d/len"), or
-	// nothing -- the caller then keeps its own detection.
-	std::optional<Candidate> chooseCandidate (const std::vector<Candidate>& found, const std::string& subnet);
-	std::optional<std::string> choose (const std::vector<Candidate>& found, const std::string& subnet);
 
 	struct Addresses
 	{
+		std::string name;
 		uint32_t local = 0, broadcast = 0;   // network byte order
 		std::array<uint8_t, 6> mac {};
 	};
+
+	uint32_t broadcastOf (uint32_t local, uint32_t netmask);
+
+	// The interface of the up default route with the lowest metric in
+	// /proc/net/route's text; nothing without one.
+	std::optional<std::string> defaultRouteInterface (const std::string& procNetRoute);
+
+	// The rule above over the usable candidates, in getifaddrs' order. A named
+	// interface that is not among them is nothing: a mistake to be seen, not
+	// a reason to go out on another network.
+	std::optional<Candidate> choose (const std::vector<Candidate>& found, const std::string& named,
+									 const std::optional<std::string>& defaultRoute);
 
 	// Up, can broadcast, not loopback: what the link may use (ifa_flags).
 	bool usable (unsigned interfaceFlags);
@@ -38,17 +52,7 @@ namespace linkinterface
 	// Zeros when the interface has none.
 	std::array<uint8_t, 6> hardwareAddress (const std::string& interfaceName);
 
-	// The control LAN as the truth at `truthPath` names it (network.address); empty when it does not.
-	std::string controlNetwork (const std::string& truthPath);
-
-	// The up, broadcast-capable, non-loopback interface in `subnet`; nothing for an empty one.
-	std::optional<Addresses> controlLan (const std::string& subnet);
-}
-
-// Pin the receiver (and so the sender's broadcast) to the control LAN; without
-// one in the truth or up here, it keeps finding its own interface at start().
-inline void pinLinkToControlLan (ProLinkReceiver& receiver, const std::string& truthPath)
-{
-	if (const auto lan = linkinterface::controlLan (linkinterface::controlNetwork (truthPath)))
-		receiver.useInterface (lan->local, lan->broadcast, lan->mac);
+	// The rule applied to this machine; nothing, with `error` set, when no
+	// interface qualifies.
+	std::optional<Addresses> find (std::string& error);
 }

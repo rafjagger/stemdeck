@@ -1,9 +1,11 @@
 #pragma once
 
 #include "OscTruth.h"
+#include "ProLinkAnnouncer.h"
 #include "ProLinkPackets.h"
 
 #include <atomic>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -11,7 +13,8 @@
 #include <vector>
 
 // StemDeck on the Pro DJ Link network: a player on the link that listens for
-// beat and status packets and announces itself every 1.5 s. Ported from beat-analyzer's
+// beat and status packets and joins as a CDJ-3000 does -- claims its number,
+// then a keep-alive every two seconds (ProLinkAnnouncer). Ported from beat-analyzer's
 // PioneerReceiver (src/osc/pioneer_receiver.cpp there): one thread, poll()
 // over three UDP sockets. SO_REUSEADDR, as beat-analyzer does, so both can
 // run on one machine and both get the broadcast beats -- as do two one-deck
@@ -32,7 +35,7 @@ public:
 
 	// Opens the sockets and starts the thread. False, with error() set, when
 	// the truth has no ports for it, the ports cannot be bound or no network
-	// interface is up.
+	// interface qualifies (LinkInterface.h: the rule that picks one).
 	bool start (int deviceNumber, const osctruth::ProLinkPorts& ports,
 				const std::string& name = "StemDeck");
 	void stop();
@@ -42,6 +45,9 @@ public:
 	void useInterface (uint32_t localIpNetworkOrder, uint32_t broadcastIpNetworkOrder,
 					   const std::array<uint8_t, 6>& mac = {});
 	bool isRunning() const { return running.load(); }
+	// The player number claimed: what it sends may go out. Running but not
+	// online is still claiming, or refused (error() says by whom).
+	bool isOnline() const { return online.load(); }
 	std::string error() const;
 
 	// The subnet's broadcast address the player announces to, in network
@@ -53,18 +59,18 @@ public:
 
 private:
 	void run();
-	void sendKeepAlive();
+	void announce (const std::vector<prolink::Announcer::Send>& packets);
+	void hearAnnouncement (double now);
 	bool openSocket (int& fd, int port);
-	bool detectInterface();
 
-	std::atomic<bool> running { false };
+	std::atomic<bool> running { false }, online { false };
 	std::thread thread;
 	int sockAnnounce = -1, sockBeat = -1, sockStatus = -1;
 	osctruth::ProLinkPorts ports;
 	int deviceNumber = 6;
 	std::string name;
-	std::array<uint8_t, 6> mac {};
-	uint32_t localIp = 0, broadcastIp = 0;
+	uint32_t broadcastIp = 0;
+	std::unique_ptr<prolink::Announcer> announcer;   // the thread's only
 	std::array<uint8_t, 6> forcedMac {};
 	uint32_t forcedLocalIp = 0, forcedBroadcastIp = 0;   // useInterface(); 0: find one
 

@@ -4,6 +4,7 @@
 #include "ProLinkPackets.h"
 
 #include <atomic>
+#include <functional>
 #include <string>
 #include <thread>
 
@@ -23,9 +24,13 @@ class ProLinkSender
 public:
 	~ProLinkSender();
 
-	// False when the truth has no ports for it or no socket opens.
+	// False when the truth has no ports for it or no socket opens. Nothing
+	// goes out while `online` says no: a CDJ sends no status or beat before
+	// its player number is claimed (ProLinkReceiver::isOnline). Called on the
+	// sender's thread.
 	bool start (int deviceNumber, uint32_t broadcastIpNetworkOrder,
-				const osctruth::ProLinkPorts& ports, const std::string& name = "StemDeck");
+				const osctruth::ProLinkPorts& ports, const std::string& name = "StemDeck",
+				std::function<bool()> online = {});
 	void stop();
 	bool isRunning() const { return running.load(); }
 
@@ -48,4 +53,5 @@ private:
 	int deviceNumber = 6;
 	uint32_t broadcastIp = 0;
 	std::string name;
+	std::function<bool()> online;
 };

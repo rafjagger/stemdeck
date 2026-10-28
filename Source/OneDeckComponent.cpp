@@ -4,7 +4,6 @@
 
 #include "AppSettings.h"
 #include "DeckLinks.h"
-#include "LinkInterface.h"
 #include "KnobSetup.h"
 #include "OscTruthFile.h"
 #include "SettingsPanel.h"
@@ -299,13 +298,12 @@ void OneDeckComponent::updateLink()
 	}
 
 	const auto device = instance.proLinkDevice();
-	if (! link.isRunning())
-		pinLinkToControlLan (link, truth.path);
 	if (! link.isRunning() && link.start (device, linkPorts, instance.title()))
 		sync.joined (nowSeconds());
 
 	if (sync.isMaster() && link.isRunning() && ! linkSender.isRunning())
-		linkSender.start (device, link.broadcastAddress(), linkPorts, instance.title());
+		linkSender.start (device, link.broadcastAddress(), linkPorts, instance.title(),
+						  [this] { return link.isOnline(); });
 	else if (! sync.isMaster())
 		linkSender.stop();
 }
@@ -332,7 +330,7 @@ void OneDeckComponent::showSyncStatus()
 	const auto now = nowSeconds();
 	const auto& clock = sync.clock();
 	const auto text = ! sync.wantsLink()   ? syncLabels::sourceButton (true)
-					: ! link.isRunning() ? syncLabels::error (link.error())
+					: ! link.isRunning() || ! link.error().empty() ? syncLabels::error (link.error())
 					: sync.isMaster()    ? syncLabels::sendingMaster (instance.letter - 'A')
 					: clock.bpm() <= 0.0 ? syncLabels::nothingHeard()
 										 : syncLabels::following (clock.bpm(), clock.isLive (now) ? clock.leader (now) : 0);

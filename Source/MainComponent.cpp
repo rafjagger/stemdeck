@@ -2,7 +2,6 @@
 #include "AppSettings.h"
 #include "CoreTruth.h"
 #include "DeckLinks.h"
-#include "LinkInterface.h"
 #include "AudioCpu.h"
 #include "StemJob.h"
 #include "GridEdit.h"
@@ -962,13 +961,11 @@ void MainComponent::updateNetwork()
 	}
 
 	if (! proLink.isRunning())
-	{
-		pinLinkToControlLan (proLink, truthPath);
 		proLink.start (device, proLinkPorts);
-	}
 
 	if (masterDeck >= 0 && proLink.isRunning() && ! pioSender.isRunning())
-		pioSender.start (device, proLink.broadcastAddress(), proLinkPorts);
+		pioSender.start (device, proLink.broadcastAddress(), proLinkPorts, "StemDeck",
+						 [this] { return proLink.isOnline(); });
 	else if (masterDeck < 0)
 		pioSender.stop();
 }

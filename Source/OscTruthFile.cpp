@@ -55,12 +55,6 @@ namespace osctruth
 		return hosts;
 	}
 
-	std::string readControlNetwork (const std::string& path, std::string& error)
-	{
-		const auto truth = parsed (path, error);
-		return truth["network"]["address"].toString().toStdString();
-	}
-
 	remote::Words readRemoteWords (const std::string& path, std::string& error)
 	{
 		const auto truth = parsed (path, error);

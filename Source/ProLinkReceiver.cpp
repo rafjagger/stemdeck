@@ -5,18 +5,15 @@
 #include <JuceHeader.h>
 
 #include <arpa/inet.h>
-#include <cstring>
-#include <ifaddrs.h>
-#include <net/if.h>
 #include <netinet/in.h>
 #include <poll.h>
-#include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
 namespace
 {
-	constexpr int keepAliveMs = 1500;
+	// Wakes for the announcer too: a CDJ's keep-alive gap is held to a few ms.
+	constexpr int pollMs = 10;
 
 	double now() { return juce::Time::getMillisecondCounterHiRes() / 1000.0; }
 }
@@ -30,39 +27,6 @@ std::string ProLinkReceiver::error() const
 {
 	std::lock_guard<std::mutex> guard (lock);
 	return lastError;
-}
-
-bool ProLinkReceiver::detectInterface()
-{
-	// The first IPv4 interface that is up, can broadcast and is not loopback,
-	// as beat-analyzer picks it.
-	ifaddrs* list = nullptr;
-	if (getifaddrs (&list) < 0)
-		return false;
-
-	std::string ifName;
-	for (auto* ifa = list; ifa != nullptr; ifa = ifa->ifa_next)
-	{
-		if (ifa->ifa_addr == nullptr || ifa->ifa_addr->sa_family != AF_INET)
-			continue;
-		if (! linkinterface::usable (ifa->ifa_flags))
-			continue;
-
-		localIp = reinterpret_cast<sockaddr_in*> (ifa->ifa_addr)->sin_addr.s_addr;
-		if (ifa->ifa_broadaddr != nullptr)
-			broadcastIp = reinterpret_cast<sockaddr_in*> (ifa->ifa_broadaddr)->sin_addr.s_addr;
-		else
-			broadcastIp = localIp | ~reinterpret_cast<sockaddr_in*> (ifa->ifa_netmask)->sin_addr.s_addr;
-		ifName = ifa->ifa_name;
-		break;
-	}
-	freeifaddrs (list);
-
-	if (ifName.empty())
-		return false;
-
-	mac = linkinterface::hardwareAddress (ifName);
-	return true;
 }
 
 bool ProLinkReceiver::openSocket (int& fd, int port)
@@ -102,14 +66,20 @@ bool ProLinkReceiver::start (int number, const osctruth::ProLinkPorts& truthPort
 	if (! ports.complete())
 		return fail ("no a3-osc.json");
 
-	if (forcedBroadcastIp != 0)
+	prolink::Identity self { number, deviceName, forcedMac, forcedLocalIp };
+	broadcastIp = forcedBroadcastIp;
+	if (forcedBroadcastIp == 0)
 	{
-		localIp = forcedLocalIp;
-		broadcastIp = forcedBroadcastIp;
-		mac = forcedMac;
+		std::string why;
+		const auto found = linkinterface::find (why);
+		if (! found)
+			return fail (why);
+		self.ip = found->local;
+		self.mac = found->mac;
+		broadcastIp = found->broadcast;
 	}
-	else if (! detectInterface())
-		return fail ("no network");
+	announcer = std::make_unique<prolink::Announcer> (self);
+	online = false;
 
 	if (! openSocket (sockAnnounce, ports.announce)
 		|| ! openSocket (sockBeat, ports.beat)
@@ -136,6 +106,7 @@ void ProLinkReceiver::stop()
 
 	if (thread.joinable())
 		thread.join();
+	online = false;
 }
 
 std::vector<ProLinkReceiver::Event> ProLinkReceiver::drain()
@@ -146,41 +117,48 @@ std::vector<ProLinkReceiver::Event> ProLinkReceiver::drain()
 	return out;
 }
 
-void ProLinkReceiver::sendKeepAlive()
+void ProLinkReceiver::announce (const std::vector<prolink::Announcer::Send>& packets)
 {
-	const auto packet = prolink::keepAlive (deviceNumber, name, mac, localIp);
+	for (const auto& packet : packets)
+	{
+		sockaddr_in to {};
+		to.sin_family = AF_INET;
+		to.sin_port = htons ((uint16_t) ports.announce);
+		to.sin_addr.s_addr = packet.to != 0 ? packet.to : broadcastIp;
+		sendto (sockAnnounce, packet.bytes.data(), packet.bytes.size(), 0, reinterpret_cast<sockaddr*> (&to), sizeof (to));
+	}
+}
 
-	sockaddr_in to {};
-	to.sin_family = AF_INET;
-	to.sin_port = htons ((uint16_t) ports.announce);
-	to.sin_addr.s_addr = broadcastIp;
-	sendto (sockAnnounce, packet.data(), packet.size(), 0, reinterpret_cast<sockaddr*> (&to), sizeof (to));
+void ProLinkReceiver::hearAnnouncement (double at)
+{
+	uint8_t buffer[600];
+	sockaddr_in from {};
+	socklen_t fromLength = sizeof (from);
+	const auto n = recvfrom (sockAnnounce, buffer, sizeof (buffer), 0, reinterpret_cast<sockaddr*> (&from), &fromLength);
+	if (n > 0)
+		announce (announcer->hear (buffer, (size_t) n, from.sin_addr.s_addr, at));
 }
 
 void ProLinkReceiver::run()
 {
 	uint8_t buffer[600]; // CDJ-3000 status packets reach 0x200 bytes
 
-	sendKeepAlive();
-	auto lastKeepAlive = juce::Time::getMillisecondCounter();
-
 	while (running)
 	{
-		pollfd fds[] = { { sockAnnounce, POLLIN, 0 }, { sockBeat, POLLIN, 0 }, { sockStatus, POLLIN, 0 } };
-		const auto ready = poll (fds, 3, 50); // wakes for the keep-alive too
-
-		if (juce::Time::getMillisecondCounter() - lastKeepAlive >= (juce::uint32) keepAliveMs)
+		announce (announcer->due (now()));
+		online = announcer->isOnline();
+		if (! announcer->refusal().empty())
 		{
-			sendKeepAlive();
-			lastKeepAlive = juce::Time::getMillisecondCounter();
+			std::lock_guard<std::mutex> guard (lock);
+			lastError = announcer->refusal();
 		}
 
-		if (ready <= 0)
+		pollfd fds[] = { { sockAnnounce, POLLIN, 0 }, { sockBeat, POLLIN, 0 }, { sockStatus, POLLIN, 0 } };
+		if (poll (fds, 3, pollMs) <= 0)
 			continue;
 
-		// Other devices' announcements: read and dropped, so the queue empties.
 		if (fds[0].revents & POLLIN)
-			recv (sockAnnounce, buffer, sizeof (buffer), 0);
+			hearAnnouncement (now());
 
 		if (fds[1].revents & POLLIN)
 		{

@@ -18,6 +18,9 @@ std::optional<sections::Features> SectionAnalysis::analyse (const StemSet& set, 
 
 	for (size_t i = 0; i < readers.size(); ++i)
 	{
+		if (! set.hasStem ((int) i))
+			continue;
+
 		readers[i].reset (formatManager.createReaderFor (set.files[i]));
 
 		if (readers[i] == nullptr)
@@ -25,7 +28,7 @@ std::optional<sections::Features> SectionAnalysis::analyse (const StemSet& set, 
 
 		// The stems are read in step at one rate; at another, a stem's beats
 		// would land in the wrong bars. No features rather than wrong ones.
-		if (i > 0 && ! juce::exactlyEqual (readers[i]->sampleRate, sampleRate))
+		if (sampleRate > 0.0 && ! juce::exactlyEqual (readers[i]->sampleRate, sampleRate))
 			return std::nullopt;
 
 		sampleRate = readers[i]->sampleRate;
@@ -34,6 +37,9 @@ std::optional<sections::Features> SectionAnalysis::analyse (const StemSet& set, 
 
 	// Each stem to mono and decimated by averaging (a crude low-pass), as
 	// TempoAnalysis::analyse does for their sum.
+	if (! (sampleRate > 0.0))
+		return std::nullopt;   // not one file
+
 	const auto decimation = juce::jmax (1, juce::roundToInt (sampleRate / analysisRate));
 	sections::FeatureBuilder builder (sampleRate / decimation, grid.firstBeat, grid.beatLength());
 
@@ -53,6 +59,11 @@ std::optional<sections::Features> SectionAnalysis::analyse (const StemSet& set, 
 
 		for (size_t s = 0; s < readers.size(); ++s)
 		{
+			if (readers[s] == nullptr)
+			{
+				std::fill (mono[s].begin(), mono[s].end(), 0.0f);   // an empty slot
+				continue;
+			}
 			auto& reader = *readers[s];
 			reader.read (&buffer, 0, numSamples, start, true, true);
 			const auto* left = buffer.getReadPointer (0);
@@ -66,6 +77,9 @@ std::optional<sections::Features> SectionAnalysis::analyse (const StemSet& set, 
 				mono[s][(size_t) i] = sum / (float) (2 * decimation);
 			}
 		}
+
+		if (! set.isComplete())
+			sections::foldIntoOneMix (mono);
 
 		builder.add ({ mono[0].data(), mono[1].data(), mono[2].data(), mono[3].data() }, numMono);
 	}

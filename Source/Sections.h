@@ -83,6 +83,15 @@ namespace sections
 
 	StemRoles rolesFor (const std::array<std::string, numStems>& stemNames);
 
+	// A set short of four files (2026-10-29) can hold anything -- a stereo
+	// master, drums and a rest -- so no slot is known to be the drums. It is
+	// read as one mix: the sum of its slots on slot 1, the others zero, and
+	// slot 1 stands for both drums and bass (a quiet mix is the breakdown,
+	// a full one the drop). The tempo (TempoAnalysis) and the downbeat
+	// (BarPhase, which reads slot 1 as its drums) read the same fold.
+	void foldIntoOneMix (std::array<std::vector<float>, numStems>& stems);
+	inline constexpr StemRoles oneMixRoles { 0, 0 };
+
 	struct BarLevels
 	{
 		float drums = 0.0f, bass = 0.0f, total = 0.0f;

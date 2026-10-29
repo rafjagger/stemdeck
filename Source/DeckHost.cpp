@@ -76,7 +76,7 @@ void DeckHost::clearStaged()
 
 juce::String DeckHost::stagedSetId() const
 {
-	return stagedSet ? stagedSet->files[0].getFullPathName() : juce::String();
+	return stagedSet ? stagedSet->firstFile().getFullPathName() : juce::String();
 }
 
 // The player swapped the staged set in on the audio thread: it is the
@@ -96,7 +96,7 @@ bool DeckHost::followHandover()
 // The set the player holds now, and its grid: from the cache, else analysed.
 void DeckHost::takeOn (const StemSet& newSet)
 {
-	setId = newSet.files[0].getFullPathName();
+	setId = newSet.firstFile().getFullPathName();
 	set = newSet;
 	++generation;
 	features.reset();
@@ -224,8 +224,9 @@ void DeckHost::rebuildSections()
 	}
 
 	const auto& names = set->stemNames;
-	const auto roles = sections::rolesFor ({ names[0].toStdString(), names[1].toStdString(),
-											 names[2].toStdString(), names[3].toStdString() });
+	const auto roles = set->isComplete() ? sections::rolesFor ({ names[0].toStdString(), names[1].toStdString(),
+																   names[2].toStdString(), names[3].toStdString() })
+										 : sections::oneMixRoles;   // what SectionAnalysis measured
 	bars = sections::classify (sections::barLevels (*features, grid.bpm, grid.firstBeat, roles));
 }
 

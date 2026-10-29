@@ -102,3 +102,34 @@ TEST (Sections, TheWordsOnTheWire)
 	EXPECT_STREQ (sections::nameOf (Section::drop), "drop");
 	EXPECT_STREQ (sections::nameOf (Section::breakdown), "breakdown");
 }
+
+// A set short of four stems (2026-10-29) holds anything: it is read as one
+// mix, the sum of its slots on slot 1, which stands for both drums and bass.
+TEST (Sections, ASetShortOfFourStemsIsReadAsOneMix)
+{
+	auto stems = synthetic::fromScript ("FFFFFFFFQQQQFFFF");
+	sections::foldIntoOneMix (stems.samples);
+	for (size_t s = 1; s < stems.samples.size(); ++s)
+		for (const auto sample : stems.samples[s])
+			ASSERT_EQ (sample, 0.0f) << "slot " << s + 1 << " is folded into slot 1";
+
+	const auto features = synthetic::featuresOf (stems);
+	std::string letters;
+	for (const auto& bar : sections::classify (sections::barLevels (features, synthetic::bpm, synthetic::firstBeat, sections::oneMixRoles)))
+		letters += bar.section == Section::breakdown ? 'B' : '-';
+	EXPECT_EQ (letters, "--------BBBB----") << "the mix gone quiet is the breakdown";
+}
+
+TEST (Sections, FoldingSumsTheSlotsSampleBySample)
+{
+	std::array<std::vector<float>, sections::numStems> stems { std::vector<float> { 0.5f, 0.0f },
+															   std::vector<float> {},
+															   std::vector<float> { 0.25f, -0.5f },
+															   std::vector<float> { 0.0f, 0.25f, 1.0f } };
+	sections::foldIntoOneMix (stems);
+	EXPECT_EQ (stems[0], (std::vector<float> { 0.75f, -0.25f, 1.0f }));
+	EXPECT_EQ (stems[1], (std::vector<float> { 0.0f, 0.0f, 0.0f })) << "every slot as long as the mix";
+	EXPECT_EQ (stems[3], (std::vector<float> { 0.0f, 0.0f, 0.0f }));
+	EXPECT_EQ (sections::oneMixRoles.drums, 0);
+	EXPECT_EQ (sections::oneMixRoles.bass, 0);
+}

@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <utility>
 
 
 // The session keeps one mix state per stem (Session.h counts them as the buses do).
@@ -49,12 +50,19 @@ bool StemDeckPlayer::isReady() const
 	return loaded != nullptr && loaded->ready.load();
 }
 
-// Opens every stem of `set` into `into`: mapped where the format allows,
-// else a reader handed back in `toDecode` for the decoding jobs.
+// Opens every file of `set` into `into`: mapped where the format allows,
+// else a reader handed back in `toDecode` for the decoding jobs. An empty
+// slot stays neither mapped nor decoded: readStemRun reads it as zeros.
 juce::String StemDeckPlayer::open (const StemSet& set, LoadedSet& into, Readers& toDecode)
 {
+	if (set.numLoaded() == 0)
+		return "The set has no file: " + set.name;
+
+	bool rateTaken = false;
 	for (int i = 0; i < numStems; ++i)
 	{
+		if (! set.hasStem (i))
+			continue;
 		const auto& file = set.files[(size_t) i];
 		auto* format = formatManager.findFormatForFileExtension (file.getFileExtension());
 
@@ -82,7 +90,7 @@ juce::String StemDeckPlayer::open (const StemSet& set, LoadedSet& into, Readers&
 		if (reader == nullptr)
 			return "Cannot read the file: " + file.getFileName();
 
-		if (i == 0)
+		if (! std::exchange (rateTaken, true))
 			into.sampleRate = reader->sampleRate;
 		else if (! juce::approximatelyEqual (reader->sampleRate, into.sampleRate))
 			return "Stems haben unterschiedliche Samplerates: " + set.name;

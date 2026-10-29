@@ -95,7 +95,7 @@ private:
 	bool pressHeldStill() const;
 	void mouseUp (const juce::MouseEvent&) override;   // from the table's rows: a set drag is over
 
-	static juce::String idFor (const StemSet& set) { return set.files[0].getFullPathName(); }
+	static juce::String idFor (const StemSet& set) { return set.firstFile().getFullPathName(); }
 	void applyFilter();
 	void rebuildFolderTree();
 	void folderTapped (FolderItem& item);

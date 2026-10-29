@@ -5,7 +5,7 @@
 #include <JuceHeader.h>
 #include "FileLock.h"
 
-// Two StemDeck instances (-bformat --deck A and B) share the library folder
+// One-deck StemDeck instances (-bformat --deck A, B, ...) share the library folder
 // and may hold the same queued job: each imported the two-deck session's
 // queue. One separates at a time: whoever holds <library>/stemcreator.lock
 // (flock, so a crashed instance lets go with its process). A job done is

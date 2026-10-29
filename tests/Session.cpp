@@ -293,6 +293,21 @@ TEST (OneDeckSession, ImportTakesDeckAForAAndBForB)
 	EXPECT_TRUE (b.imported);
 }
 
+// The two-deck session has decks A and B only: a letter beyond them starts
+// with an empty deck, and takes the library and the stem jobs as A and B do.
+TEST (OneDeckSession, ImportBeyondBTakesTheLibraryAndAnEmptyDeck)
+{
+	for (const char letter : { 'C', 'D', 'Z' })
+	{
+		const auto one = importFromTwoDeck (twoDeckSession(), letter);
+		EXPECT_TRUE (one.deck.setId.isEmpty()) << letter;
+		EXPECT_FALSE (one.deck.playing) << letter;
+		EXPECT_EQ (one.library.search, "dub") << letter;
+		EXPECT_EQ (one.stemJobs.size(), 1u) << letter;
+		EXPECT_TRUE (one.imported) << letter;
+	}
+}
+
 TEST (OneDeckSession, ImportDropsRouting)
 {
 	const auto a = importFromTwoDeck (twoDeckSession(), 'A');

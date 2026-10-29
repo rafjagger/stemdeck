@@ -214,20 +214,22 @@ namespace panel1
 		for (int stem = 0; stem < stems; ++stem)
 		{
 			const auto& s = state.stems[(size_t) stem];
+			// A stem's keys rest in its own colour, so its two columns read as that stem.
+			const auto stemRest = panel::base (state.stemColours[(size_t) stem]);
 			const auto stemColour = lit (state.stemColours[(size_t) stem]);
 			for (const auto kind : { Kind::orbit, Kind::ping, Kind::rise, Kind::scat })
 			{
 				const auto pad = s.pads[(size_t) shapeOf (kind)];
 				const auto face = pad == motionlite::PadState::running ? stemColour
 								  : pad == motionlite::PadState::armed && blinkOn (nowSeconds) ? stemColour
-								  : rest;
+								  : stemRest;
 				light (out, { kind, stem }, face);
 			}
-			light (out, { Kind::stemCue, stem }, s.cued ? lit (state.cueColour) : rest);
-			light (out, { Kind::stemMute, stem }, s.muted ? lit (state.muteColour) : rest);
-			const auto dim = panel::scaled (rest, dimNumerator, dimDenominator);
-			light (out, { Kind::lengthDown, stem }, s.shortest ? dim : rest);
-			light (out, { Kind::lengthUp, stem }, s.longest ? dim : rest);
+			light (out, { Kind::stemCue, stem }, s.cued ? lit (state.cueColour) : stemRest);
+			light (out, { Kind::stemMute, stem }, s.muted ? lit (state.muteColour) : stemRest);
+			const auto dim = panel::scaled (stemRest, dimNumerator, dimDenominator);
+			light (out, { Kind::lengthDown, stem }, s.shortest ? dim : stemRest);
+			light (out, { Kind::lengthUp, stem }, s.longest ? dim : stemRest);
 		}
 		return out;
 	}

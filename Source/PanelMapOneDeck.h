@@ -90,6 +90,7 @@ namespace panel1
 		bool continuing = false;   // CONTINUE on
 	};
 
-	// Every LED as wanted. Armed pads blink with a period of 500 ms.
+	// Every LED as wanted. The deck's own keys rest in the deck colour, a
+	// stem's keys in that stem's colour. Armed pads blink with a period of 500 ms.
 	panel::Leds leds (const LedState& state, double nowSeconds);
 }

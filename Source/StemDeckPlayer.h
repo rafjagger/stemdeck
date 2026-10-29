@@ -12,7 +12,9 @@
 // WAV/AIFF stems are memory-mapped and read directly in the audio callback,
 // which makes seeking and looping instant; a background thread touches the
 // pages ahead of the playhead so the callback does not wait on the disk.
-// Other formats fall back to a buffered reader.
+// Other formats (FLAC, the library's) fall back to a buffered reader, which
+// holds only what lies ahead of the playhead; a loop's first seconds are
+// decoded when it is set, so every pass starts from memory.
 //
 // With key lock on, each stem goes through its Rubber Band stretcher
 // (KeyLockStretcher) before the resampler: the stretchers play the tempo,
@@ -156,9 +158,23 @@ private:
 	{
 		std::array<std::unique_ptr<juce::AudioFormatReader>, numStems> readers;
 		std::array<juce::MemoryMappedAudioFormatReader*, numStems> mapped {}; // non-owning, may be null
+		std::array<juce::File, numStems> files;
 		juce::int64 length = 0;
 		double sampleRate = 44100.0;
 	};
+
+	// The first frames of a loop, for the stems not memory-mapped: JUCE's
+	// BufferingAudioReader drops what lies behind the playhead and reads
+	// silence where it holds nothing, so every jump back to the loop's start
+	// read zeros until its thread had decoded there again (03.0+240 on the
+	// rig: up to 90 ms at every seam). From here the buffered reader has
+	// loopHeadSeconds to get ahead again.
+	struct LoopHead
+	{
+		juce::int64 start = 0, length = 0;
+		std::array<juce::AudioBuffer<float>, numStems> stems;   // empty: a mapped stem, read in place
+	};
+	static constexpr double loopHeadSeconds = 2.0;
 
 	// The outgoing side of a seam: the track as it went on behind the loop's
 	// end, `done` frames of the fade-out gone. Audio thread only.
@@ -212,6 +228,9 @@ private:
 	void addSeamTail (int stem, float* const* dest, int count, const SeamTail& tail);
 	void readRun (float* const* dest, int count, juce::int64 position);
 	void readStemRun (int stem, float* const* dest, int count, juce::int64 position);
+	void readStemFromFile (int stem, float* const* dest, int count, juce::int64 position);
+	void updateLoopHead (juce::int64 start, juce::int64 end);
+	static std::shared_ptr<const LoopHead> decodeLoopHead (juce::AudioFormatManager&, const LoadedSet&, juce::int64 start, juce::int64 length);
 	void renderPreMute (int stem, const juce::AudioSourceChannelInfo& info);
 	void renderCue (int stem, int numSamples);
 	void renderScratch (const juce::AudioSourceChannelInfo& info);
@@ -234,6 +253,7 @@ private:
 	// never happens while the lock is held.
 	juce::CriticalSection setLock;
 	std::shared_ptr<LoadedSet> loaded;
+	std::shared_ptr<const LoopHead> loopHead;   // of `loaded`; swapped with it, under setLock
 	std::atomic<juce::int64> lengthInSamples { 0 };
 
 	std::atomic<bool> playing { false }, repeat { false };

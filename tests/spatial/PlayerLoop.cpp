@@ -44,20 +44,19 @@ std::vector<float> toneMix()
 	return x;
 }
 
-void writeStem (const juce::File& file, const std::vector<float>& samples, double fileRate)
+void writeStem (juce::AudioFormat& format, const juce::File& file, const std::vector<float>& samples, double fileRate, int bits)
 {
 	const auto length = (int) samples.size();
 	juce::AudioBuffer<float> audio (2, length);
 	for (int ch = 0; ch < 2; ++ch)
 		audio.copyFrom (ch, 0, samples.data(), length);
 
-	juce::WavAudioFormat wav;
 	std::unique_ptr<juce::OutputStream> stream = file.createOutputStream();
 	auto writer = stream == nullptr ? nullptr
-	                                : wav.createWriterFor (stream, juce::AudioFormatWriterOptions{}
-	                                                                   .withSampleRate (fileRate)
-	                                                                   .withNumChannels (2)
-	                                                                   .withBitsPerSample (32));
+	                                : format.createWriterFor (stream, juce::AudioFormatWriterOptions{}
+	                                                                      .withSampleRate (fileRate)
+	                                                                      .withNumChannels (2)
+	                                                                      .withBitsPerSample (bits));
 	if (writer == nullptr || ! writer->writeFromAudioSampleBuffer (audio, 0, length))
 		throw std::runtime_error ("cannot write " + file.getFullPathName().toStdString());
 }
@@ -95,14 +94,21 @@ protected:
 
 	void TearDown() override { folder.deleteRecursively(); }
 
-	void load (const std::array<std::vector<float>, StemSet::numStems>& stems, double fileRate)
+	// WAV is memory-mapped by the player; FLAC, the library's format, is not.
+	enum class Format { wav, flac };
+
+	void load (const std::array<std::vector<float>, StemSet::numStems>& stems, double fileRate, Format format = Format::wav)
 	{
+		juce::WavAudioFormat wav;
+		juce::FlacAudioFormat flac;
+		auto& writerFormat = format == Format::wav ? static_cast<juce::AudioFormat&> (wav) : flac;
+		const auto extension = format == Format::wav ? ".wav" : ".flac";
 		set.name = "loop";
 		for (int s = 0; s < StemSet::numStems; ++s)
 		{
-			set.files[(size_t) s] = folder.getChildFile ("stem" + juce::String (s) + ".wav");
+			set.files[(size_t) s] = folder.getChildFile ("stem" + juce::String (s) + extension);
 			set.stemNames[(size_t) s] = "stem" + juce::String (s);
-			writeStem (set.files[(size_t) s], stems[(size_t) s], fileRate);
+			writeStem (writerFormat, set.files[(size_t) s], stems[(size_t) s], fileRate, format == Format::wav ? 32 : 24);
 		}
 		ASSERT_EQ (player.load (set), juce::String());
 		player.prepareToPlay (block, rate);
@@ -450,4 +456,79 @@ TEST_F (PlayerLoopExact, NothingBeforeTheStartWithKeyLockEither)
 	for (size_t i = (size_t) (0.1 * rate); i < r.left.size(); ++i)
 		loudest = std::max (loudest, std::abs (r.left[i]));
 	EXPECT_LT (loudest, 0.8f) << "nothing from before the loop's start";
+}
+
+
+//==============================================================================
+namespace
+{
+// Blocks as the audio device asks for them: no faster than real time, so
+// the player's background threads get the time they get on the rig.
+std::vector<float> playInRealTime (StemDeckPlayer& player, double seconds)
+{
+	std::vector<float> left;
+	juce::AudioBuffer<float> buffer (StemDeckPlayer::numOutputChannels, block);
+	const auto blocks = (int) (seconds * rate / block);
+	const auto begin = juce::Time::getMillisecondCounterHiRes();
+	for (int b = 0; b < blocks; ++b)
+	{
+		const auto due = begin + 1000.0 * b * block / rate;
+		while (juce::Time::getMillisecondCounterHiRes() < due)
+			juce::Thread::sleep (1);
+		buffer.clear();
+		player.getNextAudioBlock ({ &buffer, 0, block });
+		left.insert (left.end(), buffer.getReadPointer (0), buffer.getReadPointer (0) + block);
+	}
+	return left;
+}
+
+size_t longestSilence (const std::vector<float>& x, size_t from)
+{
+	size_t longest = 0, run = 0;
+	for (size_t i = from; i < x.size(); ++i)
+	{
+		run = x[i] == 0.0f ? run + 1 : 0;
+		longest = std::max (longest, run);
+	}
+	return longest;
+}
+
+// The tones on all four stems, as FLAC.
+class PlayerLoopFlac : public LoopFixture
+{
+protected:
+	void SetUp() override
+	{
+		LoopFixture::SetUp();
+		const auto tones = toneMix();
+		load ({ tones, tones, tones, tones }, rate, Format::flac);
+	}
+};
+}
+
+// FLAC stems are read through JUCE's BufferingAudioReader, which keeps only
+// what lies ahead of its last read and gives silence for anything it has not
+// buffered: every jump back to the loop's start read zeros until its thread
+// had decoded there again -- on the rig (03.0+240) 0 to 90 ms of silence at
+// every seam, each stem coming back on its own: a click and a swell. As the
+// keys do it: IN at 5 s, OUT a second later, then pass after pass.
+TEST_F (PlayerLoopFlac, EveryPassIsTheLoopWithNoSilenceAtTheSeam)
+{
+	constexpr double in = 5.0, out = 6.0;
+	player.setPosition (in - 1.0);
+	juce::Thread::sleep (300);   // the deck stands loaded a while before PLAY
+	player.play();
+	playInRealTime (player, out - (in - 1.0));
+	ASSERT_GT (player.getPosition(), out - 0.05);
+
+	player.setLoop (in, out);
+	const auto looped = playInRealTime (player, 3.5 * (out - in));
+
+	EXPECT_LT (longestSilence (looped, 0), (size_t) 4) << "frames of silence: the loop's start not read";
+
+	const auto length = (size_t) std::llround ((out - in) * rate);
+	double worst = 0.0;
+	for (size_t n = length + 64; n < looped.size(); ++n)
+		worst = std::max (worst, (double) std::abs (looped[n] - looped[n - length]));
+	EXPECT_LT (worst, 1.0e-6) << "every pass the same frames";
 }

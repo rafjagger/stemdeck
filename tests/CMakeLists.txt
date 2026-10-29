@@ -93,6 +93,7 @@ add_executable(stemdeck-tests
     ${CMAKE_SOURCE_DIR}/Source/PanelMap.cpp
     PanelLink.cpp
     ${CMAKE_SOURCE_DIR}/Source/PanelLink.cpp
+    DoublePress.cpp
     PanelMapOneDeck.cpp
     ${CMAKE_SOURCE_DIR}/Source/PanelMapOneDeck.cpp
     PanelOwnership.cpp

@@ -482,6 +482,11 @@ void OneDeckComponent::handlePanel (const panel1::Event& e)
 		case Type::shot:       column.oneShots().press (e.shape); break;
 		case Type::stemCue:    column.cue().triggerClick(); break;
 		case Type::stemMute:   column.mute().triggerClick(); break;
+		case Type::gainPush:
+			column.mute().triggerClick();   // twice quickly the second click unmutes again
+			if (gainPushes[(size_t) e.stem].press (juce::Time::getMillisecondCounterHiRes() / 1000.0))
+				column.gain().setValue (column.gain().getDoubleClickReturnValue());
+			break;
 		case Type::lengthDown: column.oneShots().lengthDown().triggerClick(); break;
 		case Type::lengthUp:   column.oneShots().lengthUp().triggerClick(); break;
 		case Type::gain:       knobsetup::nudge (column.gain(), e.value); break;

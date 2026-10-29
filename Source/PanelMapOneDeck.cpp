@@ -166,11 +166,12 @@ namespace panel1
 				event.value = (double) encoder.delta;
 				events.push_back (event);
 			}
-			// Only the upper encoder's push means something: MUTE, as on the two-deck panel.
+			// Only the upper encoder's push means something: MUTE, as on the two-deck panel, and
+			// twice quickly a GAIN reset -- so it is its own event, not the MUTE pad's.
 			if (tracker.push (i, encoder.key).pressed && ! knob.width)
 			{
 				Event event;
-				event.type = Event::Type::stemMute;
+				event.type = Event::Type::gainPush;
 				event.stem = knob.stem;
 				events.push_back (event);
 			}

@@ -210,7 +210,7 @@ TEST (PanelMapOneDeck, LengthStemCueAndMuteKeys)
 	EXPECT_EQ (mute.at (0).stem, 2);
 }
 
-TEST (PanelMapOneDeck, EncodersTurnGainAndWidthAndPushMutesOnlyFromTheUpperOne)
+TEST (PanelMapOneDeck, EncodersTurnGainAndWidthAndOnlyTheUpperOnePushes)
 {
 	InputDecoder decoder;
 	auto frame = idleFrame();
@@ -225,10 +225,10 @@ TEST (PanelMapOneDeck, EncodersTurnGainAndWidthAndPushMutesOnlyFromTheUpperOne)
 	EXPECT_EQ (find (Event::Type::width).value, -2.0);
 
 	frame = idleFrame();
-	frame.encoders[6].key = KeyState::held;   // upper push, stem 2
+	frame.encoders[6].key = KeyState::held;   // upper push, stem 2: its own event (MUTE, twice = GAIN reset)
 	events = decoder.feed (frame);
 	ASSERT_EQ (events.size(), 1u);
-	EXPECT_EQ (events[0].type, Event::Type::stemMute);
+	EXPECT_EQ (events[0].type, Event::Type::gainPush);
 	EXPECT_EQ (events[0].stem, 2);
 
 	frame = idleFrame();

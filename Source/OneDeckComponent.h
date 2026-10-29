@@ -17,6 +17,7 @@
 #include "PanelOwnership.h"
 #include "PanelWorkspacePoller.h"
 #include "AuxPots.h"
+#include "DoublePress.h"
 #include "ProLinkReceiver.h"
 #include "ProLinkPresence.h"
 #include "ProLinkSender.h"
@@ -122,6 +123,7 @@ private:
 	std::unique_ptr<PanelWorkspacePoller> workspacePoller;
 	unsigned seenWorkspaceChanges = 0;
 	AuxPots auxPots { [this] (int stem) -> StemColumn& { return view.column (stem); } };   // absolute: the deck wins
+	std::array<DoublePress, StemDeckPlayer::numStems> gainPushes;   // the GAIN encoder's push: twice = reset
 
 	OneDeckView view { deckAudio, formatManager, instance.letter - 'A' };
 	juce::Label deckLabel, deviceStatus;

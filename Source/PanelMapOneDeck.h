@@ -22,8 +22,9 @@
 //       row 3  RISE   SCAT
 //       row 4  CUE    MUTE
 //       row 5  <      >      (the one-shot length)
-//   stem s's encoders: the upper one is GAIN (its push mutes), the lower is
-//   WIDTH (its push does nothing). The pots are AUX of stems 1-4 (pot n is
+//   stem s's encoders: the upper one is GAIN (its push mutes; twice quickly
+//   it resets GAIN, the second push unmuting again), the lower is WIDTH
+//   (its push does nothing). The pots are AUX of stems 1-4 (pot n is
 //   stem n's send), absolute: the reading is the value at once, the deck
 //   wins over the screen (2026-10-29: no pick-up).
 namespace panel1
@@ -48,7 +49,7 @@ namespace panel1
 
 	struct Event
 	{
-		enum class Type { cueDown, cueUp, play, shiftDown, shiftUp, loop, loopIn, loopOut, continuePlay, shot, stemCue, stemMute, lengthDown, lengthUp, gain, width, aux };
+		enum class Type { cueDown, cueUp, play, shiftDown, shiftUp, loop, loopIn, loopOut, continuePlay, shot, stemCue, stemMute, lengthDown, lengthUp, gain, gainPush, width, aux };
 		Type type = Type::play;
 		int stem = -1;
 		motionlite::Shape shape = motionlite::Shape::orbit;   // shot

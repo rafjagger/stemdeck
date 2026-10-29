@@ -5,6 +5,7 @@
 #include "../BareXServer.h"
 #include "OneDeckAudio.h"
 #include "AuxPots.h"
+#include "KnobSetup.h"
 #include "OneDeckView.h"
 #include "Outputs.h"
 #include "StemKnob.h"
@@ -803,111 +804,49 @@ TEST_F (OneDeck, HoldingCueAndTappingPlayOnTheScreenPlaysOn)
 }
 
 //==============================================================================
-// R13 on the real columns: the pots move AUX only after crossing its value.
-TEST_F (OneDeck, PotsMoveAuxOnlyAfterCrossingAndNeverJump)
+// The pots are absolute (2026-10-29): a reading is the stem's AUX at once,
+// whatever the knob held -- the deck wins, no pick-up, no mark on the knob.
+TEST_F (OneDeck, APotSetsItsStemsAuxAtOnce)
 {
 	OneDeckView view (audio, formats, 0);
 	view.setSize (screenWidth, viewHeight);
 	AuxPots pots ([&view] (int stem) -> StemColumn& { return view.column (stem); });
 	auto& knob = view.column (1).aux();
 	knob.setValue (0.5, juce::sendNotificationSync);
-	pots.rearm();   // as after a load
 
 	pots.reading (1, 0.2);
-	pots.reading (1, 0.4);
-	EXPECT_DOUBLE_EQ (knob.getValue(), 0.5) << "a pot that has not crossed does nothing";
-	EXPECT_FLOAT_EQ (settings().aux[1].load(), 0.5f);
-	pots.reading (1, 0.55);
-	EXPECT_DOUBLE_EQ (knob.getValue(), 0.55);
-	EXPECT_FLOAT_EQ (settings().aux[1].load(), 0.55f);
+	EXPECT_DOUBLE_EQ (knob.getValue(), 0.2) << "no crossing needed";
+	EXPECT_FLOAT_EQ (settings().aux[1].load(), 0.2f);
+	pots.reading (1, 0.9);
+	EXPECT_DOUBLE_EQ (knob.getValue(), 0.9);
 
-	// A touch moves the knob away from the pot: the pot must find it again.
-	knob.setValue (0.9, juce::sendNotificationSync);
-	pots.reading (1, 0.58);
-	EXPECT_DOUBLE_EQ (knob.getValue(), 0.9) << "no jump to the pot";
+	knob.setValue (0.3, juce::sendNotificationSync);   // a touch on the screen
 	pots.reading (1, 0.95);
-	EXPECT_DOUBLE_EQ (knob.getValue(), 0.95);
+	EXPECT_DOUBLE_EQ (knob.getValue(), 0.95) << "the next reading wins over the touch";
+	EXPECT_FLOAT_EQ (settings().aux[1].load(), 0.95f);
+
+	for (int other : { 0, 2, 3 })
+		EXPECT_EQ (settings().aux[(size_t) other].load(), 0.0f) << "only the pot's own stem";
+	pots.reading (4, 0.5);
+	pots.reading (-1, 0.5);
+	for (int s = 0; s < stems; ++s)
+		EXPECT_EQ (settings().aux[(size_t) s].load(), s == 1 ? 0.95f : 0.0f) << "a pot past the four is nothing";
 }
 
-TEST_F (OneDeck, AuxPotAfterALoadKeepsItsLastPlaceAsGhostAndDoesNotJump)
+// The panel's lower encoder turns WIDTH as the upper turns GAIN: a detent is
+// 1/48 of the knob's travel (7.5 degrees), some two turns end to end.
+TEST_F (OneDeck, AnEncoderDetentTurnsWidthByAFortyEighthOfItsTravel)
 {
 	OneDeckView view (audio, formats, 0);
 	view.setSize (screenWidth, viewHeight);
-	AuxPots pots ([&view] (int stem) -> StemColumn& { return view.column (stem); });
-	auto& knob = view.column (0).aux();
-	knob.setValue (0.5, juce::sendNotificationSync);
-	pots.rearm();
-	pots.reading (0, 0.5);
-	ASSERT_FALSE (view.column (0).hasAuxGhost());
-
-	knob.setValue (0.8, juce::sendNotificationSync);   // a load
-	pots.rearm();
-	EXPECT_TRUE (view.column (0).hasAuxGhost()) << "the pot's place shows at once, without a new reading";
-	EXPECT_DOUBLE_EQ (view.column (0).auxGhost().value(), 0.5);
-	pots.reading (0, 0.5);
-	EXPECT_DOUBLE_EQ (knob.getValue(), 0.8);
-	pots.reading (0, 0.85);
-	EXPECT_DOUBLE_EQ (knob.getValue(), 0.85);
-	EXPECT_FALSE (view.column (0).hasAuxGhost());
-}
-
-// While another program held the panel, the pots were its controls: the last
-// reading StemDeck heard is stale and must not count as a side.
-TEST_F (OneDeck, AuxPotAfterAPanelHandOverForgetsTheStaleReading)
-{
-	OneDeckView view (audio, formats, 0);
-	view.setSize (screenWidth, viewHeight);
-	AuxPots pots ([&view] (int stem) -> StemColumn& { return view.column (stem); });
-	auto& knob = view.column (0).aux();
-	knob.setValue (0.2, juce::sendNotificationSync);
-	pots.rearm();
-	pots.reading (0, 0.1);   // the last reading before the panel went away
-
-	pots.panelGained();
-	EXPECT_FALSE (view.column (0).hasAuxGhost()) << "no ghost from a stale place";
-	pots.reading (0, 0.9);
-	EXPECT_DOUBLE_EQ (knob.getValue(), 0.2) << "the first fresh reading does not count as a crossing";
-	ASSERT_TRUE (view.column (0).hasAuxGhost());
-	EXPECT_DOUBLE_EQ (view.column (0).auxGhost().value(), 0.9);
-	pots.reading (0, 0.25);
-	EXPECT_DOUBLE_EQ (knob.getValue(), 0.2) << "not crossed yet";
-	pots.reading (0, 0.15);
-	EXPECT_DOUBLE_EQ (knob.getValue(), 0.15) << "crossed: picked up";
-}
-
-TEST_F (OneDeck, WatchRearmsAPickedUpPotWhenTheKnobIsMovedAway)
-{
-	OneDeckView view (audio, formats, 0);
-	view.setSize (screenWidth, viewHeight);
-	AuxPots pots ([&view] (int stem) -> StemColumn& { return view.column (stem); });
-	auto& knob = view.column (2).aux();
-	knob.setValue (0.5, juce::sendNotificationSync);
-	pots.rearm();
-	pots.reading (2, 0.5);
-	knob.setValue (0.1, juce::sendNotificationSync);
-	pots.watch();
-	EXPECT_TRUE (view.column (2).hasAuxGhost());
-	EXPECT_DOUBLE_EQ (view.column (2).auxGhost().value(), 0.5);
-}
-
-// A page test must paint: the ghost mark changes the picture on the knob, and only there.
-TEST_F (OneDeck, PaintsTheAuxGhostMark)
-{
-	DJLookAndFeel look;
-	OneDeckView view (audio, formats, 0);
-	view.setLookAndFeel (&look);
-	view.setSize (screenWidth, viewHeight);
-	view.setSet (set);
-	auto& column = view.column (0);
-	const auto knobArea = view.getLocalArea (&column, column.aux().getBounds());
-	const auto knobOf = [&] { return snapshotOf (view).getClippedImage (knobArea); };
-
-	const auto without = knobOf();
-	column.setAuxGhost (0.75);
-	EXPECT_GT (differingPixels (without, knobOf()), 10) << "the mark is drawn";
-	column.setAuxGhost (std::nullopt);
-	EXPECT_EQ (differingPixels (without, knobOf()), 0) << "and goes again";
-	view.setLookAndFeel (nullptr);
+	auto& width = view.column (2).width();
+	width.setValue (0.0, juce::sendNotificationSync);
+	knobsetup::nudge (width, 4.0);
+	EXPECT_NEAR (settings().width[2].load(), 30.0f, 0.5f);
+	knobsetup::nudge (width, 48.0);
+	EXPECT_FLOAT_EQ (settings().width[2].load(), 360.0f) << "held at the end";
+	knobsetup::nudge (width, -48.0);
+	EXPECT_FLOAT_EQ (settings().width[2].load(), 0.0f);
 }
 
 // CONTINUE beside REPEAT in the deck column, one play mode: each key turns

@@ -22,9 +22,10 @@
 //       row 3  RISE   SCAT
 //       row 4  CUE    MUTE
 //       row 5  <      >      (the one-shot length)
-//   stem s's encoders: the upper one is GAIN (its push mutes), the lower is 3D.
-//   The pots are AUX of stems 1-4 (pot n is stem n's send); the owner puts them
-//   through a PotPickup, so a pot never makes a value jump.
+//   stem s's encoders: the upper one is GAIN (its push mutes), the lower is
+//   WIDTH (its push does nothing). The pots are AUX of stems 1-4 (pot n is
+//   stem n's send), absolute: the reading is the value at once, the deck
+//   wins over the screen (2026-10-29: no pick-up).
 namespace panel1
 {
 	using panel::Cell;
@@ -41,17 +42,17 @@ namespace panel1
 	// Where a control's key is; {-1, -1} for none.
 	Cell cellOf (const Control& control);
 
-	struct StemKnob { int stem = -1; bool threeD = false; };
-	// encoder % 4 is the stem; the upper four (>= 4) turn GAIN, the lower 3D.
+	struct StemKnob { int stem = -1; bool width = false; };
+	// encoder % 4 is the stem; the upper four (>= 4) turn GAIN, the lower WIDTH.
 	StemKnob encoderStem (int encoder);
 
 	struct Event
 	{
-		enum class Type { cueDown, cueUp, play, shiftDown, shiftUp, loop, loopIn, loopOut, continuePlay, shot, stemCue, stemMute, lengthDown, lengthUp, gain, threeD, aux };
+		enum class Type { cueDown, cueUp, play, shiftDown, shiftUp, loop, loopIn, loopOut, continuePlay, shot, stemCue, stemMute, lengthDown, lengthUp, gain, width, aux };
 		Type type = Type::play;
 		int stem = -1;
 		motionlite::Shape shape = motionlite::Shape::orbit;   // shot
-		double value = 0.0;                                   // gain, threeD: encoder detents, + clockwise; aux: the pot's reading, 0..1
+		double value = 0.0;                                   // gain, width: encoder detents, + clockwise; aux: the pot's reading, 0..1
 	};
 
 	// Turns polled frames into events: a key reports its press (CUE and SHIFT

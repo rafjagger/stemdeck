@@ -161,13 +161,13 @@ namespace panel1
 			if (encoder.delta != 0)
 			{
 				Event event;
-				event.type = knob.threeD ? Event::Type::threeD : Event::Type::gain;
+				event.type = knob.width ? Event::Type::width : Event::Type::gain;
 				event.stem = knob.stem;
 				event.value = (double) encoder.delta;
 				events.push_back (event);
 			}
 			// Only the upper encoder's push means something: MUTE, as on the two-deck panel.
-			if (tracker.push (i, encoder.key).pressed && ! knob.threeD)
+			if (tracker.push (i, encoder.key).pressed && ! knob.width)
 			{
 				Event event;
 				event.type = Event::Type::stemMute;

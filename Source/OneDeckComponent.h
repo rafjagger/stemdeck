@@ -79,8 +79,6 @@ private:
 	void followWorkspace();   // R9: one step of the rule, then the lock follows
 	void handlePanel (const panel1::Event&);
 	void showPanel();
-	// R13: the pots find their values again. After a session, a set load and a restore, and when the panel is gained.
-	void rearmPotPickups();
 	void showSettings();
 	// The link (S4.7): joined while SYNC or MASTER is on; the MASTER deck publishes.
 	void startSync();
@@ -123,8 +121,7 @@ private:
 	std::optional<PanelFollowsWorkspace> panelFollow;   // set: the panel follows the i3 workspace
 	std::unique_ptr<PanelWorkspacePoller> workspacePoller;
 	unsigned seenWorkspaceChanges = 0;
-	panel::PanelGain panelGain { [this] { auxPots.panelGained(); } };   // R13: the pots find their values when the panel is gained
-	AuxPots auxPots { [this] (int stem) -> StemColumn& { return view.column (stem); } };
+	AuxPots auxPots { [this] (int stem) -> StemColumn& { return view.column (stem); } };   // absolute: the deck wins
 
 	OneDeckView view { deckAudio, formatManager, instance.letter - 'A' };
 	juce::Label deckLabel, deviceStatus;

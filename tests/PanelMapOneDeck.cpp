@@ -121,13 +121,13 @@ TEST (PanelMapOneDeck, CellOfAnUnassignedControlIsNowhere)
 	EXPECT_EQ (panel1::cellOf ({ Kind::shift, -1 }), (Cell { 0, 9 }));
 }
 
-TEST (PanelMapOneDeck, UpperEncoderIsGainLowerIs3D)
+TEST (PanelMapOneDeck, UpperEncoderIsGainLowerIsWidth)
 {
 	for (int encoder = 0; encoder < panel::encoderCount; ++encoder)
 	{
 		const auto knob = panel1::encoderStem (encoder);
 		EXPECT_EQ (knob.stem, encoder % 4);
-		EXPECT_EQ (knob.threeD, encoder < 4) << encoder;
+		EXPECT_EQ (knob.width, encoder < 4) << encoder;
 	}
 	EXPECT_EQ (panel1::encoderStem (8).stem, -1);
 	EXPECT_EQ (panel1::encoderStem (-1).stem, -1);
@@ -210,19 +210,19 @@ TEST (PanelMapOneDeck, LengthStemCueAndMuteKeys)
 	EXPECT_EQ (mute.at (0).stem, 2);
 }
 
-TEST (PanelMapOneDeck, EncodersTurnGainAnd3DAndPushMutesOnlyFromTheUpperOne)
+TEST (PanelMapOneDeck, EncodersTurnGainAndWidthAndPushMutesOnlyFromTheUpperOne)
 {
 	InputDecoder decoder;
 	auto frame = idleFrame();
 	frame.encoders[5].delta = 3;    // upper, stem 1: gain
-	frame.encoders[2].delta = -2;   // lower, stem 2: 3D
+	frame.encoders[2].delta = -2;   // lower, stem 2: width
 	auto events = decoder.feed (frame);
 	ASSERT_EQ (events.size(), 2u);
 	const auto find = [&] (Event::Type type) { for (const auto& e : events) if (e.type == type) return e; return Event {}; };
 	EXPECT_EQ (find (Event::Type::gain).stem, 1);
 	EXPECT_EQ (find (Event::Type::gain).value, 3.0);
-	EXPECT_EQ (find (Event::Type::threeD).stem, 2);
-	EXPECT_EQ (find (Event::Type::threeD).value, -2.0);
+	EXPECT_EQ (find (Event::Type::width).stem, 2);
+	EXPECT_EQ (find (Event::Type::width).value, -2.0);
 
 	frame = idleFrame();
 	frame.encoders[6].key = KeyState::held;   // upper push, stem 2

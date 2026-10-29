@@ -189,29 +189,6 @@ void StemColumn::paint (juce::Graphics& g)
 	g.fillRect (card.withHeight (juce::jmax (2.0f, (float) getHeight() * gapShare / 2.0f)));
 }
 
-void StemColumn::setAuxGhost (std::optional<double> position)
-{
-	if (position == ghost)
-		return;
-	ghost = position;
-	repaint (auxKnob.getBounds());
-}
-
-// A short tick across the knob's ring at the pot's place, in the text colour.
-void StemColumn::paintOverChildren (juce::Graphics& g)
-{
-	if (! ghost)
-		return;
-	const auto bounds = auxKnob.getBounds().toFloat();
-	const auto radius = juce::jmin (bounds.getWidth(), bounds.getHeight()) / 2.0f;
-	const auto& rotary = auxKnob.getRotaryParameters();
-	const auto angle = rotary.startAngleRadians + (float) *ghost * (rotary.endAngleRadians - rotary.startAngleRadians);
-	const auto centre = bounds.getCentre();
-	const auto direction = juce::Point<float> (std::sin (angle), -std::cos (angle));
-	g.setColour (Theme::text);
-	g.drawLine (juce::Line<float> (centre + direction * (radius * 0.55f), centre + direction * radius), juce::jmax (2.0f, radius * 0.12f));
-}
-
 void StemColumn::resized()
 {
 	const auto height = (float) getHeight();

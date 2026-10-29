@@ -161,7 +161,6 @@ void OneDeckComponent::showLoaded (const StemSet& set)
 	refusedStage = {};
 	view.setSet (set);
 	findSteps();
-	rearmPotPickups();
 }
 
 // No Auto DJ on this screen (B15): CONTINUE has the deck to itself. Were it
@@ -269,7 +268,6 @@ void OneDeckComponent::restoreSession()
 	}
 
 	creatorLink->restore (restored.stemJobs);
-	rearmPotPickups();
 
 	if (restored.imported)
 		saveSession();
@@ -442,7 +440,6 @@ void OneDeckComponent::updatePanelOwner()
 {
 	followWorkspace();
 	const auto holds = panelOwnership.holds();
-	panelGain.update (holds);
 	if (! holds)
 	{
 		panelDevice.reset();
@@ -488,15 +485,10 @@ void OneDeckComponent::handlePanel (const panel1::Event& e)
 		case Type::lengthDown: column.oneShots().lengthDown().triggerClick(); break;
 		case Type::lengthUp:   column.oneShots().lengthUp().triggerClick(); break;
 		case Type::gain:       knobsetup::nudge (column.gain(), e.value); break;
-		case Type::threeD:     knobsetup::nudge (column.threeD(), e.value); break;
+		case Type::width:      knobsetup::nudge (column.width(), e.value); break;
 		case Type::aux:        auxPots.reading (e.stem, e.value); break;
 		default: break;
 	}
-}
-
-void OneDeckComponent::rearmPotPickups()
-{
-	auxPots.rearm();
 }
 
 void OneDeckComponent::showPanel()
@@ -605,7 +597,6 @@ void OneDeckComponent::timerCallback()
 		panelCountdown = refreshHz / 2;
 		updatePanelOwner();
 	}
-	auxPots.watch();
 	showPanel();
 	creatorLink->showStatus();
 	rec.update (audio->usingJack() ? audio->jackClient().getClientName() : juce::String());

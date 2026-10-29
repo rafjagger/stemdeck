@@ -116,6 +116,15 @@ TEST (SectionFeatures, TheStemsByNameElseByOrder)
 	const auto shuffled = sections::rolesFor ({ "Vocals", "Bass", "Drums", "Other" });
 	EXPECT_EQ (shuffled.drums, 2);
 	EXPECT_EQ (shuffled.bass, 1);
+
+	// space4: the drum attacks are in TOPS (hats, snare), the low end in LOW (kick + bass).
+	const auto space4 = sections::rolesFor ({ "1 - low", "2 - tops", "3 - music", "4 - vocals" });
+	EXPECT_EQ (space4.drums, 1);
+	EXPECT_EQ (space4.bass, 0);
+
+	const auto slow = sections::rolesFor ({ "1 - slow", "2 - flow", "3 - other", "4 - vocals" });
+	EXPECT_EQ (slow.drums, 0) << "low only as the whole name";
+	EXPECT_EQ (slow.bass, 1);
 }
 
 // Real analysed grids never put the downbeat on a 10 ms slice boundary.

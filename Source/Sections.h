@@ -74,7 +74,8 @@ namespace sections
 	std::optional<Features> decode (const std::string& text);
 
 	// Which stem is the drums and which the bass: by name where the names
-	// say so ("drums", "kick" / "bass"), else the stem creator's order
+	// say so ("drums", "kick", space4's "tops" / "bass", space4's "low"),
+	// else the stem creator's order
 	// (1 drums, 2 bass, 3 other, 4 vocals) -- never both on one stem.
 	struct StemRoles
 	{

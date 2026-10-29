@@ -134,9 +134,10 @@ void OneDeckView::setSet (const StemSet& set)
 	thumbnails.setSet (set);
 	panel.setSet (set);
 	wave.setTitle (set.name);
+	const auto names = set.displayNames();
 	for (int s = 0; s < StemDeckPlayer::numStems; ++s)
 	{
-		const auto& name = set.stemNames[(size_t) s];
+		const auto& name = names[(size_t) s];
 		columns[(size_t) s]->setStemName (name.isNotEmpty() ? name : "STEM " + juce::String (s + 1));
 	}
 }

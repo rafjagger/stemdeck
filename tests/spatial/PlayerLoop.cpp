@@ -6,6 +6,7 @@
 #include "StemDeckPlayer.h"
 
 #include <algorithm>
+#include <iterator>
 #include <array>
 #include <cmath>
 #include <cstdio>
@@ -97,21 +98,41 @@ protected:
 	// WAV is memory-mapped by the player; FLAC, the library's format, is not.
 	enum class Format { wav, flac };
 
-	void load (const std::array<std::vector<float>, StemSet::numStems>& stems, double fileRate, Format format = Format::wav)
+	// The stems as files named `name`-N in the test's folder.
+	StemSet write (const std::array<std::vector<float>, StemSet::numStems>& stems, double fileRate, Format format,
+				   const juce::String& name = "stem")
 	{
 		juce::WavAudioFormat wav;
 		juce::FlacAudioFormat flac;
 		auto& writerFormat = format == Format::wav ? static_cast<juce::AudioFormat&> (wav) : flac;
 		const auto extension = format == Format::wav ? ".wav" : ".flac";
-		set.name = "loop";
+		StemSet written;
+		written.name = name;
 		for (int s = 0; s < StemSet::numStems; ++s)
 		{
-			set.files[(size_t) s] = folder.getChildFile ("stem" + juce::String (s) + extension);
-			set.stemNames[(size_t) s] = "stem" + juce::String (s);
-			writeStem (writerFormat, set.files[(size_t) s], stems[(size_t) s], fileRate, format == Format::wav ? 32 : 24);
+			written.files[(size_t) s] = folder.getChildFile (name + juce::String (s) + extension);
+			written.stemNames[(size_t) s] = "stem" + juce::String (s);
+			writeStem (writerFormat, written.files[(size_t) s], stems[(size_t) s], fileRate, format == Format::wav ? 32 : 24);
 		}
+		return written;
+	}
+
+	// As a deck stands loaded before PLAY: decoded, unless told not to wait.
+	void load (const std::array<std::vector<float>, StemSet::numStems>& stems, double fileRate, Format format = Format::wav,
+			   bool waitForDecoding = true)
+	{
+		set = write (stems, fileRate, format);
 		ASSERT_EQ (player.load (set), juce::String());
 		player.prepareToPlay (block, rate);
+		if (waitForDecoding)
+			ASSERT_TRUE (waitUntilReady());
+	}
+
+	bool waitUntilReady()
+	{
+		for (int waited = 0; waited < 20000 && ! player.isReady(); waited += 5)
+			juce::Thread::sleep (5);
+		return player.isReady();
 	}
 
 	// `passes` passes of the loop, played from its start.
@@ -506,7 +527,7 @@ protected:
 };
 }
 
-// FLAC stems are read through JUCE's BufferingAudioReader, which keeps only
+// FLAC stems were read through JUCE's BufferingAudioReader, which keeps only
 // what lies ahead of its last read and gives silence for anything it has not
 // buffered: every jump back to the loop's start read zeros until its thread
 // had decoded there again -- on the rig (03.0+240) 0 to 90 ms of silence at
@@ -531,4 +552,125 @@ TEST_F (PlayerLoopFlac, EveryPassIsTheLoopWithNoSilenceAtTheSeam)
 	for (size_t n = length + 64; n < looped.size(); ++n)
 		worst = std::max (worst, (double) std::abs (looped[n] - looped[n - length]));
 	EXPECT_LT (worst, 1.0e-6) << "every pass the same frames";
+}
+
+//==============================================================================
+// Since 2026-10-29 compressed stems are decoded whole into memory when the set
+// loads: any jump -- CUE, a seek, the jog's search, a click in the waveform,
+// a loop's first jump and every seam -- lands on decoded frames. Before, a
+// jump into what the buffered reader had not decoded read up to ~90 ms of
+// zeros, the first one included.
+TEST_F (PlayerLoopFlac, NoJumpStartsWithSilence)
+{
+	player.setPosition (1.0);
+	player.play();
+	const std::array<double, 5> jumps { 25.0, 11.7, 37.2, 2.4, 19.95 };
+	for (const auto to : jumps)
+	{
+		player.setPosition (to);   // a seek, the jog's search, a waveform click
+		const auto heard = playInRealTime (player, 0.25);
+		EXPECT_LT (longestSilence (heard, 0), (size_t) 4) << "frames of silence after a jump to " << to << " s";
+	}
+
+	// CUE: back to the cue point while standing, then PLAY.
+	player.pause();
+	player.setCuePoint (31.3);
+	player.setPosition (player.getCuePoint());
+	player.play();
+	EXPECT_LT (longestSilence (playInRealTime (player, 0.25), 0), (size_t) 4) << "frames of silence after CUE";
+}
+
+namespace
+{
+class PlayerLoopFlacLong : public PlayerLoopFlac, public ::testing::WithParamInterface<double> {};
+}
+
+// A loop longer than what was once held of its start (2 s): its first jump
+// -- far from where the deck played -- and its first seam, read from memory.
+TEST_P (PlayerLoopFlacLong, TheFirstJumpAndTheSeamAreNeverSilent)
+{
+	const auto length = GetParam();
+	const auto start = 30.0 - length;
+	player.setPosition (2.0);
+	player.play();
+	playInRealTime (player, 0.2);
+
+	player.setLoop (start, start + length);
+	const auto looped = playInRealTime (player, length + 0.5);
+	EXPECT_LT (longestSilence (looped, 0), (size_t) 4) << "frames of silence in a " << length << " s loop";
+	EXPECT_GE (player.getPosition(), start);
+	EXPECT_LT (player.getPosition(), start + length);
+}
+
+INSTANTIATE_TEST_SUITE_P (ThreeAndEightSeconds, PlayerLoopFlacLong, ::testing::Values (3.0, 8.0));
+
+namespace
+{
+class PlayerLoopFlacStart : public LoopFixture {};
+}
+
+// PLAY straight after loading, before the stems are decoded: the deck starts
+// once they are, from where it stands -- never zeros in the middle of the music.
+TEST_F (PlayerLoopFlacStart, PlayBeforeDecodingStartsWhenReady)
+{
+	const auto tones = toneMix();
+	load ({ tones, tones, tones, tones }, rate, Format::flac, false);
+	player.setPosition (12.0);
+	player.play();
+	const auto heard = playInRealTime (player, 1.0);
+	EXPECT_TRUE (player.isReady());
+
+	const auto first = (size_t) std::distance (heard.begin(), std::find_if (heard.begin(), heard.end(), [] (float v) { return v != 0.0f; }));
+	ASSERT_LT (first, heard.size()) << "nothing heard";
+	EXPECT_LT (longestSilence (heard, first), (size_t) 4) << "frames of silence once it started";
+	EXPECT_NEAR (player.getPosition(), 12.0 + (double) (heard.size() - first) / rate, 0.05) << "it started where it stood";
+}
+
+// The decoded stems are the set's memory: a reload frees the previous set's,
+// and the two are never held at once. A mapped WAV set holds none.
+TEST_F (PlayerLoopFlacStart, AReloadFreesThePreviousSetsMemory)
+{
+	const auto bytesOf = [] (double seconds) { return (juce::int64) StemSet::numStems * 2 * (juce::int64) std::llround (seconds * rate) * (juce::int64) sizeof (float); };
+	const auto tones = toneMix();
+	load ({ tones, tones, tones, tones }, rate, Format::flac);
+	EXPECT_EQ (player.decodedBytes(), bytesOf (trackSeconds));
+
+	const std::vector<float> shorter (tones.begin(), tones.begin() + (long) (10.0 * rate));
+	const auto second = write ({ shorter, shorter, shorter, shorter }, rate, Format::flac, "second");
+	ASSERT_EQ (player.load (second), juce::String());
+	juce::int64 most = player.decodedBytes();
+	for (int waited = 0; waited < 20000 && ! player.isReady(); waited += 1)
+	{
+		most = std::max (most, player.decodedBytes());
+		juce::Thread::sleep (1);
+	}
+	ASSERT_TRUE (player.isReady());
+	EXPECT_EQ (player.decodedBytes(), bytesOf (10.0)) << "the first set's memory is freed";
+	EXPECT_LE (most, bytesOf (trackSeconds)) << "never both sets at once";
+
+	const auto mapped = write ({ shorter, shorter, shorter, shorter }, rate, Format::wav, "mapped");
+	ASSERT_EQ (player.load (mapped), juce::String());
+	EXPECT_TRUE (player.isReady()) << "a mapped set plays at once";
+	EXPECT_EQ (player.decodedBytes(), 0);
+}
+
+// Not in the suite (it writes 4 x 7 minutes of FLAC): how long a set of the
+// library's size takes from load() to ready on this machine.
+// --gtest_also_run_disabled_tests --gtest_filter='*SevenMinute*'
+TEST_F (PlayerLoopFlacStart, DISABLED_LoadTimeOfASevenMinuteSet)
+{
+	constexpr double minutes = 7.0;
+	juce::Random random (29);
+	std::vector<float> music ((size_t) (minutes * 60.0 * rate));
+	for (size_t i = 0; i < music.size(); ++i)
+		music[i] = 0.2f * (random.nextFloat() - 0.5f) + 0.3f * (float) std::sin (2.0 * pi * 110.0 * (double) i / rate);
+	const auto seven = write ({ music, music, music, music }, rate, Format::flac, "seven");
+
+	const auto begin = juce::Time::getMillisecondCounterHiRes();
+	ASSERT_EQ (player.load (seven), juce::String());
+	const auto opened = juce::Time::getMillisecondCounterHiRes();
+	ASSERT_TRUE (waitUntilReady());
+	const auto ready = juce::Time::getMillisecondCounterHiRes();
+	std::printf ("7-minute 4-stem FLAC set: load() %.0f ms, ready after %.0f ms, %.1f MB decoded\n",
+			opened - begin, ready - begin, (double) player.decodedBytes() / 1.0e6);
 }

@@ -3,6 +3,9 @@
 #include "GridEdit.h"
 #include "Buses.h"
 
+#include <algorithm>
+#include <limits>
+
 
 // The session keeps one mix state per stem (Session.h counts them as the buses do).
 static_assert (StemDeckPlayer::numStems == buses::stemsPerDeck);
@@ -20,25 +23,38 @@ StemDeckPlayer::StemDeckPlayer (juce::AudioFormatManager& fm) : formatManager (f
 
 	diskThread.addTimeSliceClient (this);
 	diskThread.startThread (juce::Thread::Priority::normal);
-	bufferThread.startThread (juce::Thread::Priority::normal);
 }
 
 StemDeckPlayer::~StemDeckPlayer()
 {
+	decoders.removeAllJobs (true, 10000);
 	diskThread.removeTimeSliceClient (this);
 	diskThread.stopThread (2000);
 
-	{
-		const juce::ScopedLock sl (setLock);
-		loaded.reset(); // buffered readers must go before bufferThread stops
-	}
-
-	bufferThread.stopThread (2000);
+	const juce::ScopedLock sl (setLock);
+	loaded.reset();
 }
 
+StemDeckPlayer::LoadedSet::~LoadedSet()
+{
+	for (const auto& frames : decoded)
+		bytes -= (juce::int64) frames.getNumChannels() * frames.getNumSamples() * (juce::int64) sizeof (float);
+}
+
+bool StemDeckPlayer::isReady() const
+{
+	const juce::ScopedLock sl (setLock);
+	return loaded != nullptr && loaded->ready.load();
+}
+
+// Opens the stems and swaps the set in at once; the stems not mapped are
+// decoded afterwards by `decoders`, and the set is ready when they are. The
+// previous set is stopped and freed before the new one's memory is taken,
+// so a reload holds no more than the larger of the two.
 juce::String StemDeckPlayer::load (const StemSet& set)
 {
-	auto newSet = std::make_shared<LoadedSet>();
+	auto newSet = std::make_shared<LoadedSet> (decodedByteCount);
+	std::array<std::shared_ptr<juce::AudioFormatReader>, numStems> toDecode;
 
 	for (int i = 0; i < numStems; ++i)
 	{
@@ -48,18 +64,22 @@ juce::String StemDeckPlayer::load (const StemSet& set)
 		if (format == nullptr)
 			return "Unbekanntes Format: " + file.getFileName();
 
-		std::unique_ptr<juce::AudioFormatReader> reader;
+		juce::AudioFormatReader* reader = nullptr;
 
 		if (std::unique_ptr<juce::MemoryMappedAudioFormatReader> mapped { format->createMemoryMappedReader (file) };
 			mapped != nullptr && mapped->mapEntireFile())
 		{
-			newSet->mapped[(size_t) i] = mapped.get();
-			reader = std::move (mapped);
+			reader = mapped.get();
+			newSet->mapped[(size_t) i] = std::move (mapped);
 		}
-		else if (auto* plain = formatManager.createReaderFor (file))
+		else if (auto* plain = formatManager.createReaderFor (file); plain != nullptr && plain->lengthInSamples > 0)
 		{
-			// Keep ~10 s buffered ahead; the callback never blocks on it.
-			reader = std::make_unique<juce::BufferingAudioReader> (plain, bufferThread, (int) (plain->sampleRate * 10));
+			reader = plain;
+			toDecode[(size_t) i].reset (plain);
+		}
+		else
+		{
+			delete plain;
 		}
 
 		if (reader == nullptr)
@@ -71,9 +91,14 @@ juce::String StemDeckPlayer::load (const StemSet& set)
 			return "Stems haben unterschiedliche Samplerates: " + set.name;
 
 		newSet->length = juce::jmax (newSet->length, reader->lengthInSamples);
-		newSet->readers[(size_t) i] = std::move (reader);
-		newSet->files[(size_t) i] = file;
 	}
+
+	const auto numToDecode = (int) std::count_if (toDecode.begin(), toDecode.end(), [] (const auto& r) { return r != nullptr; });
+	newSet->pending = numToDecode;
+	newSet->ready = numToDecode == 0;
+
+	// The previous set's decoding stops before its memory goes.
+	decoders.removeAllJobs (true, 10000);
 
 	playing = false;
 	scratching = false;
@@ -85,16 +110,20 @@ juce::String StemDeckPlayer::load (const StemSet& set)
 	lengthInSamples = newSet->length;
 	seekTo (0);
 
-	std::shared_ptr<const LoopHead> oldHead;
 	{
 		const juce::ScopedLock sl (setLock);
 		std::swap (loaded, newSet);
-		std::swap (loopHead, oldHead);
 	}
 
-	// The previous set (now in newSet) is released here, outside the lock.
+	// The previous set (now in newSet) is released here, outside the lock,
+	// before the new one's stems take their memory.
+	newSet.reset();
 	resampler.flushBuffers();
 	updateResamplingRatio();
+
+	for (int s = 0; s < numStems; ++s)
+		if (auto reader = toDecode[(size_t) s])
+			decoders.addJob ([set = loaded, s, reader] { decodeStem (*set, s, *reader); });
 
 	if (keyLock.load())
 		buildStretchers();   // for this file's sample rate
@@ -177,61 +206,43 @@ void StemDeckPlayer::setLoop (double requestedStart, double requestedEnd)
 	if (end - start < (juce::int64) (rate * 0.01))
 		return;
 
-	updateLoopHead (start, end);
 	loopEnd = 0; // disable while the bounds change
 	loopStart = start;
 	loopEnd = end;
 	setPosition (startSeconds);
 }
 
-// Decodes the loop's first seconds for the stems the buffered reader plays,
-// before the playhead jumps there. Allocates and reads the files: never on
-// the audio thread.
-void StemDeckPlayer::updateLoopHead (juce::int64 start, juce::int64 end)
+// One stem, whole, into its set's memory, in pieces so a newer load can
+// stop it. The last stem done makes the set ready. A stem that cannot be
+// held or read stays silent, as an unreadable stretch of a file would.
+void StemDeckPlayer::decodeStem (LoadedSet& set, int stem, juce::AudioFormatReader& reader)
 {
-	std::shared_ptr<LoadedSet> set;
+	auto* job = juce::ThreadPoolJob::getCurrentThreadPoolJob();
+	const auto shouldStop = [job] { return job != nullptr && job->shouldExit(); };
+	auto& frames = set.decoded[(size_t) stem];
+	const auto channels = reader.numChannels > 1 ? 2 : 1;
+	const auto length = (int) juce::jmin (reader.lengthInSamples, (juce::int64) std::numeric_limits<int>::max());
+
+	try
 	{
-		const juce::ScopedLock sl (setLock);
-		set = loaded;
+		frames.setSize (channels, length);
+		set.bytes += (juce::int64) channels * length * (juce::int64) sizeof (float);
 	}
-	if (set == nullptr)
-		return;
-
-	const auto length = juce::jmin (end - start, (juce::int64) (loopHeadSeconds * set->sampleRate));
-	if (loopHead != nullptr && loopHead->start == start && loopHead->length == length)
-		return;
-
-	auto fresh = decodeLoopHead (formatManager, *set, start, length);
+	catch (const std::bad_alloc&)
 	{
-		const juce::ScopedLock sl (setLock);
-		if (set != loaded)
-			return;   // another set came meanwhile; the old head goes with `fresh`
-		std::swap (loopHead, fresh);
+		frames.setSize (0, 0);
 	}
-}
 
-std::shared_ptr<const StemDeckPlayer::LoopHead> StemDeckPlayer::decodeLoopHead (juce::AudioFormatManager& formats, const LoadedSet& set,
-																				juce::int64 start, juce::int64 length)
-{
-	auto head = std::make_shared<LoopHead>();
-	head->start = start;
-	head->length = length;
-
-	for (int s = 0; s < numStems; ++s)
+	constexpr int piece = 1 << 16;
+	for (int at = 0; at < frames.getNumSamples(); at += piece)
 	{
-		if (set.mapped[(size_t) s] != nullptr)
-			continue;
-		const std::unique_ptr<juce::AudioFormatReader> reader { formats.createReaderFor (set.files[(size_t) s]) };
-		if (reader == nullptr)
-			continue;   // read as before, through the buffered reader
-
-		auto& frames = head->stems[(size_t) s];
-		frames.setSize (2, (int) length);
-		reader->read (&frames, 0, (int) length, start, true, true);
-		if (reader->numChannels == 1)
-			frames.copyFrom (1, 0, frames, 0, 0, (int) length);
+		if (shouldStop())
+			return;
+		reader.read (&frames, at, juce::jmin (piece, length - at), at, true, channels > 1);
 	}
-	return head;
+
+	if (set.pending.fetch_sub (1) == 1)
+		set.ready.store (true, std::memory_order_release);
 }
 
 void StemDeckPlayer::clearLoop()
@@ -390,7 +401,8 @@ void StemDeckPlayer::getNextAudioBlock (const juce::AudioSourceChannelInfo& info
 		wasScratching = scratchNow;
 	}
 
-	if (loaded == nullptr || (! playing.load() && ! scratchNow))
+	// Before its stems are decoded the deck stands: PLAY waits for them.
+	if (loaded == nullptr || ! loaded->ready.load (std::memory_order_acquire) || (! playing.load() && ! scratchNow))
 	{
 		wasRendering = false;
 		info.clearActiveBufferRegion();
@@ -523,18 +535,8 @@ void StemDeckPlayer::renderScratch (const juce::AudioSourceChannelInfo& info)
 
 	for (int s = 0; s < numStems; ++s)
 	{
-		auto* reader = loaded->readers[(size_t) s].get();
 		float* dest[2] = { scratchBuffer.getWritePointer (s * 2), scratchBuffer.getWritePointer (s * 2 + 1) };
-
-		if (reader->numChannels == 1)
-		{
-			reader->read (dest, 1, first, count);
-			juce::FloatVectorOperations::copy (dest[1], dest[0], count);
-		}
-		else
-		{
-			reader->read (dest, 2, first, count);
-		}
+		readStemRun (s, dest, count, first);
 	}
 
 	// A record held still is silent, not a frozen sample: fade with speed.
@@ -643,40 +645,38 @@ void StemDeckPlayer::readRun (float* const* dest, int count, juce::int64 positio
 		readStemRun (s, dest + s * 2, count, position);
 }
 
-// One stem's `count` frames into dest[0], dest[1]; a mono stem on both.
-// Within a loop's head, from the head; the buffered reader is still asked
-// for one frame there, which moves its buffering to the playhead.
-void StemDeckPlayer::readStemRun (int stem, float* const* dest, int count, juce::int64 position)
+namespace
 {
-	const auto* head = loopHead.get();
-	const auto from = head == nullptr ? (juce::int64) -1 : position - head->start;
-	if (from < 0 || from >= head->length || head->stems[(size_t) stem].getNumSamples() == 0)
-	{
-		readStemFromFile (stem, dest, count, position);
-		return;
-	}
+// `count` frames of a decoded stem from `position` into dest[0], dest[1]:
+// zeros where it has none, a mono stem on both.
+void readDecoded (const juce::AudioBuffer<float>& frames, float* const* dest, int count, juce::int64 position)
+{
+	const auto length = (juce::int64) frames.getNumSamples();
+	const auto from = (int) juce::jlimit ((juce::int64) 0, (juce::int64) count, -position);
+	const auto to = (int) juce::jlimit ((juce::int64) from, (juce::int64) count, length - position);
 
-	const auto& frames = head->stems[(size_t) stem];
-	const auto n = (int) juce::jmin ((juce::int64) count, head->length - from);
 	for (int ch = 0; ch < 2; ++ch)
-		juce::FloatVectorOperations::copy (dest[ch], frames.getReadPointer (ch, (int) from), n);
-
-	if (n < count)
 	{
-		float* rest[2] = { dest[0] + n, dest[1] + n };
-		readStemFromFile (stem, rest, count - n, position + n);
-		return;
+		juce::FloatVectorOperations::clear (dest[ch], from);
+		if (to > from)
+			juce::FloatVectorOperations::copy (dest[ch] + from, frames.getReadPointer (juce::jmin (ch, frames.getNumChannels() - 1), (int) (position + from)), to - from);
+		juce::FloatVectorOperations::clear (dest[ch] + to, count - to);
 	}
-	float left = 0.0f, right = 0.0f;
-	float* nudge[2] = { &left, &right };
-	readStemFromFile (stem, nudge, 1, position + n);
+}
 }
 
-void StemDeckPlayer::readStemFromFile (int stem, float* const* dest, int count, juce::int64 position)
+// One stem's `count` frames into dest[0], dest[1]; a mono stem on both.
+// Audio thread, with setLock held and the set ready.
+void StemDeckPlayer::readStemRun (int stem, float* const* dest, int count, juce::int64 position)
 {
-	auto* reader = loaded->readers[(size_t) stem].get();
-	float* pair[2] = { dest[0], dest[1] };
+	auto* reader = loaded->mapped[(size_t) stem].get();
+	if (reader == nullptr)
+	{
+		readDecoded (loaded->decoded[(size_t) stem], dest, count, position);
+		return;
+	}
 
+	float* pair[2] = { dest[0], dest[1] };
 	if (reader->numChannels == 1)
 	{
 		reader->read (pair, 1, position, count);
@@ -886,7 +886,7 @@ int StemDeckPlayer::useTimeSlice()
 	{
 		const auto end = juce::jmin (set->length, start + numSamples);
 
-		for (auto* reader : set->mapped)
+		for (const auto& reader : set->mapped)
 			if (reader != nullptr)
 				for (auto s = juce::jmax ((juce::int64) 0, start); s < end; s += 256)
 					reader->touchSample (s);

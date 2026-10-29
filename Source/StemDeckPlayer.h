@@ -12,9 +12,16 @@
 // WAV/AIFF stems are memory-mapped and read directly in the audio callback,
 // which makes seeking and looping instant; a background thread touches the
 // pages ahead of the playhead so the callback does not wait on the disk.
-// Other formats (FLAC, the library's) fall back to a buffered reader, which
-// holds only what lies ahead of the playhead; a loop's first seconds are
-// decoded when it is set, so every pass starts from memory.
+// Other formats (FLAC, the library's; Ogg) are decoded whole into memory,
+// as float, by background jobs when the set loads -- every position is then
+// as instantly there as in a mapped file. Until they are done the deck is
+// not ready: it stands, silent, and PLAY pressed meanwhile starts it the
+// moment they are, from where it stands. A buffered reader in the meantime
+// would read zeros after any jump, and zeros were the fault this replaced.
+// Float, as the callback reads it, so 24-bit stems stay exact: a 7-minute
+// stereo stem at 44.1 kHz holds 148 MB, a set of four 593 MB, decoded in
+// ~0.3 s on a3coreV01. A reload frees the previous set before the next one
+// takes its memory, so a deck never holds more than the larger of the two.
 //
 // With key lock on, each stem goes through its Rubber Band stretcher
 // (KeyLockStretcher) before the resampler: the stretchers play the tempo,
@@ -44,6 +51,10 @@ public:
 	// Returns an error message, or an empty string on success.
 	juce::String load (const StemSet& set);
 	bool isLoaded() const { return lengthInSamples.load() > 0; }
+	// Loaded and every stem playable: mapped, or decoded into memory.
+	bool isReady() const;
+	// What the decoded stems hold, a set on its way out included.
+	juce::int64 decodedBytes() const { return decodedByteCount.load(); }
 
 	void play();
 	void pause();
@@ -154,27 +165,20 @@ public:
 	void releaseResources() override;
 
 private:
+	// A stem is either mapped or decoded. The decoding jobs write `decoded`
+	// before `ready`; the audio thread reads it only after.
 	struct LoadedSet
 	{
-		std::array<std::unique_ptr<juce::AudioFormatReader>, numStems> readers;
-		std::array<juce::MemoryMappedAudioFormatReader*, numStems> mapped {}; // non-owning, may be null
-		std::array<juce::File, numStems> files;
+		explicit LoadedSet (std::atomic<juce::int64>& byteCount) : bytes (byteCount) {}
+		~LoadedSet();
+		std::array<std::unique_ptr<juce::MemoryMappedAudioFormatReader>, numStems> mapped; // null: decoded
+		std::array<juce::AudioBuffer<float>, numStems> decoded;   // one channel for a mono stem
 		juce::int64 length = 0;
 		double sampleRate = 44100.0;
+		std::atomic<int> pending { 0 };   // stems still decoding
+		std::atomic<bool> ready { false };
+		std::atomic<juce::int64>& bytes;
 	};
-
-	// The first frames of a loop, for the stems not memory-mapped: JUCE's
-	// BufferingAudioReader drops what lies behind the playhead and reads
-	// silence where it holds nothing, so every jump back to the loop's start
-	// read zeros until its thread had decoded there again (03.0+240 on the
-	// rig: up to 90 ms at every seam). From here the buffered reader has
-	// loopHeadSeconds to get ahead again.
-	struct LoopHead
-	{
-		juce::int64 start = 0, length = 0;
-		std::array<juce::AudioBuffer<float>, numStems> stems;   // empty: a mapped stem, read in place
-	};
-	static constexpr double loopHeadSeconds = 2.0;
 
 	// The outgoing side of a seam: the track as it went on behind the loop's
 	// end, `done` frames of the fade-out gone. Audio thread only.
@@ -228,9 +232,7 @@ private:
 	void addSeamTail (int stem, float* const* dest, int count, const SeamTail& tail);
 	void readRun (float* const* dest, int count, juce::int64 position);
 	void readStemRun (int stem, float* const* dest, int count, juce::int64 position);
-	void readStemFromFile (int stem, float* const* dest, int count, juce::int64 position);
-	void updateLoopHead (juce::int64 start, juce::int64 end);
-	static std::shared_ptr<const LoopHead> decodeLoopHead (juce::AudioFormatManager&, const LoadedSet&, juce::int64 start, juce::int64 length);
+	static void decodeStem (LoadedSet&, int stem, juce::AudioFormatReader&);
 	void renderPreMute (int stem, const juce::AudioSourceChannelInfo& info);
 	void renderCue (int stem, int numSamples);
 	void renderScratch (const juce::AudioSourceChannelInfo& info);
@@ -246,14 +248,15 @@ private:
 
 	juce::AudioFormatManager& formatManager;
 	juce::TimeSliceThread diskThread { "Stem prefetch" };
-	juce::TimeSliceThread bufferThread { "Stem buffering" }; // for non-mappable formats
+	// One job per compressed stem, so a set decodes on as many cores.
+	juce::ThreadPool decoders { juce::ThreadPoolOptions{}.withThreadName ("Stem decoding").withNumberOfThreads (numStems) };
+	std::atomic<juce::int64> decodedByteCount { 0 };
 
 	// Held by the audio callback for its whole duration and by load() only for
 	// the pointer swap. The prefetch thread takes a shared copy, so disk I/O
 	// never happens while the lock is held.
-	juce::CriticalSection setLock;
+	mutable juce::CriticalSection setLock;
 	std::shared_ptr<LoadedSet> loaded;
-	std::shared_ptr<const LoopHead> loopHead;   // of `loaded`; swapped with it, under setLock
 	std::atomic<juce::int64> lengthInSamples { 0 };
 
 	std::atomic<bool> playing { false }, repeat { false };

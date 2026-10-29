@@ -471,6 +471,7 @@ TEST (OneDeckSession, ContinueIsKeptLikeRepeat)
 
 	Session twoDeck;
 	twoDeck.decks[0].continuePlay = true;
-	for (auto* deck : twoDeck.toXml()->getChildWithTagNameIterator ("Deck"))
+	const auto twoDeckXml = twoDeck.toXml();   // alive for the loop: the range would outlive a temporary
+	for (auto* deck : twoDeckXml->getChildWithTagNameIterator ("Deck"))
 		EXPECT_FALSE (deck->hasAttribute ("continue"));
 }

@@ -606,17 +606,18 @@ TEST_F (OneDeck, TheTransportStandsInTheFootRow)
 		keys.push_back (key->getBounds());
 	}
 	EXPECT_LT (panel.cueKey().getRight(), panel.playKey().getX());
-	EXPECT_EQ (panel.cueKey().getX(), foot.getX() + surface::metrics (rigViewWidth).gap) << "CUE at the hand's corner";
 	EXPECT_GE (panel.cueKey().getHeight(), 84) << "over 12 mm on the rig";
 	EXPECT_GE (panel.previousKey().getHeight(), 40);
 
 	const auto meters = view.outputs().getBounds();
 	EXPECT_TRUE (foot.contains (meters));
-	EXPECT_LT (panel.nextKey().getRight(), meters.getX()) << "the meters right of the transport";
+	EXPECT_LT (panel.playKey().getRight(), meters.getX()) << "the meters right of the transport";
 	for (const auto bus : outputs::oneDeck::meteredBuses)
 		EXPECT_TRUE (view.outputs().getLocalBounds().contains (view.outputs().meter (bus).getBounds()));
 
-	// The loop block between the track search and the meters (2026-10-28).
+	// The loop block at the left, the track search beside it, then CUE
+	// ("den loop block doch links neben CUE", "prev/next buttons links neben
+	// cue", 2026-10-28).
 	for (auto* key : { &panel.loopKey(), &panel.loopInKey(), &panel.loopOutKey() })
 	{
 		EXPECT_EQ (key->getParentComponent(), &view);
@@ -627,10 +628,11 @@ TEST_F (OneDeck, TheTransportStandsInTheFootRow)
 		keys.push_back (key->getBounds());
 		EXPECT_GE (key->getHeight(), 40) << "over 6 mm on the rig";
 	}
-	EXPECT_LT (panel.nextKey().getRight(), panel.loopKey().getX());
+	EXPECT_EQ (panel.loopKey().getX(), foot.getX() + surface::metrics (rigViewWidth).gap) << "the loop block at the left";
+	EXPECT_LT (panel.loopOutKey().getRight(), panel.previousKey().getX()) << "then the track search";
+	EXPECT_LT (panel.previousKey().getRight(), panel.cueKey().getX()) << "then CUE";
 	EXPECT_LT (panel.loopKey().getBottom(), panel.loopInKey().getY() + 1) << "LOOP on top";
 	EXPECT_LT (panel.loopInKey().getRight(), panel.loopOutKey().getX()) << "IN | OUT";
-	EXPECT_LT (panel.loopOutKey().getRight(), meters.getX());
 	EXPECT_EQ (panel.loopKey().getButtonText(), "LOOP") << "its state is its light, not its text";
 
 	// LOOP OFF left the deck column; REPEAT stayed in it.
@@ -722,6 +724,20 @@ TEST_F (OneDeck, TheLoopKeysLoopTheDeck)
 	panel.loopKey().onClick();
 	ASSERT_TRUE (player().hasLoop()) << "LOOP again goes back in";
 	EXPECT_NEAR (player().getLoop().getStart(), 0.5, 1e-3);
+	EXPECT_NEAR (player().getPosition(), 0.5, 0.01);
+
+	// OUT is a toggle: out of the loop, playing on; again, the loop from
+	// the same IN to the new playhead, on the beat.
+	panel.loopOutKey().onClick();
+	EXPECT_FALSE (player().hasLoop()) << "OUT exits";
+	EXPECT_TRUE (player().isPlaying());
+	panel.loopKey().onClick();
+	panel.loopKey().onClick();   // RELOOP and EXIT: LOOP keeps its role
+	player().setPosition (2.48);
+	panel.loopOutKey().onClick();
+	ASSERT_TRUE (player().hasLoop()) << "OUT again closes a loop";
+	EXPECT_NEAR (player().getLoop().getStart(), 0.5, 1e-3) << "from the same IN";
+	EXPECT_NEAR (player().getLoop().getEnd(), 2.5, 1e-3) << "to the new playhead, on the beat";
 	EXPECT_NEAR (player().getPosition(), 0.5, 0.01);
 }
 

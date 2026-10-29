@@ -8,8 +8,11 @@
 // (manual, "Looping"). Pure: no JUCE.
 //
 //   IN:    marks the loop's start at the playhead
-//   OUT:   after a mark, the loop from it to the playhead, playing at once
-//          from its start; without a mark, or before it, nothing
+//   OUT:   right after IN, the loop from the mark to the playhead, playing at
+//          once from its start; while looping, leaves the loop and plays on;
+//          pressed again, the loop from the same mark to the new playhead --
+//          a toggle (the maintainer, 2026-10-28). Without a mark, or before
+//          it, it closes nothing.
 //   LOOP:  looping, leaves the loop and plays on (EXIT); otherwise goes back
 //          into the last loop from its start (RELOOP)
 //
@@ -21,7 +24,8 @@ public:
 	void in (TransportDeck&);
 	void out (TransportDeck&);
 	void toggle (TransportDeck&);
-	// The SCS.3d's VINYL key: OUT when a mark lies before the playhead, IN otherwise.
+	// The SCS.3d's VINYL key: OUT when an IN pressed since the last loop lies
+	// before the playhead, IN otherwise -- it never leaves a loop.
 	void inOrOut (TransportDeck&);
 
 	bool isInMarked() const { return inMarked; }
@@ -33,7 +37,11 @@ public:
 
 private:
 	bool canCloseAt (double position) const;
+	void close (TransportDeck&);
+	void exit (TransportDeck&);
 
-	bool inMarked = false, hasStored = false;
+	// freshIn: IN pressed since the last loop was closed -- OUT then closes
+	// rather than leaves.
+	bool inMarked = false, freshIn = false, hasStored = false;
 	double inPoint = 0.0, storedStart = 0.0, storedEnd = 0.0;
 };

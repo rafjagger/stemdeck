@@ -14,6 +14,7 @@ namespace panel1
 
 		constexpr int stems = 4, endColumn = panel::columns - 1;
 		constexpr int cueRow = 0, playRow = 1, shiftRow = 0;
+		constexpr int loopRow = 2, loopInRow = 3, loopOutRow = 4;
 		// The pad rows' two keys, left then right, row 2 downwards.
 		constexpr std::array<std::array<Kind, 2>, 4> padRows { { { Kind::orbit, Kind::ping }, { Kind::rise, Kind::scat },
 																 { Kind::stemCue, Kind::stemMute }, { Kind::lengthDown, Kind::lengthUp } } };
@@ -58,6 +59,12 @@ namespace panel1
 			return { Kind::cue, -1 };
 		if (cell.col == 0 && cell.row == playRow)
 			return { Kind::play, -1 };
+		if (cell.col == 0 && cell.row == loopRow)
+			return { Kind::loop, -1 };
+		if (cell.col == 0 && cell.row == loopInRow)
+			return { Kind::loopIn, -1 };
+		if (cell.col == 0 && cell.row == loopOutRow)
+			return { Kind::loopOut, -1 };
 		if (cell.col == endColumn && cell.row == shiftRow)
 			return { Kind::shift, -1 };
 		if (cell.col < 1 || cell.col > 2 * stems || cell.row < panel::firstPadRow)
@@ -73,6 +80,9 @@ namespace panel1
 		{
 			case Kind::cue:   return { cueRow, 0 };
 			case Kind::play:  return { playRow, 0 };
+			case Kind::loop:    return { loopRow, 0 };
+			case Kind::loopIn:  return { loopInRow, 0 };
+			case Kind::loopOut: return { loopOutRow, 0 };
 			case Kind::shift: return { shiftRow, endColumn };
 			case Kind::none:  return { -1, -1 };
 			default: break;
@@ -129,6 +139,9 @@ namespace panel1
 					if (e.released) add (Event::Type::shiftUp);
 					break;
 				case Kind::play:       if (e.pressed) add (Event::Type::play); break;
+				case Kind::loop:       if (e.pressed) add (Event::Type::loop); break;
+				case Kind::loopIn:     if (e.pressed) add (Event::Type::loopIn); break;
+				case Kind::loopOut:    if (e.pressed) add (Event::Type::loopOut); break;
 				case Kind::stemCue:    if (e.pressed) add (Event::Type::stemCue); break;
 				case Kind::stemMute:   if (e.pressed) add (Event::Type::stemMute); break;
 				case Kind::lengthDown: if (e.pressed) add (Event::Type::lengthDown); break;
@@ -188,6 +201,10 @@ namespace panel1
 		light (out, { Kind::cue, -1 }, state.atCue ? lit (state.cueColour) : rest);
 		light (out, { Kind::play, -1 }, state.playing ? lit (state.playColour) : rest);
 		light (out, { Kind::shift, -1 }, state.shift ? lit (state.deckColour) : rest);
+		const auto loopKey = [&] (Kind kind, bool on) { light (out, { kind, -1 }, on ? lit (state.loopColour) : rest); };
+		loopKey (Kind::loop, state.looping);
+		loopKey (Kind::loopIn, state.looping || state.loopInMarked);
+		loopKey (Kind::loopOut, state.looping);
 
 		for (int stem = 0; stem < stems; ++stem)
 		{

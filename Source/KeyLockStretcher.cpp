@@ -149,6 +149,7 @@ void KeyLockStretcher::process (int count)
 {
 	const auto before = stretcher.available();
 	stretcher.process (inputs.data(), (size_t) count, false);
+	processed += count;
 	runs.produced (stretcher.available() - before, rate);
 }
 

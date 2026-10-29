@@ -41,7 +41,7 @@ TEST_F (DeckLoopTest, InMarksOutLoops)
 	EXPECT_DOUBLE_EQ (deck.out, 14.0);
 	EXPECT_DOUBLE_EQ (deck.at, 10.0) << "the loop plays from its start";
 	EXPECT_TRUE (deck.playing);
-	EXPECT_FALSE (loop.isInMarked());
+	EXPECT_TRUE (loop.isInMarked()) << "the mark stays: OUT closes from it again";
 }
 
 // "Quantized if the deck quantizes": the deck's grid places both ends.
@@ -155,4 +155,95 @@ TEST_F (DeckLoopTest, OneKeyInThenOut)
 	EXPECT_TRUE (deck.looping);
 	EXPECT_DOUBLE_EQ (deck.in, 9.0);
 	EXPECT_DOUBLE_EQ (deck.out, 13.0);
+}
+
+// OUT is a toggle (the maintainer, 2026-10-28): "wenn an ausmachen, läuft
+// weiter, loop out nochmal drücken schließt den loop an neuer stelle".
+TEST_F (DeckLoopTest, OutWhileLoopingLeavesTheLoopPlayingOn)
+{
+	deck.playing = true;
+	loopFrom (10.0, 14.0);
+	deck.at = 12.5;
+
+	loop.out (deck);
+	EXPECT_FALSE (deck.looping);
+	EXPECT_TRUE (deck.playing) << "playing on";
+	EXPECT_DOUBLE_EQ (deck.at, 12.5) << "from where it was";
+}
+
+TEST_F (DeckLoopTest, OutAgainClosesTheLoopFromTheSameInAtTheNewPlayhead)
+{
+	deck.playing = true;
+	loopFrom (10.0, 14.0);
+	deck.at = 12.0;
+	loop.out (deck);   // off
+
+	deck.at = 18.0;
+	loop.out (deck);
+	EXPECT_TRUE (deck.looping);
+	EXPECT_DOUBLE_EQ (deck.in, 10.0) << "the same IN";
+	EXPECT_DOUBLE_EQ (deck.out, 18.0) << "the new OUT";
+	EXPECT_DOUBLE_EQ (deck.at, 10.0);
+
+	loop.out (deck);
+	EXPECT_FALSE (deck.looping) << "and off again";
+}
+
+TEST_F (DeckLoopTest, OutAgainIsOnTheGridToo)
+{
+	deck.beat = 0.5;
+	loopFrom (10.0, 14.0);
+	deck.at = 12.0;
+	loop.out (deck);
+	deck.at = 17.9;
+	loop.out (deck);
+	EXPECT_DOUBLE_EQ (deck.in, 10.0);
+	EXPECT_DOUBLE_EQ (deck.out, 18.0);
+}
+
+// LOOP keeps its role: after OUT left the loop it goes back into that loop.
+TEST_F (DeckLoopTest, LoopReloopsTheLoopOutLeft)
+{
+	loopFrom (10.0, 14.0);
+	deck.at = 12.0;
+	loop.out (deck);
+	EXPECT_TRUE (loop.canReloop (deck));
+
+	deck.at = 30.0;
+	loop.toggle (deck);
+	EXPECT_TRUE (deck.looping);
+	EXPECT_DOUBLE_EQ (deck.in, 10.0);
+	EXPECT_DOUBLE_EQ (deck.out, 14.0);
+	EXPECT_DOUBLE_EQ (deck.at, 10.0);
+}
+
+// A loop set elsewhere (the overview drag) is left by OUT as well; with no
+// mark a second OUT has nothing to close from.
+TEST_F (DeckLoopTest, OutLeavesALoopSetElsewhereAndWithoutAMarkDoesNoMore)
+{
+	deck.setLoop (3.0, 5.0);
+	deck.at = 4.0;
+	loop.out (deck);
+	EXPECT_FALSE (deck.looping);
+	deck.at = 8.0;
+	loop.out (deck);
+	EXPECT_FALSE (deck.looping);
+}
+
+// The SCS.3d's one key stays IN then OUT: after a loop the next press marks
+// anew, it does not leave the loop.
+TEST_F (DeckLoopTest, OneKeyMarksAnewAfterALoop)
+{
+	deck.at = 10.0;
+	loop.inOrOut (deck);
+	deck.at = 14.0;
+	loop.inOrOut (deck);
+	ASSERT_TRUE (deck.looping);
+	deck.at = 11.0;
+	loop.inOrOut (deck);
+	EXPECT_TRUE (deck.looping) << "a new mark, the loop plays on";
+	deck.at = 12.0;
+	loop.inOrOut (deck);
+	EXPECT_DOUBLE_EQ (deck.in, 11.0);
+	EXPECT_DOUBLE_EQ (deck.out, 12.0);
 }

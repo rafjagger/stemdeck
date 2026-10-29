@@ -66,6 +66,8 @@ add_executable(stemdeck-tests
     ${CMAKE_SOURCE_DIR}/Source/MeterBallistics.cpp
     Workspaces.cpp
     ${CMAKE_SOURCE_DIR}/Source/Workspaces.cpp
+    SpawnOutput.cpp
+    ${CMAKE_SOURCE_DIR}/Source/SpawnOutput.cpp
     KeyboardPolicy.cpp
     ${CMAKE_SOURCE_DIR}/Source/KeyboardPolicy.cpp
     FolderChoice.cpp
@@ -204,6 +206,7 @@ add_executable(stemdeck-spatial-tests
     spatial/OneDeck.cpp
     spatial/OneDeckSync.cpp
     spatial/PlayerTempo.cpp
+    spatial/PlayerLoop.cpp
     spatial/StemCreatorLock.cpp
     spatial/AnalysisCache.cpp
     spatial/Recorder.cpp

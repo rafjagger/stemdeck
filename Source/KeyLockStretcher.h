@@ -52,6 +52,9 @@ public:
 
 	// The playhead: where the output is in the track, latency taken off.
 	double position() const { return map.position() - keylock::lagCorrection (alignment, rate, startRate); }
+	// Frames handed to Rubber Band so far: the stretcher's work, for tests.
+	std::int64_t framesProcessed() const { return processed; }
+
 	// The reader is past the track's end; what comes now is silence.
 	bool hasEnded() const { return ended; }
 
@@ -82,4 +85,5 @@ private:
 	std::int64_t cursor = 0;   // where the reader goes on
 	bool ended = false;
 	std::size_t toDiscard = 0;
+	std::int64_t processed = 0;
 };

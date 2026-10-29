@@ -12,7 +12,16 @@
 // WAV/AIFF stems are memory-mapped and read directly in the audio callback,
 // which makes seeking and looping instant; a background thread touches the
 // pages ahead of the playhead so the callback does not wait on the disk.
-// Other formats fall back to a buffered reader.
+// Other formats (FLAC, the library's; Ogg) are decoded whole into memory,
+// as float, by background jobs when the set loads -- every position is then
+// as instantly there as in a mapped file. Until they are done the deck is
+// not ready: it stands, silent, and PLAY pressed meanwhile starts it the
+// moment they are, from where it stands. A buffered reader in the meantime
+// would read zeros after any jump, and zeros were the fault this replaced.
+// Float, as the callback reads it, so 24-bit stems stay exact: a 7-minute
+// stereo stem at 44.1 kHz holds 148 MB, a set of four 593 MB, decoded in
+// ~0.3 s on a3coreV01. A reload frees the previous set before the next one
+// takes its memory, so a deck never holds more than the larger of the two.
 //
 // With key lock on, each stem goes through its Rubber Band stretcher
 // (KeyLockStretcher) before the resampler: the stretchers play the tempo,
@@ -25,12 +34,27 @@ public:
 	static constexpr int numStems = StemSet::numStems;
 	static constexpr int numOutputChannels = numStems * 2;
 
+	// The loop's seam, in what is read -- before the stretchers, so they
+	// read one stream and never start again. From the seam on, the loop's
+	// start plays exactly as it is, at full level from its first frame, as
+	// on a CDJ; the track as it went on behind the end is added under it,
+	// fading out over seamFade frames (a raised cosine) -- a micro-fade of
+	// the outgoing side only. Nothing from before the loop's start is ever
+	// heard. 0, a bare cut: on music snapped to the grid it clicks no more
+	// than the music does (tests/spatial/PlayerLoop.cpp), and 16 or 32 only
+	// cost level under key lock -- measured 2026-10-29.
+	static constexpr int seamFade = 0;
+
 	explicit StemDeckPlayer (juce::AudioFormatManager& formatManager);
 	~StemDeckPlayer() override;
 
 	// Returns an error message, or an empty string on success.
 	juce::String load (const StemSet& set);
 	bool isLoaded() const { return lengthInSamples.load() > 0; }
+	// Loaded and every stem playable: mapped, or decoded into memory.
+	bool isReady() const;
+	// What the decoded stems hold, a set on its way out included.
+	juce::int64 decodedBytes() const { return decodedByteCount.load(); }
 
 	void play();
 	void pause();
@@ -133,16 +157,35 @@ public:
 
 	// AudioSource: the buffer must have at least numOutputChannels channels.
 	void prepareToPlay (int samplesPerBlockExpected, double sampleRate) override;
+
+	// Frames the key lock stretchers have processed so far: their work, for
+	// the tests. Audio thread, or a test's own.
+	std::int64_t stretcherWork() const;
 	void getNextAudioBlock (const juce::AudioSourceChannelInfo& bufferToFill) override;
 	void releaseResources() override;
 
 private:
+	// A stem is either mapped or decoded. The decoding jobs write `decoded`
+	// before `ready`; the audio thread reads it only after.
 	struct LoadedSet
 	{
-		std::array<std::unique_ptr<juce::AudioFormatReader>, numStems> readers;
-		std::array<juce::MemoryMappedAudioFormatReader*, numStems> mapped {}; // non-owning, may be null
+		explicit LoadedSet (std::atomic<juce::int64>& byteCount) : bytes (byteCount) {}
+		~LoadedSet();
+		std::array<std::unique_ptr<juce::MemoryMappedAudioFormatReader>, numStems> mapped; // null: decoded
+		std::array<juce::AudioBuffer<float>, numStems> decoded;   // one channel for a mono stem
 		juce::int64 length = 0;
 		double sampleRate = 44100.0;
+		std::atomic<int> pending { 0 };   // stems still decoding
+		std::atomic<bool> ready { false };
+		std::atomic<juce::int64>& bytes;
+	};
+
+	// The outgoing side of a seam: the track as it went on behind the loop's
+	// end, `done` frames of the fade-out gone. Audio thread only.
+	struct SeamTail
+	{
+		juce::int64 from = 0;
+		int done = 1 << 30;   // past any fade: none
 	};
 
 	// Reads the stems at the playhead; this is what the resampler pulls from.
@@ -163,6 +206,7 @@ private:
 		std::int64_t jumpFrom (std::int64_t position) override;
 		StemDeckPlayer& owner;
 		const int stem;
+		SeamTail seam;
 	};
 
 	// A deck's stretchers, one per stem, built and swapped as one.
@@ -184,8 +228,11 @@ private:
 	};
 
 	void readStems (const juce::AudioSourceChannelInfo& info);
+	juce::int64 inLoop (juce::int64 position) const;
+	void addSeamTail (int stem, float* const* dest, int count, const SeamTail& tail);
 	void readRun (float* const* dest, int count, juce::int64 position);
 	void readStemRun (int stem, float* const* dest, int count, juce::int64 position);
+	static void decodeStem (LoadedSet&, int stem, juce::AudioFormatReader&);
 	void renderPreMute (int stem, const juce::AudioSourceChannelInfo& info);
 	void renderCue (int stem, int numSamples);
 	void renderScratch (const juce::AudioSourceChannelInfo& info);
@@ -201,19 +248,23 @@ private:
 
 	juce::AudioFormatManager& formatManager;
 	juce::TimeSliceThread diskThread { "Stem prefetch" };
-	juce::TimeSliceThread bufferThread { "Stem buffering" }; // for non-mappable formats
+	// One job per compressed stem, so a set decodes on as many cores.
+	juce::ThreadPool decoders { juce::ThreadPoolOptions{}.withThreadName ("Stem decoding").withNumberOfThreads (numStems) };
+	std::atomic<juce::int64> decodedByteCount { 0 };
 
 	// Held by the audio callback for its whole duration and by load() only for
 	// the pointer swap. The prefetch thread takes a shared copy, so disk I/O
 	// never happens while the lock is held.
-	juce::CriticalSection setLock;
+	mutable juce::CriticalSection setLock;
 	std::shared_ptr<LoadedSet> loaded;
 	std::atomic<juce::int64> lengthInSamples { 0 };
 
 	std::atomic<bool> playing { false }, repeat { false };
 	std::atomic<juce::int64> readPosition { 0 };
 	std::atomic<double> positionStamp { 0.0 };
-	std::atomic<juce::int64> loopStart { 0 }, loopEnd { 0 }; // loopEnd == 0: no loop
+	// loopEnd == 0: no loop. While there is one the playhead never passes its
+	// end: the audio thread wraps at it, and a jump behind it lands in it.
+	std::atomic<juce::int64> loopStart { 0 }, loopEnd { 0 };
 	std::atomic<double> fileSampleRate { 44100.0 }, deviceSampleRate { 44100.0 }, speed { 1.0 };
 	std::atomic<double> pitchBend { 1.0 }, syncNudge { 1.0 };
 	std::atomic<double> gridBpm { 0.0 }, gridFirstBeat { 0.0 };
@@ -256,6 +307,9 @@ private:
 	const Stretchers* stretchersInUse = nullptr;
 	int fadeRemaining = 0, fadeLength = 1;
 	juce::AudioBuffer<float> fadeBuffer;
+
+	juce::AudioBuffer<float> seamScratch { 2, juce::jmax (1, seamFade) };
+	SeamTail plainSeam;   // the plain path's
 	std::array<KeyLockInput, numStems> keyLockInputs { { { *this, 0 }, { *this, 1 }, { *this, 2 }, { *this, 3 } } };
 	KeyLockSource keyLockSource { *this };
 	juce::ResamplingAudioSource keyLockResampler { &keyLockSource, false, numOutputChannels };

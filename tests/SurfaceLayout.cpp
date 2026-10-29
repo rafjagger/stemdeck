@@ -527,10 +527,9 @@ TEST (SurfaceLayout, GridEditRowHasFiveKeysUnderTheNudgeKeys)
 
 //==============================================================================
 // The one-deck screen (2026-10-28): its outputs row lost the phones and the
-// 16 B-format bars, and the transport moved into the room -- CUE | PLAY as
-// tall as the row at the left, the track search stacked beside them, the
-// loop block (LOOP over IN | OUT) beside that, the three meters' card at the
-// right.
+// 16 B-format bars, and the transport moved into the room -- the loop block
+// (LOOP over IN | OUT) at the left, the track search stacked beside it, CUE |
+// PLAY as tall as the row after them, the three meters' card at the right.
 namespace
 {
 	// OneDeckView's foot row on the rig: 15 % of its 756 x 718.
@@ -540,7 +539,7 @@ namespace
 	Rect footRow (int w, int h) { return Rect { 0, 0, w, h }; }
 }
 
-TEST (SurfaceLayout, OneDeckFootHasCueThenPlayAtTheLeftAsTallAsTheRow)
+TEST (SurfaceLayout, OneDeckFootHasCueThenPlayAsTallAsTheRow)
 {
 	for (const auto& [w, h] : footRows)
 	{
@@ -552,7 +551,6 @@ TEST (SurfaceLayout, OneDeckFootHasCueThenPlayAtTheLeftAsTallAsTheRow)
 		EXPECT_TRUE (row.contains (foot.metersTile)) << sizeName (w, h);
 		EXPECT_FALSE (t.tile.intersects (foot.metersTile)) << sizeName (w, h);
 		EXPECT_LT (t.tile.right(), foot.metersTile.x) << "the meters at the right, " << sizeName (w, h);
-		EXPECT_EQ (t.tile.x, row.x) << "the transport at the hand's corner";
 
 		for (const auto& key : { t.cue, t.play, t.previous, t.next })
 			EXPECT_TRUE (t.tile.contains (key)) << sizeName (w, h);
@@ -562,7 +560,7 @@ TEST (SurfaceLayout, OneDeckFootHasCueThenPlayAtTheLeftAsTallAsTheRow)
 		EXPECT_EQ (t.cue.h, t.play.h);
 		EXPECT_GE (t.cue.h * 10, h * 8) << "nearly the row's height, " << sizeName (w, h);
 
-		EXPECT_LT (t.play.right(), t.previous.x) << "track search after PLAY";
+		EXPECT_LT (t.next.right(), t.cue.x) << "track search before CUE";
 		EXPECT_EQ (t.previous.x, t.next.x);
 		EXPECT_EQ (t.previous.w, t.next.w);
 		EXPECT_LT (t.previous.bottom(), t.next.y + 1) << "|< over >|";
@@ -589,9 +587,11 @@ TEST (SurfaceLayout, OneDeckTransportIsFingerSizedOnTheRig)
 	}
 }
 
-// The transport band from right to left (2026-10-28): the meters; the loop
-// block, LOOP on top, LOOP IN | LOOP OUT under it; |< over >|; PLAY; CUE.
-TEST (SurfaceLayout, OneDeckFootRunsMetersLoopSearchPlayCueFromTheRight)
+// The transport band from left to right (2026-10-28, "den loop block doch
+// links neben CUE", then "prev/next buttons links neben cue"): the loop
+// block, LOOP on top, LOOP IN | LOOP OUT under it; |< over >|; CUE; PLAY;
+// the meters.
+TEST (SurfaceLayout, OneDeckFootRunsLoopSearchCuePlayMetersFromTheLeft)
 {
 	for (const auto& [w, h] : footRows)
 	{
@@ -601,7 +601,8 @@ TEST (SurfaceLayout, OneDeckFootRunsMetersLoopSearchPlayCueFromTheRight)
 
 		for (const auto& key : { t.loop, t.loopIn, t.loopOut })
 			EXPECT_TRUE (t.tile.contains (key)) << size;
-		EXPECT_LT (t.loopOut.right(), foot.metersTile.x) << "the meters at the far right, " << size;
+		EXPECT_LT (t.play.right(), foot.metersTile.x) << "the meters at the far right, " << size;
+		EXPECT_LE (t.loop.x, t.tile.x + surface::metrics (w).gap) << "the loop block at the far left, " << size;
 		EXPECT_LT (t.loopIn.right(), t.loopOut.x) << "IN before OUT, " << size;
 		EXPECT_EQ (t.loopIn.y, t.loopOut.y);
 		EXPECT_LE (std::abs (t.loopIn.w - t.loopOut.w), 1) << "IN and OUT alike";
@@ -613,9 +614,9 @@ TEST (SurfaceLayout, OneDeckFootRunsMetersLoopSearchPlayCueFromTheRight)
 		EXPECT_EQ (t.loop.y, t.previous.y) << "the loop block lines up with the track search";
 		EXPECT_EQ (t.loopIn.bottom(), t.next.bottom());
 
-		EXPECT_LT (t.next.right(), t.loop.x) << "the track search left of the loop block, " << size;
-		EXPECT_LT (t.play.right(), t.previous.x) << "PLAY left of the track search, " << size;
-		EXPECT_LT (t.cue.right(), t.play.x) << "CUE at the far left, " << size;
+		EXPECT_LT (t.loopOut.right(), t.previous.x) << "the loop block left of the track search, " << size;
+		EXPECT_LT (t.previous.right(), t.cue.x) << "the track search left of CUE, " << size;
+		EXPECT_LT (t.cue.right(), t.play.x) << "CUE before PLAY, " << size;
 
 		for (const auto& small : { t.previous, t.next, t.loop, t.loopIn, t.loopOut })
 			EXPECT_LT (small.w * small.h, t.cue.w * t.cue.h) << "CUE and PLAY are the biggest, " << size;

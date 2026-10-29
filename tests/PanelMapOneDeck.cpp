@@ -64,12 +64,22 @@ TEST (PanelMapOneDeck, TransportAndShiftKeysSitInTheEndColumns)
 	EXPECT_EQ (panel1::controlAt ({ 0, 9 }).kind, Kind::shift);
 }
 
+// Under CUE and PLAY, the screen's loop block stood on end: LOOP, IN, OUT.
+TEST (PanelMapOneDeck, LoopKeysSitUnderCueAndPlay)
+{
+	EXPECT_EQ (panel1::controlAt ({ 2, 0 }).kind, Kind::loop);
+	EXPECT_EQ (panel1::controlAt ({ 3, 0 }).kind, Kind::loopIn);
+	EXPECT_EQ (panel1::controlAt ({ 4, 0 }).kind, Kind::loopOut);
+	for (const auto kind : { Kind::loop, Kind::loopIn, Kind::loopOut })
+		EXPECT_EQ (panel1::controlAt (panel1::cellOf ({ kind, -1 })).kind, kind);
+}
+
 TEST (PanelMapOneDeck, UnassignedKeysAreNone)
 {
 	EXPECT_EQ (panel1::controlAt ({ 1, 9 }).kind, Kind::none);
+	EXPECT_EQ (panel1::controlAt ({ 5, 0 }).kind, Kind::none);
 	for (int row = 2; row < panel::rows; ++row)
-		for (const int col : { 0, 9 })
-			EXPECT_EQ (panel1::controlAt ({ row, col }).kind, Kind::none) << row << "," << col;
+		EXPECT_EQ (panel1::controlAt ({ row, 9 }).kind, Kind::none) << row << ",9";
 	// Not a key at all.
 	EXPECT_EQ (panel1::controlAt ({ 0, 4 }).kind, Kind::none);
 }
@@ -155,6 +165,22 @@ TEST (PanelMapOneDeck, PlayWhileCueIsHeldComesThroughAlone)
 	events = decoder.feed (idleFrame());
 	ASSERT_EQ (events.size(), 1u);
 	EXPECT_EQ (events[0].type, Event::Type::cueUp);
+}
+
+TEST (PanelMapOneDeck, LoopKeysReportTheirPressOnly)
+{
+	InputDecoder decoder;
+	const std::array<std::pair<Cell, Event::Type>, 3> keys { { { { 2, 0 }, Event::Type::loop },
+															   { { 3, 0 }, Event::Type::loopIn },
+															   { { 4, 0 }, Event::Type::loopOut } } };
+	for (const auto& [cell, type] : keys)
+	{
+		const auto events = decoder.feed (pressing (cell));
+		ASSERT_EQ (events.size(), 1u) << cell.row;
+		EXPECT_EQ (events[0].type, type) << cell.row;
+		EXPECT_TRUE (decoder.feed (pressing (cell)).empty()) << "held: nothing more";
+		EXPECT_TRUE (decoder.feed (idleFrame()).empty()) << "no release";
+	}
 }
 
 TEST (PanelMapOneDeck, LengthStemCueAndMuteKeys)
@@ -248,9 +274,34 @@ TEST (PanelMapOneDeckLeds, EverythingAtRestIsTheDeckColourAndUnassignedIsDark)
 	EXPECT_EQ (ledAtCell (leds, 2, 1), rest);
 	EXPECT_EQ (ledAtCell (leds, 4, 8), rest);
 	EXPECT_EQ (ledAtCell (leds, 1, 9), Rgb {});
+	for (int row = 2; row < 5; ++row)
+		EXPECT_EQ (ledAtCell (leds, row, 0), rest) << "the loop keys rest, " << row;
+	EXPECT_EQ (ledAtCell (leds, 5, 0), Rgb {});
 	for (int row = 2; row < panel::rows; ++row)
-		for (const int col : { 0, 9 })
-			EXPECT_EQ (ledAtCell (leds, row, col), Rgb {}) << row << "," << col;
+		EXPECT_EQ (ledAtCell (leds, row, 9), Rgb {}) << row << ",9";
+}
+
+// As the screen's keys: LOOP and OUT lit while looping, IN while looping or
+// while its mark waits for OUT; in the loop colour.
+TEST (PanelMapOneDeckLeds, LoopKeysLightAsTheScreensDo)
+{
+	auto state = quietState();
+	state.loopColour = { 95, 176, 255 };
+	const auto rest = panel::base (state.deckColour);
+	const auto lit = panel::vivid (state.loopColour);
+
+	state.loopInMarked = true;
+	auto leds = panel1::leds (state, 0.0);
+	EXPECT_EQ (ledAtCell (leds, 2, 0), rest);
+	EXPECT_EQ (ledAtCell (leds, 3, 0), lit);
+	EXPECT_EQ (ledAtCell (leds, 4, 0), rest);
+
+	state.loopInMarked = false;
+	state.looping = true;
+	leds = panel1::leds (state, 0.0);
+	EXPECT_EQ (ledAtCell (leds, 2, 0), lit);
+	EXPECT_EQ (ledAtCell (leds, 3, 0), lit);
+	EXPECT_EQ (ledAtCell (leds, 4, 0), lit);
 }
 
 TEST (PanelMapOneDeckLeds, ARunningShotLightsInTheStemColour)

@@ -36,7 +36,7 @@ public:
 	void refresh();
 
 	// The stems' names, each at the start of its lane, in its colour.
-	void setStemNames (const std::array<juce::String, StemSet::numStems>& names) { stemNames = names; repaint(); }
+	void setLoadedSlots (const std::array<bool, StemSet::numStems>& loaded) { loadedSlots = loaded; repaint(); }
 
 	void paint (juce::Graphics& g) override;
 	void resized() override;
@@ -58,7 +58,7 @@ private:
 
 	bool dragging = false;
 	float dragStartX = 0.0f, dragEndX = 0.0f;
-	std::array<juce::String, StemSet::numStems> stemNames;
+	std::array<bool, StemSet::numStems> loadedSlots { true, true, true, true };
 };
 
 //==============================================================================

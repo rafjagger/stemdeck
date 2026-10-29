@@ -25,7 +25,9 @@ class StemColumn : public juce::Component
 public:
 	StemColumn (StemDeckPlayer&, DeckSpatialPorts&, int stem, std::function<bool()> takeShift);
 
-	void setStemName (const juce::String&);
+	// Whether a file is on this slot; an empty one is drawn dim.
+	void setLoaded (bool);
+	juce::Label& header() { return nameLabel; }
 	// The owner's timer: the shot's state, the viewer, CUE and MUTE as the player has them.
 	void refresh();
 

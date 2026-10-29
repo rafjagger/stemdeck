@@ -273,16 +273,9 @@ void DeckPanel::restoreState (const DeckSession& state)
 void DeckPanel::setSet (const StemSet& set)
 {
 	titleLabel.setText (set.name, juce::dontSendNotification);
-	juce::StringArray names;
-
-	for (const auto& n : set.stemNames)
-		names.add (n);
-
-	stemsLabel.setText ("Stems: " + names.joinIntoString (" / "), juce::dontSendNotification);
-	std::array<juce::String, StemSet::numStems> labels;
-	for (int s = 0; s < StemSet::numStems; ++s)
-		labels[(size_t) s] = juce::String (stemLaneLabel (set.stemNames[(size_t) s].toStdString(), s));
-	overview.setStemNames (labels);
+	// The slots by number: anything can be in a track (2026-10-29).
+	stemsLabel.setText ("Stems: " + juce::String (loadedSlotsText (set.loadedSlots())), juce::dontSendNotification);
+	overview.setLoadedSlots (set.loadedSlots());
 	cuePlay.reset();
 	deckLoop.reset();
 }

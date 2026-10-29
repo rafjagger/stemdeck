@@ -19,6 +19,10 @@ namespace Theme
 	inline const juce::Colour loop         { 0xff5fb0ff };
 	inline const juce::Colour aux          { 0xff9b6bff };
 
+	// An empty slot (a set of fewer than four files): its column and its
+	// lane's number at this alpha -- there, findable, plainly not playing.
+	inline constexpr float emptySlotAlpha = 0.3f;
+
 	inline juce::Colour stem (int index)
 	{
 		static const juce::Colour colours[] = { juce::Colour (0xffe8a33d), juce::Colour (0xff4fb3bf),

@@ -2,6 +2,7 @@
 #include "Theme.h"
 #include "Waveforms.h"
 #include "StemJob.h"
+#include "StemNames.h"
 #include "FolderStep.h"
 #include "LibraryFolders.h"
 
@@ -337,7 +338,7 @@ const StemSet* StemLibrary::neighbourInFolder (const juce::String& setId, int di
 	{
 		if (idFor (*set) == setId)
 			current = folders.size();
-		folders.push_back (set->files[0].getParentDirectory().getFullPathName().toStdString());
+		folders.push_back (set->firstFile().getParentDirectory().getFullPathName().toStdString());
 	}
 
 	if (! current)
@@ -481,7 +482,7 @@ void StemLibrary::paintCell (juce::Graphics& g, int row, int columnId, int width
 	switch (columnId)
 	{
 		case nameColumn:   text = set.name; break;
-		case stemsColumn:  { juce::StringArray n; for (const auto& s : set.stemNames) n.add (s); text = n.joinIntoString (" / "); break; }
+		case stemsColumn:  text = juce::String (loadedSlotsText (set.loadedSlots())); break;
 		case bpmColumn:    { const auto bpm = bpmOf (set); text = bpm > 0.0 ? juce::String (bpm, 2) : juce::String(); break; }
 		case lengthColumn: text = Theme::formatTime (set.lengthSeconds).upToLastOccurrenceOf (".", false, false); break;
 		case artistColumn: text = set.artist; break;

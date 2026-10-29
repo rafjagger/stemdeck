@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <string>
 
 // How stem files are named, both ways. Pure: no JUCE, testable.
@@ -28,3 +29,15 @@ std::string sanitiseName (const std::string& name, const std::string& fallback);
 // The label on stem `stem`'s lane: the name, numbered unless it already
 // starts with its number ("1 - drums" stays, "DUB" becomes "1 DUB").
 std::string stemLaneLabel (const std::string& name, int stem);
+
+// What a set's stems are called on screen, from their suffixes: the name
+// without its bus number ("1 - drums" and "1.drums" show "drums"). The
+// stemseparator's space4 set ("1 - low", "2 - tops", "3 - music",
+// "4 - vocals") shows LOW, TOPS, MUSIC, VOCALS -- in capitals, to tell its
+// jobs from the old drums/bass/other/vocals at a glance. A suffix that is not
+// a numbered name ("DUB", "001") stays as it is.
+std::array<std::string, 4> stemDisplayNames (const std::array<std::string, 4>& suffixes);
+
+// The name part of a numbered suffix, lower case ("1 - LOW" -> "low"); the
+// whole suffix in lower case when it has no number in front.
+std::string stemWord (const std::string& suffix);

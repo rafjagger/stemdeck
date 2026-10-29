@@ -12,6 +12,25 @@ namespace
 		const auto end = s.find_last_not_of (characters);
 		return end == std::string::npos ? std::string() : s.substr (0, end + 1);
 	}
+
+	// "1 - drums", "1.drums": one or two digits, separators, a name.
+	std::string nameAfterNumber (const std::string& suffix)
+	{
+		const auto digitsEnd = suffix.find_first_not_of ("0123456789");
+		if (digitsEnd == 0 || digitsEnd == std::string::npos || digitsEnd > 2)
+			return {};
+		const auto nameStart = suffix.find_first_not_of (" -_.", digitsEnd);
+		if (nameStart == digitsEnd || nameStart == std::string::npos)
+			return {};
+		return suffix.substr (nameStart);
+	}
+
+	std::string changeCase (std::string s, int (*convert) (int))
+	{
+		for (auto& c : s)
+			c = (char) convert ((unsigned char) c);
+		return s;
+	}
 }
 
 bool splitStemName (const std::string& baseName, std::string& prefix, std::string& suffix)
@@ -83,4 +102,28 @@ std::string stemLaneLabel (const std::string& name, int stem)
 	if (std::isdigit ((unsigned char) name[0]))
 		return name;
 	return number + " " + name;
+}
+
+std::string stemWord (const std::string& suffix)
+{
+	const auto name = nameAfterNumber (suffix);
+	return changeCase (name.empty() ? suffix : name, ::tolower);
+}
+
+std::array<std::string, 4> stemDisplayNames (const std::array<std::string, 4>& suffixes)
+{
+	static const std::array<std::string, 4> space4 { "low", "tops", "music", "vocals" };
+
+	std::array<std::string, 4> words, shown;
+	for (size_t s = 0; s < suffixes.size(); ++s)
+	{
+		words[s] = stemWord (suffixes[s]);
+		const auto name = nameAfterNumber (suffixes[s]);
+		shown[s] = name.empty() ? suffixes[s] : name;
+	}
+
+	if (words == space4)
+		for (auto& name : shown)
+			name = changeCase (name, ::toupper);
+	return shown;
 }

@@ -246,15 +246,16 @@ void DeckPanel::restoreState (const DeckSession& state)
 void DeckPanel::setSet (const StemSet& set)
 {
 	titleLabel.setText (set.name, juce::dontSendNotification);
+	const auto shown = set.displayNames();
 	juce::StringArray names;
 
-	for (const auto& n : set.stemNames)
+	for (const auto& n : shown)
 		names.add (n);
 
 	stemsLabel.setText ("Stems: " + names.joinIntoString (" / "), juce::dontSendNotification);
 	std::array<juce::String, StemSet::numStems> labels;
 	for (int s = 0; s < StemSet::numStems; ++s)
-		labels[(size_t) s] = juce::String (stemLaneLabel (set.stemNames[(size_t) s].toStdString(), s));
+		labels[(size_t) s] = juce::String (stemLaneLabel (shown[(size_t) s].toStdString(), s));
 	overview.setStemNames (labels);
 	cuePlay.reset();
 	deckLoop.reset();

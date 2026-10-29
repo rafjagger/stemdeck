@@ -60,6 +60,14 @@ public:
 	int loadGeneration() const { return generation; }            // counts loads: results for an older one are dropped
 	const std::vector<sections::Bar>& sectionBars() const { return bars; }
 
+	// CONTINUE (PlayMode.h): the set the player goes on with at its end,
+	// staged with its cached grid; and, once the player has handed over,
+	// that set taken on as loaded (true once per change), the old one freed.
+	juce::String stageNext (const StemSet& next);
+	void clearStaged();
+	juce::String stagedSetId() const;   // empty: none
+	bool followHandover();
+
 	// Grid Adjust (GridAction): the edit kept in the cache as a
 	// correction, RESET back to the analysed grid. SHIFT GRID needs the
 	// leader's beat phase now (the other deck, or the Pioneer master);
@@ -75,6 +83,7 @@ public:
 	void restoreTransport (const DeckSession&);   // after it is
 
 private:
+	void takeOn (const StemSet& newSet);
 	void startAnalysis();
 	void startDownbeatAnalysis();
 	void startSectionAnalysis (const BeatGrid& grid);
@@ -93,6 +102,8 @@ private:
 	std::optional<StemSet> set;
 	juce::String setId;
 	int generation = 0;
+	std::optional<StemSet> stagedSet;
+	int seenHandovers = 0;
 	std::optional<sections::Features> features;
 	std::vector<sections::Bar> bars;
 

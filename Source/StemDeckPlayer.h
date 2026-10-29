@@ -6,6 +6,8 @@
 #include "StemSet.h"
 #include "TempoAnalysis.h"
 
+#include <optional>
+
 // Plays the four stems of a StemSet from one shared playhead, so they stay
 // sample-locked. Output is 8 channels: stem N -> channels 2N, 2N+1.
 //
@@ -110,6 +112,17 @@ public:
 	// deck plays exactly as without it. Switching crossfades the two paths.
 	void setKeyLock (bool on);
 	bool isKeyLocked() const { return keyLock.load(); }
+
+	// KEY quality: the stretchers' engine. A new engine takes over where it
+	// cannot be heard starting (keylock::engineSwap): at once with KEY off
+	// or the deck stopped; under a playing KEY it is built beside the
+	// running stretchers, off the audio thread (the standby), and taken at
+	// the next track -- a load, or CONTINUE's change on the audio thread.
+	void setKeyLockEngine (keylock::Engine engine);
+	keylock::Engine keyLockEngine() const { return engine.load(); }
+	// The engine of the stretchers built, if any; and whether a standby waits.
+	std::optional<keylock::Engine> keyLockEngineInUse() const;
+	bool hasStandbyStretchers() const;
 
 	// Scratching (jog wheel top in vinyl mode): while active the playhead
 	// follows a target position that scratchBy() moves, forwards or backwards,
@@ -243,8 +256,10 @@ private:
 	// A deck's stretchers, one per stem, built and swapped as one.
 	struct Stretchers
 	{
-		explicit Stretchers (double fileRate);
+		Stretchers (double fileRate, keylock::Engine engine);
+		bool are (double fileRate, keylock::Engine wanted) const;
 		double sampleRate;
+		keylock::Engine engine;
 		std::array<std::unique_ptr<KeyLockStretcher>, numStems> stems;
 	};
 
@@ -273,6 +288,9 @@ private:
 	void restartStretchers (juce::int64 position);
 	double stretchedPosition() const;
 	void buildStretchers();
+	void prepareStandby();
+	void dropStandby();
+	bool takeStandby();
 	void seekTo (juce::int64 position);
 	void updateResamplingRatio();
 	int useTimeSlice() override;
@@ -334,9 +352,13 @@ private:
 	StemReader stemReader { *this };
 	juce::ResamplingAudioSource resampler { &stemReader, false, numOutputChannels };
 
-	// Key lock. The stretchers are swapped under setLock, like the set.
-	std::unique_ptr<Stretchers> stretchers;
+	// Key lock. The stretchers are swapped under setLock, like the set; so
+	// are the standby (a new engine waiting for the next track) and the
+	// stretchers CONTINUE's change put aside, freed with the played-out set.
+	std::unique_ptr<Stretchers> stretchers, standby, retiredStretchers;
 	std::atomic<bool> keyLock { false };
+	std::atomic<keylock::Engine> engine { keylock::Engine::standard };
+	juce::ThreadPool standbyBuilder { juce::ThreadPoolOptions{}.withThreadName ("Key lock standby").withNumberOfThreads (1) };
 	// A seek from outside the audio thread, for the stretchers to start
 	// again there; -1: none.
 	std::atomic<juce::int64> pendingSeek { -1 };

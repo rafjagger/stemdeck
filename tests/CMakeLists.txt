@@ -211,6 +211,7 @@ add_executable(stemdeck-spatial-tests
     spatial/PlayerTempo.cpp
     spatial/PlayerLoop.cpp
     spatial/PlayerContinue.cpp
+    spatial/PlayerKeyLockEngine.cpp
     spatial/StemCreatorLock.cpp
     spatial/AnalysisCache.cpp
     spatial/Recorder.cpp

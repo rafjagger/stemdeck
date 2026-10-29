@@ -3,11 +3,28 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <string>
 
 // Key lock (a CDJ's MASTER TEMPO): the tempo changes, the pitch stays. Pure:
 // the maths around the stretcher (KeyLockStretcher), testable without audio.
 namespace keylock
 {
+	// KEY quality, a device setting: Rubber Band's R2 (Faster) engine, light
+	// enough for a Pi, or its R3 (Finer), much cleaner under a moving tempo
+	// at some two to three times the CPU.
+	enum class Engine { standard, high };
+
+	// As the settings file stores it ("standard", "high"); anything else is
+	// standard, the safe one.
+	std::string engineName (Engine engine);
+	Engine engineFrom (const std::string& name);
+
+	// When a newly chosen engine takes over. A new engine is a new stretcher,
+	// started again: while KEY plays that start would be heard as a jump, so
+	// it waits for the next track; otherwise nobody hears it.
+	enum class EngineSwap { now, atNextLoad };
+	EngineSwap engineSwap (bool keyLockOn, bool playing);
+
 	// Rubber Band's time ratio for a playback rate: how much longer the
 	// output lasts than the input. Clamped, so a deck held still or a
 	// runaway nudge cannot hand it 0 or infinity.

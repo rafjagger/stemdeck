@@ -2,38 +2,56 @@
 
 #include <algorithm>
 #include <cmath>
+#include <map>
+#include <mutex>
+#include <utility>
 
 namespace
 {
 	using RB = RubberBand::RubberBandStretcher;
 
-	// R2, the faster engine, in real time: two decks of four stereo stems on
-	// the rig's CPU. Crisp transients with the compound detector reset the
-	// phases on each hit, so the drums keep their attack; laminar phase
-	// keeps bass, pads and vocals coherent across bins, where independent
-	// phase sounds softer and phasier. The standard window: the short one
-	// would serve the drums and thin the bass. The two channels of a stem
-	// together: a stereo stem keeps its image and its mono sum, which the
-	// 3D encoding downstream relies on. No threads of its own on the audio
-	// thread.
-	constexpr RB::Options options = RB::OptionProcessRealTime | RB::OptionEngineFaster
-								  | RB::OptionTransientsCrisp | RB::OptionDetectorCompound
-								  | RB::OptionPhaseLaminar | RB::OptionWindowStandard
-								  | RB::OptionChannelsTogether | RB::OptionThreadingNever;
+	// Standard: R2, the faster engine, in real time -- chosen when one
+	// machine carried two decks of four stereo stems. Crisp transients with
+	// the compound detector reset the phases on each hit, so the drums keep
+	// their attack; laminar phase keeps bass, pads and vocals coherent
+	// across bins, where independent phase sounds softer and phasier. The
+	// standard window: the short one would serve the drums and thin the
+	// bass. The two channels of a stem together: a stereo stem keeps its
+	// image and its mono sum, which the 3D encoding downstream relies on. No
+	// threads of its own on the audio thread.
+	constexpr RB::Options standardOptions = RB::OptionProcessRealTime | RB::OptionEngineFaster
+										  | RB::OptionTransientsCrisp | RB::OptionDetectorCompound
+										  | RB::OptionPhaseLaminar | RB::OptionWindowStandard
+										  | RB::OptionChannelsTogether | RB::OptionThreadingNever;
+
+	// High: R3, the finer engine, now that each machine carries one deck.
+	// R3 ignores the transient, detector, phase and smoothing flags (it
+	// finds its own); what it honours is set: the standard window -- its
+	// full multi-resolution scheme, the short one would be a single window,
+	// faster but coarser -- the channels together for the same mono sum as
+	// above, and no threads (R3 has no multi-threaded mode anyway).
+	constexpr RB::Options highOptions = RB::OptionProcessRealTime | RB::OptionEngineFiner
+									  | RB::OptionWindowStandard
+									  | RB::OptionChannelsTogether | RB::OptionThreadingNever;
+
+	constexpr RB::Options optionsFor (keylock::Engine engine)
+	{
+		return engine == keylock::Engine::high ? highOptions : standardOptions;
+	}
 
 	// A stretcher that keeps asking for nothing and giving nothing: give up
 	// the block rather than spin on the audio thread.
 	constexpr int maxRounds = 256;
 }
 
-KeyLockStretcher::KeyLockStretcher (int channels, double fileRate)
-	: KeyLockStretcher (channels, fileRate, measureAlignment (fileRate))
+KeyLockStretcher::KeyLockStretcher (int channels, double fileRate, keylock::Engine chosen)
+	: KeyLockStretcher (channels, fileRate, chosen, alignmentFor (fileRate, chosen))
 {
 }
 
-KeyLockStretcher::KeyLockStretcher (int channels, double fileRate, const keylock::Alignment& known)
-	: numChannels (channels), sampleRate (fileRate),
-	  stretcher ((size_t) fileRate, (size_t) channels, options),
+KeyLockStretcher::KeyLockStretcher (int channels, double fileRate, keylock::Engine chosen, const keylock::Alignment& known)
+	: numChannels (channels), sampleRate (fileRate), engine (chosen),
+	  stretcher ((size_t) fileRate, (size_t) channels, optionsFor (chosen)),
 	  alignment (known)
 {
 	stretcher.setMaxProcessSize ((size_t) chunk);
@@ -255,15 +273,27 @@ static double playheadError (KeyLockStretcher& stretcher, double startRate, doub
 }
 
 // One channel tells it for any number: the window and hops are the same.
-keylock::Alignment KeyLockStretcher::measureAlignment (double sampleRate)
+keylock::Alignment KeyLockStretcher::measureAlignment (double sampleRate, keylock::Engine engine)
 {
 	constexpr double away = 1.25;   // far enough from 1 to measure in samples
 	keylock::Alignment alignment;
 
-	KeyLockStretcher probe { 1, sampleRate, alignment };
+	KeyLockStretcher probe { 1, sampleRate, engine, alignment };
 	alignment.startOffset = playheadError (probe, away, away) / (away - 1.0);
 
 	probe.alignment = alignment;
 	alignment.rateLag = playheadError (probe, 1.0, away) / (away - 1.0);
 	return alignment;
+}
+
+keylock::Alignment KeyLockStretcher::alignmentFor (double sampleRate, keylock::Engine engine)
+{
+	static std::mutex lock;
+	static std::map<std::pair<keylock::Engine, double>, keylock::Alignment> measured;
+
+	const std::lock_guard<std::mutex> held (lock);
+	const auto key = std::make_pair (engine, sampleRate);
+	if (const auto found = measured.find (key); found != measured.end())
+		return found->second;
+	return measured[key] = measureAlignment (sampleRate, engine);
 }

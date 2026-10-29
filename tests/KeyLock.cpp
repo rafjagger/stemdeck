@@ -180,3 +180,27 @@ TEST (KeyLockAlignment, ATempoChangeSinceTheStartIsCorrected)
 	EXPECT_NEAR (keylock::lagCorrection (alignment, 1.08, 1.0), 1400.0 * 0.08, 1e-9);
 	EXPECT_NEAR (keylock::lagCorrection (alignment, 1.0, 1.08), -1400.0 * 0.08, 1e-9);
 }
+
+// The KEY quality setting: stored by name, anything unknown is the light
+// engine -- the safe one on a Pi.
+TEST (KeyLock, TheEngineIsStoredByName)
+{
+	using keylock::Engine;
+	EXPECT_EQ (keylock::engineName (Engine::standard), "standard");
+	EXPECT_EQ (keylock::engineName (Engine::high), "high");
+	EXPECT_EQ (keylock::engineFrom ("high"), Engine::high);
+	EXPECT_EQ (keylock::engineFrom ("standard"), Engine::standard);
+	EXPECT_EQ (keylock::engineFrom (""), Engine::standard);
+	EXPECT_EQ (keylock::engineFrom ("R3"), Engine::standard);
+}
+
+// A new engine is a new stretcher, started again: heard while KEY plays,
+// it would be a jump in the music. So it waits for the next track then.
+TEST (KeyLock, ANewEngineWaitsForTheNextTrackOnlyWhileKeyPlays)
+{
+	using keylock::EngineSwap;
+	EXPECT_EQ (keylock::engineSwap (false, false), EngineSwap::now);
+	EXPECT_EQ (keylock::engineSwap (false, true), EngineSwap::now);
+	EXPECT_EQ (keylock::engineSwap (true, false), EngineSwap::now);
+	EXPECT_EQ (keylock::engineSwap (true, true), EngineSwap::atNextLoad);
+}

@@ -28,6 +28,8 @@ namespace
 		e->setAttribute ("loopStart", deck.loop.getStart());
 		e->setAttribute ("loopEnd", deck.loop.getEnd());
 		e->setAttribute ("repeat", deck.repeat);
+		if (! withRouting)
+			e->setAttribute ("continue", deck.continuePlay);
 		e->setAttribute ("tempo", deck.tempo);
 		e->setAttribute ("tempoRange", deck.tempoRange);
 		e->setAttribute ("vinyl", deck.vinyl);
@@ -82,6 +84,7 @@ namespace
 		deck.cuePoint = e.getDoubleAttribute ("cue");
 		deck.loop = { e.getDoubleAttribute ("loopStart"), e.getDoubleAttribute ("loopEnd") };
 		deck.repeat = e.getBoolAttribute ("repeat");
+		deck.continuePlay = ! withRouting && e.getBoolAttribute ("continue");
 		deck.tempo = e.getDoubleAttribute ("tempo", 1.0);
 		deck.tempoRange = e.getDoubleAttribute ("tempoRange", 0.08);
 		deck.vinyl = e.getBoolAttribute ("vinyl", true);

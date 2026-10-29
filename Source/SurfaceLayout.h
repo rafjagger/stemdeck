@@ -103,14 +103,14 @@ namespace surface
 	{
 		Rect elapsed, remaining;
 		Rect transportTile, previous, cue, play, next;
-		Rect loopOff, repeat, sync, master, vinyl, grid;
+		Rect loopOff, repeat, continuePlay, sync, master, vinyl, grid;
 		std::array<Rect, 5> gridNudge;   // <1/2  <1  SET 1  1>  1/2>
 		std::array<Rect, 5> gridEdit;    // SNAP  SHIFT  RESET  x2  1/2
 	};
 	// The transport in the column's foot (the two-deck screen), or placed by
 	// the window, which leaves the column's room to its other keys (the
 	// one-deck screen's foot row, oneDeckFoot); there LOOP OFF is the foot
-	// row's LOOP, and REPEAT has its row to itself.
+	// row's LOOP, and its row is the play mode's: REPEAT | CONTINUE.
 	enum class Transport { inColumn, elsewhere };
 	DeckColumn deckColumn (Rect local, bool gridOn, int deckIndex, Metrics metrics, Transport transport = Transport::inColumn);
 

@@ -46,6 +46,9 @@ public:
 	// ends or for a set not in the library.
 	const StemSet* neighbourInFolder (const juce::String& setId, int direction) const;
 
+	// The sets the table shows, in its order, by id: CONTINUE's list (PlayMode.h).
+	std::vector<std::string> shownIds() const;
+
 	// A set picked at random from those the search shows, not one of
 	// `played`; when every one was, from all of them again. Null: none shown.
 	const StemSet* randomVisibleSet (const std::set<juce::String>& played) const;

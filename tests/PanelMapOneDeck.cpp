@@ -74,10 +74,23 @@ TEST (PanelMapOneDeck, LoopKeysSitUnderCueAndPlay)
 		EXPECT_EQ (panel1::controlAt (panel1::cellOf ({ kind, -1 })).kind, kind);
 }
 
+TEST (PanelMapOneDeck, ContinueSitsUnderTheLoopKeys)
+{
+	EXPECT_EQ (panel1::controlAt ({ 5, 0 }).kind, Kind::continuePlay);
+	EXPECT_EQ (panel1::cellOf ({ Kind::continuePlay, -1 }), (Cell { 5, 0 }));
+
+	InputDecoder decoder;
+	const auto events = decoder.feed (pressing ({ 5, 0 }));
+	ASSERT_EQ (events.size(), 1u);
+	EXPECT_EQ (events[0].type, Event::Type::continuePlay);
+	EXPECT_TRUE (decoder.feed (pressing ({ 5, 0 })).empty()) << "held: nothing more";
+	EXPECT_TRUE (decoder.feed (idleFrame()).empty()) << "its release: nothing";
+}
+
 TEST (PanelMapOneDeck, UnassignedKeysAreNone)
 {
 	EXPECT_EQ (panel1::controlAt ({ 1, 9 }).kind, Kind::none);
-	EXPECT_EQ (panel1::controlAt ({ 5, 0 }).kind, Kind::none);
+	EXPECT_EQ (panel1::controlAt ({ 1, 9 }).kind, Kind::none);
 	for (int row = 2; row < panel::rows; ++row)
 		EXPECT_EQ (panel1::controlAt ({ row, 9 }).kind, Kind::none) << row << ",9";
 	// Not a key at all.
@@ -276,9 +289,20 @@ TEST (PanelMapOneDeckLeds, EverythingAtRestIsTheDeckColourAndUnassignedIsDark)
 	EXPECT_EQ (ledAtCell (leds, 1, 9), Rgb {});
 	for (int row = 2; row < 5; ++row)
 		EXPECT_EQ (ledAtCell (leds, row, 0), rest) << "the loop keys rest, " << row;
-	EXPECT_EQ (ledAtCell (leds, 5, 0), Rgb {});
+	EXPECT_EQ (ledAtCell (leds, 5, 0), rest) << "CONTINUE rests";
 	for (int row = 2; row < panel::rows; ++row)
 		EXPECT_EQ (ledAtCell (leds, row, 9), Rgb {}) << row << ",9";
+}
+
+// CONTINUE: the last free key of the transport column, under LOOP OUT, lit
+// in the play mode's colour while on -- its light is its state.
+TEST (PanelMapOneDeckLeds, ContinueLightsWhileOn)
+{
+	auto state = quietState();
+	state.playModeColour = { 0, 150, 0 };
+	state.continuing = true;
+	const auto leds = panel1::leds (state, 0.0);
+	EXPECT_EQ (ledAtCell (leds, 5, 0), panel::vivid (state.playModeColour));
 }
 
 // As the screen's keys: LOOP and OUT lit while looping, IN while looping or

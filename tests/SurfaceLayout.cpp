@@ -689,11 +689,17 @@ TEST (SurfaceLayout, DeckColumnWithoutTransportGivesTheRoomToTheKeys)
 				EXPECT_GT (b.h, a.h) << sizeName (w, h);
 			EXPECT_LT (without.repeat.bottom(), without.sync.y + 1);
 			EXPECT_LT (without.sync.bottom(), without.vinyl.y + 1);
-			// LOOP OFF went to the foot row's LOOP; REPEAT keeps its row, alone across it.
+			// LOOP OFF went to the foot row's LOOP; its row is the play mode's,
+			// REPEAT | CONTINUE, as SYNC | MASTER under it.
 			EXPECT_TRUE (without.loopOff.isEmpty()) << sizeName (w, h);
+			EXPECT_TRUE (with.continuePlay.isEmpty()) << "the two-deck column has no CONTINUE";
 			EXPECT_EQ (without.repeat.x, without.sync.x) << sizeName (w, h);
-			EXPECT_EQ (without.repeat.right(), without.master.right()) << sizeName (w, h);
-			for (const auto& key : { without.repeat, without.sync, without.master, without.vinyl, without.grid })
+			EXPECT_EQ (without.repeat.right(), without.sync.right()) << sizeName (w, h);
+			EXPECT_EQ (without.continuePlay.x, without.master.x) << sizeName (w, h);
+			EXPECT_EQ (without.continuePlay.right(), without.master.right()) << sizeName (w, h);
+			EXPECT_EQ (without.continuePlay.y, without.repeat.y) << sizeName (w, h);
+			EXPECT_EQ (without.continuePlay.h, without.repeat.h) << sizeName (w, h);
+			for (const auto& key : { without.repeat, without.continuePlay, without.sync, without.master, without.vinyl, without.grid })
 				EXPECT_TRUE (column.contains (key)) << sizeName (w, h);
 			EXPECT_GE (without.vinyl.bottom(), column.h - column.h / 10) << "the keys at the column's foot";
 		}

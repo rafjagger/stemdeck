@@ -6,6 +6,8 @@
 #include "GridEdit.h"
 #include "SectionAnalysis.h"
 
+#include <utility>
+
 namespace
 {
 double nowSeconds() { return juce::Time::getMillisecondCounterHiRes() / 1000.0; }
@@ -51,6 +53,49 @@ juce::String DeckHost::load (const StemSet& newSet)
 	if (const auto error = deckPlayer.load (newSet); error.isNotEmpty())
 		return error;
 
+	stagedSet.reset();
+	seenHandovers = deckPlayer.handovers();
+	takeOn (newSet);
+	return {};
+}
+
+juce::String DeckHost::stageNext (const StemSet& next)
+{
+	const auto grid = analysisCache.find (next);
+	if (auto error = deckPlayer.stageNext (next, grid ? *grid : BeatGrid {}); error.isNotEmpty())
+		return error;
+	stagedSet = next;
+	return {};
+}
+
+void DeckHost::clearStaged()
+{
+	deckPlayer.clearStaged();
+	stagedSet.reset();
+}
+
+juce::String DeckHost::stagedSetId() const
+{
+	return stagedSet ? stagedSet->files[0].getFullPathName() : juce::String();
+}
+
+// The player swapped the staged set in on the audio thread: it is the
+// loaded one now, and the played-out one is freed here.
+bool DeckHost::followHandover()
+{
+	const auto handovers = deckPlayer.handovers();
+	if (handovers == seenHandovers)
+		return false;
+	seenHandovers = handovers;
+	deckPlayer.releaseRetired();
+	if (stagedSet)
+		takeOn (*std::exchange (stagedSet, std::nullopt));
+	return true;
+}
+
+// The set the player holds now, and its grid: from the cache, else analysed.
+void DeckHost::takeOn (const StemSet& newSet)
+{
 	setId = newSet.files[0].getFullPathName();
 	set = newSet;
 	++generation;
@@ -75,7 +120,6 @@ juce::String DeckHost::load (const StemSet& newSet)
 	{
 		startAnalysis();
 	}
-	return {};
 }
 
 void DeckHost::startAnalysis()

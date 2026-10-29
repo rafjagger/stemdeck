@@ -87,21 +87,6 @@ TEST (PanelFollowsWorkspace, ReleaseIsFasterThanTheOtherSidesTakeDelay)
 	EXPECT_LT (panelPollSeconds + panelReactSeconds, 0.75);
 }
 
-TEST (PanelFollowsWorkspace, GainingThePanelRearmsThePots)
-{
-	int rearmed = 0;
-	panel::PanelGain gain ([&] { ++rearmed; });
-	gain.update (false);
-	EXPECT_EQ (rearmed, 0);
-	gain.update (true);
-	EXPECT_EQ (rearmed, 1);
-	gain.update (true);
-	EXPECT_EQ (rearmed, 1);   // still the same holding
-	gain.update (false);
-	gain.update (true);
-	EXPECT_EQ (rearmed, 2);   // gained again
-}
-
 TEST (PanelFollowsWorkspace, TheToggleShowsWhyItIsInertInFollowMode)
 {
 	const auto follow = panel::toggleFace (true, true);

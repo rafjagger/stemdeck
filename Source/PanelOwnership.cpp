@@ -169,13 +169,6 @@ namespace panel
 		return ownership.holds();
 	}
 
-	void PanelGain::update (bool holds)
-	{
-		if (holds && ! wasHolding)
-			onGained();
-		wasHolding = holds;
-	}
-
 	ToggleFace toggleFace (bool followsWorkspace, bool holds)
 	{
 		if (followsWorkspace)

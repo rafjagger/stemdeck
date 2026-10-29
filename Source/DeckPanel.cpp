@@ -60,10 +60,15 @@ DeckPanel::DeckPanel (StemDeckPlayer& p, StemThumbnails& thumbnails, int index)
 	loopOffButton.setTooltip (juce::String ("Set a loop: drag in the overview"));
 	loopOffButton.setColour (juce::TextButton::buttonOnColourId, Theme::loop);
 
-	repeatButton.setClickingTogglesState (true);
-	repeatButton.setColour (juce::TextButton::buttonOnColourId, Theme::play.darker (0.3f));
+	// One play mode, as a CDJ has: each key turns the other off.
+	for (auto* key : { &repeatButton, &continueButton })
+		key->setColour (juce::TextButton::buttonOnColourId, Theme::playMode);
 	repeatButton.setTooltip ("Start over at the end of the track");
-	repeatButton.onClick = [this] { player.setRepeat (repeatButton.getToggleState()); };
+	repeatButton.onClick = [this] { toggleRepeat(); };
+	continueButton.setTooltip ("At the end of the track, the next one in the library list plays");
+	continueButton.setMouseClickGrabsKeyboardFocus (false);
+	continueButton.onClick = [this] { toggleContinue(); };
+	addChildComponent (continueButton);   // shown with the one-deck transport (addTransportTo)
 
 	syncButton.setClickingTogglesState (true);
 	syncButton.setColour (juce::TextButton::buttonOnColourId, Theme::deck (deckIndex));
@@ -201,6 +206,27 @@ void DeckPanel::setSyncAvailable (bool available)
 	masterButton.setTooltip (available ? juce::String (syncLabels::masterTooltip()) : juce::String (syncLabels::linkUnavailable()));
 }
 
+playmode::Mode DeckPanel::playMode() const
+{
+	return playmode::fromFlags (repeatButton.getToggleState(), continueButton.getToggleState());
+}
+
+void DeckPanel::setPlayMode (playmode::Mode mode)
+{
+	if (mode == playmode::Mode::continuous && ! hasContinue())
+		mode = playmode::Mode::single;
+	repeatButton.setToggleState (mode == playmode::Mode::repeat, juce::dontSendNotification);
+	continueButton.setToggleState (mode == playmode::Mode::continuous, juce::dontSendNotification);
+	player.setRepeat (mode == playmode::Mode::repeat);
+	player.setContinue (mode == playmode::Mode::continuous);
+}
+
+void DeckPanel::toggleContinue()
+{
+	if (hasContinue())
+		setPlayMode (playmode::toggledContinue (playMode()));
+}
+
 void DeckPanel::setSyncTooltip (const juce::String& text)
 {
 	syncTooltip = text;
@@ -223,7 +249,8 @@ void DeckPanel::saveState (DeckSession& state) const
 	state.tempoRange = tempoRange;
 	state.keyLock = keyLockButton.getToggleState();
 	state.vinyl = vinylButton.getToggleState();
-	state.repeat = repeatButton.getToggleState();
+	state.repeat = playMode() == playmode::Mode::repeat;
+	state.continuePlay = playMode() == playmode::Mode::continuous;
 	state.sync = syncButton.getToggleState();
 }
 
@@ -238,7 +265,7 @@ void DeckPanel::restoreState (const DeckSession& state)
 	}
 	keyLockButton.setToggleState (state.keyLock, juce::sendNotificationSync);
 	vinylButton.setToggleState (state.vinyl, juce::sendNotificationSync);
-	repeatButton.setToggleState (state.repeat, juce::sendNotificationSync);
+	setPlayMode (playmode::fromFlags (state.repeat, state.continuePlay && hasContinue()));
 	// Lit only where SYNC can work: a one-deck instance without the link keeps it dark.
 	syncButton.setToggleState (state.sync && syncButton.isEnabled(), juce::dontSendNotification);
 }
@@ -389,6 +416,7 @@ void DeckPanel::resized()
 		setTransportBounds ({ layout.transportTile, layout.previous, layout.cue, layout.play, layout.next, {}, {}, {} });   // no loop block in the column
 	place (loopOffButton, layout.loopOff);
 	place (repeatButton, layout.repeat);
+	place (continueButton, layout.continuePlay);
 	place (syncButton, layout.sync);
 	place (masterButton, layout.master);
 	place (vinylButton, layout.vinyl);
@@ -421,6 +449,7 @@ void DeckPanel::addTransportTo (juce::Component& parent)
 	for (auto* key : std::initializer_list<juce::TextButton*> { &previousButton, &cueButton, &playButton, &nextButton, &loopButton, &loopInButton, &loopOutButton })
 		parent.addAndMakeVisible (key);
 	loopOffButton.setVisible (false);   // LOOP in the foot row does its job
+	continueButton.setVisible (true);   // beside REPEAT, in LOOP OFF's row
 	resized();
 }
 

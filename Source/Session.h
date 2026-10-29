@@ -36,6 +36,7 @@ struct DeckSession
 	double cuePoint = 0.0;
 	juce::Range<double> loop;   // empty: no loop
 	bool repeat = false;
+	bool continuePlay = false;  // CONTINUE (PlayMode.h); one-deck sessions only
 
 	double tempo = 1.0;         // the fader's ratio
 	double tempoRange = 0.08;

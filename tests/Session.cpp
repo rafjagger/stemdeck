@@ -457,3 +457,20 @@ TEST (Session, TwoDeckXmlWritesNoAux)
 		for (auto* stem : deck->getChildWithTagNameIterator ("Stem"))
 			EXPECT_FALSE (stem->hasAttribute ("aux"));
 }
+
+// CONTINUE is the one-deck screen's (PlayMode.h): kept in its session like
+// REPEAT; the two-deck file, read byte for byte, never carries it.
+TEST (OneDeckSession, ContinueIsKeptLikeRepeat)
+{
+	OneDeckSession session;
+	session.deck.continuePlay = true;
+	EXPECT_TRUE (OneDeckSession::fromXml (*session.toXml()).deck.continuePlay);
+
+	session.deck.continuePlay = false;
+	EXPECT_FALSE (OneDeckSession::fromXml (*session.toXml()).deck.continuePlay);
+
+	Session twoDeck;
+	twoDeck.decks[0].continuePlay = true;
+	for (auto* deck : twoDeck.toXml()->getChildWithTagNameIterator ("Deck"))
+		EXPECT_FALSE (deck->hasAttribute ("continue"));
+}

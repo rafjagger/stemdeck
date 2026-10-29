@@ -909,3 +909,96 @@ TEST_F (OneDeck, PaintsTheAuxGhostMark)
 	EXPECT_EQ (differingPixels (without, knobOf()), 0) << "and goes again";
 	view.setLookAndFeel (nullptr);
 }
+
+// CONTINUE beside REPEAT in the deck column, one play mode: each key turns
+// the other off, and the player follows. The session keeps it.
+TEST_F (OneDeck, ContinueStandsBesideRepeatAndTheyAreExclusive)
+{
+	OneDeckView view (audio, formats, 0);
+	view.setSize (rigViewWidth, rigViewHeight);
+	auto& panel = view.deckPanel();
+	auto& repeat = panel.repeatKey();
+	auto& continuePlay = panel.continueKey();
+
+	EXPECT_TRUE (continuePlay.isVisible());
+	EXPECT_EQ (continuePlay.getParentComponent(), &panel);
+	EXPECT_EQ (continuePlay.getY(), repeat.getY());
+	EXPECT_EQ (continuePlay.getHeight(), repeat.getHeight());
+	EXPECT_LT (repeat.getRight(), continuePlay.getX()) << "REPEAT | CONTINUE";
+	EXPECT_EQ (continuePlay.getButtonText(), "CONTINUE") << "its state is its light, not its text";
+
+	continuePlay.onClick();   // a tap, as the button runs it
+	EXPECT_TRUE (continuePlay.getToggleState());
+	EXPECT_TRUE (player().isContinuing());
+	EXPECT_EQ (continuePlay.getButtonText(), "CONTINUE");
+
+	repeat.onClick();   // a tap, as the button runs it
+	EXPECT_TRUE (repeat.getToggleState());
+	EXPECT_FALSE (continuePlay.getToggleState()) << "REPEAT turned CONTINUE off";
+	EXPECT_TRUE (player().isRepeating());
+	EXPECT_FALSE (player().isContinuing());
+
+	panel.toggleContinue();   // the panel's key
+	EXPECT_FALSE (repeat.getToggleState()) << "CONTINUE turned REPEAT off";
+	EXPECT_FALSE (player().isRepeating());
+	EXPECT_TRUE (player().isContinuing());
+
+	DeckSession saved;
+	view.saveState (saved);
+	EXPECT_TRUE (saved.continuePlay);
+	EXPECT_FALSE (saved.repeat);
+
+	panel.toggleContinue();
+	EXPECT_EQ (panel.playMode(), playmode::Mode::single);
+	view.restoreState (saved);
+	EXPECT_EQ (panel.playMode(), playmode::Mode::continuous);
+	EXPECT_TRUE (player().isContinuing());
+}
+
+// A page test must paint: CONTINUE's own pixels change when it lights, and
+// REPEAT's go dark; for the eye, the column at the rig's size in
+// STEMDECK_SNAPSHOT_DIR when set.
+TEST_F (OneDeck, PaintsTheContinueKeyLitAndDark)
+{
+	DJLookAndFeel look;
+	OneDeckView view (audio, formats, 0);
+	view.setLookAndFeel (&look);
+	view.setSize (rigViewWidth, rigViewHeight);
+	view.setSet (set);
+	player().clearLoop();
+	auto& panel = view.deckPanel();
+	const auto areaOf = [&] (juce::Component& key) { return view.getLocalArea (&panel, key.getBounds()); };
+	const auto keyRow = areaOf (panel.repeatKey()).getUnion (areaOf (panel.continueKey()));
+
+	panel.setPlayMode (playmode::Mode::repeat);
+	const auto repeating = snapshotOf (view);
+	panel.setPlayMode (playmode::Mode::continuous);
+	const auto continuing = snapshotOf (view);
+	panel.setPlayMode (playmode::Mode::single);
+	const auto single = snapshotOf (view);
+
+	for (const auto* image : { &repeating, &continuing, &single })
+		EXPECT_GT (lumaVariance (image->getClippedImage (keyRow)), 50.0);
+	const auto continueArea = areaOf (panel.continueKey()), repeatArea = areaOf (panel.repeatKey());
+	EXPECT_GT (differingPixels (single.getClippedImage (continueArea), continuing.getClippedImage (continueArea)), 100) << "CONTINUE is lit";
+	EXPECT_GT (differingPixels (repeating.getClippedImage (repeatArea), continuing.getClippedImage (repeatArea)), 100) << "REPEAT went dark";
+	EXPECT_EQ (differingPixels (single.getClippedImage (repeatArea), continuing.getClippedImage (repeatArea)), 0) << "REPEAT dark as in single";
+
+	const auto directory = juce::SystemStats::getEnvironmentVariable ("STEMDECK_SNAPSHOT_DIR", {});
+	if (directory.isNotEmpty())
+	{
+		const auto write = [&] (const char* name, const juce::Image& image)
+		{
+			const auto file = juce::File (directory).getChildFile (juce::String (name) + ".png");
+			ASSERT_TRUE (file.getParentDirectory().createDirectory().wasOk());
+			file.deleteFile();
+			juce::FileOutputStream stream (file);
+			ASSERT_TRUE (stream.openedOk());
+			ASSERT_TRUE (juce::PNGImageFormat().writeImageToStream (image, stream));
+		};
+		write ("one-deck-continue-on", continuing);
+		write ("one-deck-repeat-on", repeating);
+		write ("one-deck-play-mode-off", single);
+	}
+	view.setLookAndFeel (nullptr);
+}

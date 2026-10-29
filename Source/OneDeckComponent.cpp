@@ -153,9 +153,58 @@ void OneDeckComponent::loadSet (const StemSet& set)
 		juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Cannot load the set", error);
 		return;
 	}
+	showLoaded (set);
+}
+
+void OneDeckComponent::showLoaded (const StemSet& set)
+{
+	refusedStage = {};
 	view.setSet (set);
 	findSteps();
 	rearmPotPickups();
+}
+
+// No Auto DJ on this screen (B15): CONTINUE has the deck to itself. Were it
+// to meet Auto DJ, Auto DJ wins (playmode::continues).
+void OneDeckComponent::followContinue()
+{
+	auto& host = deckAudio.host();
+	if (host.followHandover() && host.loadedSet())
+		showLoaded (*host.loadedSet());
+
+	auto& player = host.player();
+	playmode::Deck deck;
+	deck.mode = view.deckPanel().playMode();
+	deck.looping = player.hasLoop();
+	deck.playing = player.isPlaying();
+	deck.ranOut = player.takeRanOut();
+	deck.position = player.getPosition();
+	deck.length = player.getLength();
+	deck.current = host.loadedSetId().toStdString();
+	deck.staged = host.stagedSetId().toStdString();
+
+	const auto plan = playmode::plan (deck, library.shownIds());
+	const auto* set = plan.id.empty() ? nullptr : library.findSet (juce::String (plan.id));
+	switch (plan.action)
+	{
+		case playmode::Plan::Action::stage:
+			// Refused while the loaded set still decodes: tried again next tick.
+			if (set != nullptr && set->files[0].getFullPathName() != refusedStage && host.stageNext (*set).isNotEmpty() && player.isReady())
+				refusedStage = set->files[0].getFullPathName();
+			break;
+		case playmode::Plan::Action::unstage:
+			host.clearStaged();
+			break;
+		case playmode::Plan::Action::loadAndPlay:
+			if (set != nullptr)
+			{
+				loadSet (*set);
+				player.play();   // PLAY waits for the stems if they still decode
+			}
+			break;
+		case playmode::Plan::Action::none:
+			break;
+	}
 }
 
 void OneDeckComponent::loadById (const juce::String& setId)
@@ -422,6 +471,7 @@ void OneDeckComponent::handlePanel (const panel1::Event& e)
 		case Type::loop:      deck.toggleLoop(); return;
 		case Type::loopIn:    deck.loopIn(); return;
 		case Type::loopOut:   deck.loopOut(); return;
+		case Type::continuePlay: deck.toggleContinue(); return;
 		case Type::shiftDown: view.shift().setToggleState (true, juce::dontSendNotification); return;
 		case Type::shiftUp:   view.shift().setToggleState (false, juce::dontSendNotification); return;
 		default: break;
@@ -481,6 +531,8 @@ void OneDeckComponent::showPanel()
 	state.loopColour = panel::rgbOf (Theme::loop);
 	state.looping = player.hasLoop();
 	state.loopInMarked = view.deckPanel().isLoopInMarked();
+	state.playModeColour = panel::rgbOf (Theme::playMode);
+	state.continuing = view.deckPanel().playMode() == playmode::Mode::continuous;
 	panelDevice->show (panel1::leds (state, nowSeconds()));
 }
 
@@ -529,6 +581,7 @@ void OneDeckComponent::showSettings()
 
 void OneDeckComponent::timerCallback()
 {
+	followContinue();
 	view.refresh();
 	sync.hear (link.drain());
 	const auto handedOver = sync.followLink (link.takeMasterChange(), nowSeconds());

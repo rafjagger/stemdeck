@@ -282,11 +282,11 @@ namespace surface
 		splitPair (area.removeFromBottom (units (keyUnits)), rowGap, c.sync, c.master);
 		area.removeFromBottom (rowGap);
 		// Without the transport LOOP OFF goes too (the foot row's LOOP does
-		// its job), and REPEAT has the row to itself.
+		// its job), and the row is the play mode's: REPEAT | CONTINUE.
 		if (hasTransport)
 			splitPair (area.removeFromBottom (units (keyUnits)), rowGap, c.loopOff, c.repeat);
 		else
-			c.repeat = area.removeFromBottom (units (keyUnits));
+			splitPair (area.removeFromBottom (units (keyUnits)), rowGap, c.repeat, c.continuePlay);
 		area.removeFromBottom (rowGap);
 
 		// Grid Adjust above the keys; with GRID off its room is the times'.

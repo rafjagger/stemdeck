@@ -370,6 +370,15 @@ const StemSet* StemLibrary::selectedSet() const
 	return row >= 0 && row < (int) visibleSets.size() ? visibleSets[(size_t) row] : nullptr;
 }
 
+std::vector<std::string> StemLibrary::shownIds() const
+{
+	std::vector<std::string> ids;
+	ids.reserve (visibleSets.size());
+	for (const auto* set : visibleSets)
+		ids.push_back (idFor (*set).toStdString());
+	return ids;
+}
+
 const StemSet* StemLibrary::randomVisibleSet (const std::set<juce::String>& played) const
 {
 	std::vector<const StemSet*> fresh;

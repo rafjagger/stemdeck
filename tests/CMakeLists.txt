@@ -203,6 +203,7 @@ add_executable(stemdeck-spatial-tests
     spatial/DeckHost.cpp
     spatial/OneDeck.cpp
     spatial/OneDeckSync.cpp
+    spatial/PlayerTempo.cpp
     spatial/StemCreatorLock.cpp
     spatial/AnalysisCache.cpp
     spatial/Recorder.cpp

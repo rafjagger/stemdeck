@@ -60,13 +60,26 @@ TEST (LaunchOptions, DeckWithoutBformatIsRefused)
 	EXPECT_TRUE (refused ({ "--deck", "A" }));
 }
 
-TEST (LaunchOptions, DeckPastBIsRefused)
+// Ruling A8: no fixed deck count. Any letter is a deck; the truth's range
+// and the engine's count limit it at run time, not the parser.
+TEST (LaunchOptions, AnyLetterIsADeck)
 {
-	EXPECT_TRUE (refused ({ "--bformat", "--deck", "C" }));
-	EXPECT_TRUE (refused ({ "--bformat", "--deck", "c" }));
+	for (const auto& [word, letter] : std::vector<std::pair<std::string, char>> {
+			 { "C", 'C' }, { "d", 'D' }, { "D", 'D' }, { "z", 'Z' }, { "Z", 'Z' } })
+		EXPECT_EQ (ok (parseLaunch ({ "--bformat", "--deck", word })).deck, letter) << word;
+}
+
+TEST (LaunchOptions, WhatIsNoLetterIsRefused)
+{
 	EXPECT_TRUE (refused ({ "--bformat", "--deck", "AB" }));
 	EXPECT_TRUE (refused ({ "--bformat", "--deck" }));
 	EXPECT_TRUE (refused ({ "--bformat", "--deck", "1" }));
+	EXPECT_TRUE (refused ({ "--bformat", "--deck", "" }));
+	EXPECT_TRUE (refused ({ "--bformat", "--deck", "-" }));
+	EXPECT_TRUE (refused ({ "--bformat", "--deck", "\xc3\x84" }));   // UTF-8 umlaut: two bytes, no ASCII letter
+	const auto r = parseLaunch ({ "--bformat", "--deck", "1" });
+	ASSERT_TRUE (std::holds_alternative<std::string> (r));
+	EXPECT_NE (std::get<std::string> (r).find ("A to Z"), std::string::npos) << std::get<std::string> (r);
 }
 
 TEST (LaunchOptions, UnknownFlagIsRefused)

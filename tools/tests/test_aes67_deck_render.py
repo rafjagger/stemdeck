@@ -130,10 +130,47 @@ class TheDeckSender(RenderCase):
         self.assertEqual(0, self.render("render", "b").returncode)
         self.assertEqual(["pipewire-aes67-deck-B.conf"], self.written())
 
-    def test_render_refuses_a_letter_without_a_group(self):
+    def test_any_letter_renders_its_own_sender(self):
+        """Ruling A8: no fixed deck count. A letter the truth names no group
+        for counts on from deck A's group, one address a letter, carried as a
+        32-bit number: C, D follow B, Z crosses into the next /24."""
+        for letter, address in (("C", "239.69.150.246"), ("D", "239.69.150.247"),
+                                ("L", "239.69.150.255"), ("M", "239.69.151.0"),
+                                ("Z", "239.69.151.13")):
+            with self.subTest(letter=letter):
+                for step in ("can-render", "render"):
+                    done = self.render(step, letter.lower())
+                    self.assertEqual(0, done.returncode, done.stderr)
+                text = self.conf(letter)
+                self.assertIn(f'destination.ip = "{address}"', text)
+                self.assertIn(f'sess.name = "AES67 deck {letter}"', text)
+                self.assertIn(f'node.name = "aes67-deck-{letter.lower()}"', text)
+                self.assertIsNone(re.search(r"@[A-Z_]+@", text))
+
+    def test_every_letter_has_a_group_of_its_own(self):
+        truth = deck.load_truth(self.truth_file)
+        groups = {deck.deck_group(truth, chr(c))[0] for c in range(ord("A"), ord("Z") + 1)}
+        self.assertEqual(26, len(groups))
+        self.assertTrue(groups.isdisjoint({"239.69.150.243", "239.255.255.255"}))
+
+    def test_a_group_the_truth_names_wins(self):
+        self.write_truth({**TRUTH, "hosts": {**TRUTH["hosts"], "aes67-deck-c": "239.69.160.1"}})
+        self.assertEqual(0, self.render("render", "C").returncode)
+        self.assertIn('destination.ip = "239.69.160.1"', self.conf("C"))
+
+    def test_a_counted_group_on_another_host_s_address_is_refused(self):
+        self.write_truth({**TRUTH, "hosts": {**TRUTH["hosts"], "other": "239.69.150.246"}})
         done = self.render("render", "C")
         self.assertEqual(2, done.returncode)
-        self.assertIn("aes67-deck-c", done.stderr)
+        self.assertIn("239.69.150.246", done.stderr)
+        self.assertEqual([], self.written())
+
+    def test_without_deck_a_s_group_a_letter_has_none(self):
+        hosts = {k: v for k, v in TRUTH["hosts"].items() if k != "aes67-deck-a"}
+        self.write_truth({**TRUTH, "hosts": hosts})
+        done = self.render("render", "C")
+        self.assertEqual(2, done.returncode)
+        self.assertIn("aes67-deck-a", done.stderr)
         self.assertEqual([], self.written())
 
     def test_render_refuses_what_is_no_letter(self):
@@ -331,7 +368,8 @@ class CanRender(RenderCase):
 
     REFUSALS = (
         ("no audio port", {"network": {}}, "B"),
-        ("letter without a group", {}, "C"),
+        ("no group for the letter and none to count from",
+         {"hosts": {k: v for k, v in TRUTH["hosts"].items() if k != "aes67-deck-a"}}, "C"),
         ("no deck listener", {"listeners": TRUTH["listeners"][2:]}, "B"),
         ("no sap listener", {"listeners": TRUTH["listeners"][:2]}, "B"),
         ("no sap host", {"hosts": {k: v for k, v in TRUTH["hosts"].items() if k != "sap"}}, "B"),
@@ -341,7 +379,9 @@ class CanRender(RenderCase):
         return self.run_tool(step, *args, "--truth", str(self.truth_file))
 
     def test_a_renderable_deck_and_base_pass(self):
-        self.assertEqual(0, self.check("can-render", "B").returncode)
+        for letter in ("B", "C", "D", "Z"):
+            with self.subTest(letter=letter):
+                self.assertEqual(0, self.check("can-render", letter).returncode)
         self.assertEqual(0, self.check("can-render-base").returncode)
         self.assertEqual([], self.written())
 

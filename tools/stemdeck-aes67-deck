@@ -29,6 +29,7 @@ and an earlier render goes, so no sender starts on a stale socket.
 """
 
 import argparse
+import ipaddress
 import json
 import os
 import sys
@@ -114,6 +115,24 @@ def endpoint(truth, program, role, **fields):
     return host(truth, entry["host"].format(**fields)), entry["port"]
 
 
+def deck_group(truth, letter):
+    """(multicast address, port) of deck <letter>'s stream. The truth's own
+    host for the letter wins; a letter it names none for (Ruling A8: no fixed
+    deck count) counts on from deck A's group, one address a letter, as a
+    32-bit number -- A .244, B .245, C .246, ... L .255, M 239.69.151.0."""
+    entry = listener(truth, "aes67", "deck")
+    name = entry["host"].format(deck=letter.lower())
+    if name in truth.get("hosts", {}):
+        return host(truth, name), entry["port"]
+    first = ipaddress.IPv4Address(host(truth, entry["host"].format(deck="a")))
+    group = str(first + (ord(letter) - ord("A")))
+    taken = {value: key for key, value in truth.get("hosts", {}).items()}
+    if group in taken:
+        raise Refused(f"deck {letter}'s counted group {group} is the truth's '{taken[group]}': "
+                      f"give the truth a host '{name}'")
+    return group, entry["port"]
+
+
 # -- rendering ------------------------------------------------------------------
 
 def template(name):
@@ -130,14 +149,14 @@ def filled(text, values):
 
 
 def deck_letter(word):
-    if len(word) != 1 or not word.isalpha() or not word.isascii():
+    if len(word) != 1 or not word.isascii() or not word.isalpha():
         raise Refused(f"'{word}' is no deck letter")
     return word.upper()
 
 
 def deck_conf(truth, letter, environ):
     port = audio_port(truth, environ)
-    stream_ip, stream_port = endpoint(truth, "aes67", "deck", deck=letter.lower())
+    stream_ip, stream_port = deck_group(truth, letter)
     sap_ip, sap_port = endpoint(truth, "aes67", "sap")
     return filled(template(DECK_TEMPLATE), {
         "AUDIO_PORT": port,

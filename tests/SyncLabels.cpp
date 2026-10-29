@@ -32,6 +32,8 @@ TEST (SyncLabels, TheOtherStates)
 	EXPECT_EQ (syncLabels::noMaster(), "LINK: no master \xc2\xb7 follow");
 	EXPECT_EQ (syncLabels::error ("port busy"), "LINK: port busy");
 	EXPECT_EQ (syncLabels::sendingMaster (1), "LINK master: B");
+	EXPECT_EQ (syncLabels::sendingMaster (2), "LINK master: C");
+	EXPECT_EQ (syncLabels::sendingMaster (25), "LINK master: Z");
 }
 
 // stemdeck#4: the UI refers to the protocol it works with, never to a

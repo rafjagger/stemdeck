@@ -614,6 +614,35 @@ TEST (Remote, OptionalDeckWordsAreReadFromTheTruth)
 	EXPECT_EQ (with.deckHello, "/stemdeck/{deck}/hello");
 }
 
+// Ruling A8: the parser takes any letter; the truth's {deck} range says which
+// decks Core hears. A deck outside it still starts, and says so.
+TEST (Remote, TheDeckRangeIsReadFromTheTruth)
+{
+	std::string error;
+	const auto old = truthWith (R"(, "stemdeck.deck-hello": {"pattern": "/stemdeck/{deck}/hello"})");
+	EXPECT_FALSE (osctruth::readRemoteWords (old, error).deckRange.has_value());
+	std::filesystem::remove (old);
+	const auto made = truthWith (R"(, "stemdeck.deck-hello": {"pattern": "/stemdeck/{deck}/hello", "deck": [1, 4]})");
+	const auto with = osctruth::readRemoteWords (made, error);
+	std::filesystem::remove (made);
+	ASSERT_TRUE (with.deckRange.has_value());
+	EXPECT_EQ (with.deckRange->first, 1);
+	EXPECT_EQ (with.deckRange->second, 4);
+}
+
+TEST (Remote, ADeckOutsideTheTruthsRangeIsSaid)
+{
+	auto w = deckWords();
+	EXPECT_TRUE (remote::deckOutsideTruth (w, 5).empty());   // no range: nothing to say
+	w.deckRange = std::make_pair (1, 4);
+	for (const int deck : { 1, 3, 4 })
+		EXPECT_TRUE (remote::deckOutsideTruth (w, deck).empty()) << deck;
+	const auto e = remote::deckOutsideTruth (w, 5);
+	EXPECT_NE (e.find ("deck E"), std::string::npos) << e;
+	EXPECT_NE (e.find ("1 to 4"), std::string::npos) << e;
+	EXPECT_NE (remote::deckOutsideTruth (w, 26).find ("deck Z"), std::string::npos);
+}
+
 // Two one-deck instances on one host cannot share a port: deck k listens on
 // the truth's stemdeck.osc port + (k - 1).
 TEST (Remote, DeckListenPortFollowsTheDeckNumber)
@@ -624,3 +653,122 @@ TEST (Remote, DeckListenPortFollowsTheDeckNumber)
 	EXPECT_EQ (remote::deckListenPort (7780, 0), -1);
 	EXPECT_EQ (remote::deckListenPort (0, 1), -1);
 }
+
+// The tempo report (`stemdeck.tempo`, Ruling A5): each deck tells Core its BPM
+// as it plays, whether it plays and whether it is MASTER.
+namespace
+{
+	remote::Words tempoWords()
+	{
+		auto w = words;
+		w.deckTempo = "/stemdeck/{deck}/tempo";
+		return w;
+	}
+}
+
+TEST (Remote, TempoMessageForAnyDeckTheTruthAllows)
+{
+	const auto w = tempoWords();
+	const auto d = remote::tempoMessage (w, 1, { 128.5, true, false });
+	ASSERT_TRUE (d.has_value());
+	EXPECT_EQ (d->address, "/stemdeck/1/tempo");
+	EXPECT_FLOAT_EQ (d->bpm, 128.5f);
+	EXPECT_EQ (d->playing, 1);
+	EXPECT_EQ (d->master, 0);
+	EXPECT_EQ (remote::tempoMessage (w, 4, { 0.0, false, true })->address, "/stemdeck/4/tempo");
+	EXPECT_EQ (remote::tempoMessage (w, 7, { 0.0, false, true })->master, 1);
+}
+
+TEST (Remote, ATruthWithoutTheTempoWordSendsNoTempo)
+{
+	EXPECT_FALSE (remote::tempoMessage (words, 1, { 120.0, true, true }).has_value());
+}
+
+TEST (Remote, TempoOfIsTheGridTempoTimesTheRate)
+{
+	EXPECT_DOUBLE_EQ (remote::tempoOf (true, 120.0, 1.05), 126.0);
+	EXPECT_DOUBLE_EQ (remote::tempoOf (false, 120.0, 1.05), 0.0);   // no track
+	EXPECT_DOUBLE_EQ (remote::tempoOf (true, 0.0, 1.05), 0.0);      // no grid: the deck shows "--"
+}
+
+TEST (Remote, TempoReportSaysItsFirstStateAtOnce)
+{
+	remote::TempoReport report;
+	const auto first = report.next ({ 120.0, false, false }, 0.0);
+	ASSERT_TRUE (first.has_value());
+	EXPECT_DOUBLE_EQ (first->bpm, 120.0);
+	EXPECT_FALSE (report.next ({ 120.0, false, false }, 500.0).has_value());   // unchanged, not due
+}
+
+TEST (Remote, TempoReportRepeatsEveryTwoSeconds)
+{
+	remote::TempoReport report;
+	report.next ({ 120.0, true, false }, 0.0);
+	EXPECT_FALSE (report.next ({ 120.0, true, false }, 1999.0).has_value());
+	EXPECT_TRUE (report.next ({ 120.0, true, false }, 2000.0).has_value());
+	EXPECT_FALSE (report.next ({ 120.0, true, false }, 3000.0).has_value());
+	EXPECT_TRUE (report.next ({ 120.0, true, false }, 4000.0).has_value());
+}
+
+TEST (Remote, TempoReportSendsPlayingAndMasterAtOnce)
+{
+	remote::TempoReport report;
+	report.next ({ 120.0, false, false }, 0.0);
+	const auto play = report.next ({ 120.0, true, false }, 200.0);
+	ASSERT_TRUE (play.has_value());
+	EXPECT_TRUE (play->playing);
+	const auto master = report.next ({ 120.0, true, true }, 400.0);
+	ASSERT_TRUE (master.has_value());
+	EXPECT_TRUE (master->master);
+}
+
+TEST (Remote, TempoReportOnlyForMoreThanAHundredthOfABpm)
+{
+	remote::TempoReport report;
+	report.next ({ 120.0, true, false }, 0.0);
+	EXPECT_FALSE (report.next ({ 120.01, true, false }, 200.0).has_value());   // exactly 0.01: not more
+	EXPECT_FALSE (report.next ({ 120.005, true, false }, 300.0).has_value());
+	EXPECT_TRUE (report.next ({ 120.02, true, false }, 400.0).has_value());
+}
+
+TEST (Remote, TempoReportComparesToWhatWasLastSent)
+{
+	// Small steps must add up: 0.006 + 0.006 is a change against what Core heard.
+	remote::TempoReport report;
+	report.next ({ 120.0, true, false }, 0.0);
+	EXPECT_FALSE (report.next ({ 120.006, true, false }, 200.0).has_value());
+	EXPECT_TRUE (report.next ({ 120.012, true, false }, 400.0).has_value());
+}
+
+TEST (Remote, TempoReportAtMostOncePerHundredMilliseconds)
+{
+	remote::TempoReport report;
+	report.next ({ 120.0, true, false }, 1000.0);
+	EXPECT_FALSE (report.next ({ 125.0, true, false }, 1050.0).has_value());   // changed, but too soon
+	EXPECT_FALSE (report.next ({ 126.0, true, false }, 1099.0).has_value());
+	const auto later = report.next ({ 127.0, true, false }, 1100.0);           // the change is not lost
+	ASSERT_TRUE (later.has_value());
+	EXPECT_DOUBLE_EQ (later->bpm, 127.0);
+}
+
+TEST (Remote, TempoReportHoldsADueRepeatUntilTheLimitAllows)
+{
+	remote::TempoReport report;
+	report.next ({ 120.0, true, false }, 0.0);
+	report.next ({ 130.0, true, false }, 1950.0);                              // a change just before the repeat
+	EXPECT_FALSE (report.next ({ 130.0, true, false }, 2000.0).has_value());   // repeat counted from that send
+	EXPECT_TRUE (report.next ({ 130.0, true, false }, 3950.0).has_value());
+}
+
+TEST (Remote, TheTempoWordIsReadFromTheTruth)
+{
+	std::string error;
+	const auto old = truthWith ("");
+	EXPECT_TRUE (osctruth::readRemoteWords (old, error).deckTempo.empty());
+	std::filesystem::remove (old);
+	const auto made = truthWith (R"(, "stemdeck.tempo": {"pattern": "/stemdeck/{deck}/tempo"})");
+	const auto with = osctruth::readRemoteWords (made, error);
+	std::filesystem::remove (made);
+	EXPECT_EQ (with.deckTempo, "/stemdeck/{deck}/tempo");
+}
+

@@ -12,6 +12,7 @@
 #include "Tips.h"
 
 #include <iostream>
+#include <utility>
 
 namespace
 {
@@ -103,6 +104,7 @@ OneDeckComponent::OneDeckComponent (DeckInstance deck, double pathLatencySeconds
 	truthKeeper = coretruth::follow (truth);
 	deckLink = std::make_unique<DeckLink> (instance.oscDeck(), host.spatialPorts().settings().deckThreeD);
 	deckLink->start (truth.path, truth.hash);
+	deckLink->followPlayer (deckAudio.host().player(), [this] { return sync.isMaster(); });
 
 	startSync();
 	setSize (768, 1024);
@@ -295,6 +297,15 @@ void OneDeckComponent::updateLink()
 	}
 
 	const auto device = instance.proLinkDevice();
+	if (device == 0)
+	{
+		// Pro DJ Link numbers players 1-6 (A-D here); updateLink() runs every
+		// two seconds while off the link, so say it once.
+		static bool said = false;
+		if (! std::exchange (said, true))
+			std::cerr << "StemDeck " << instance.letter << ": no Pro DJ Link player number beyond deck D -- not on the link" << std::endl;
+		return;
+	}
 	if (! link.isRunning() && link.start (device, linkPorts, instance.title()))
 		sync.joined (nowSeconds());
 

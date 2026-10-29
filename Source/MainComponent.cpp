@@ -180,6 +180,7 @@ MainComponent::MainComponent()
 	mixer.onBusesChanged = [this] (const buses::Masks& now, int answered) { remote.busesChanged (now, answered); };
 	static_assert (AutoDj::auxBus == buses::aux && AutoDj::numStems == buses::stemsPerDeck);
 	mixer.onDjSwitch = [this] (int deck, int stem, int bus, bool on) { autoDj.djSwitched (deck, stem, bus, on); };
+	remote.masterDeck = [this] { return masterDeck; };
 	remote.start (truthPath, truthHash);
 
 	motionPanel = std::make_unique<PanelDevice>();

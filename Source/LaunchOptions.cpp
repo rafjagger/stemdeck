@@ -10,8 +10,9 @@
 
 namespace
 {
-	// R11: the truth's {deck} range is [1, 2] until it grows.
-	constexpr char lastDeckLetter = 'B';
+	// Ruling A8: any letter is a deck. The truth's {deck} range and the
+	// engine's deck count limit it at run time; the parser does not.
+	constexpr char lastDeckLetter = 'Z';
 	constexpr double longestPathLatencyMs = 200.0;
 
 	std::optional<double> parsePathLatencyMs (const std::string& text)
@@ -47,7 +48,7 @@ std::variant<LaunchOptions, std::string> parseLaunch (const std::vector<std::str
 		else if (word == "--deck")
 		{
 			if (i + 1 >= argv.size())
-				return std::string ("--deck needs a letter (A or B)");
+				return std::string ("--deck needs a letter (A to Z)");
 
 			const auto& value = argv[++i];
 			const char letter = value.size() == 1
@@ -55,7 +56,7 @@ std::variant<LaunchOptions, std::string> parseLaunch (const std::vector<std::str
 				: '\0';
 
 			if (letter < 'A' || letter > lastDeckLetter)
-				return "--deck " + value + " is not a deck: use A or B";
+				return "--deck " + value + " is not a deck: use a letter A to Z";
 
 			options.deck = letter;
 			deckGiven = true;

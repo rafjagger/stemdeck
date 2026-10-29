@@ -33,7 +33,7 @@ namespace syncLabels
 
 	std::string error (const std::string& why) { return network + ": " + why; }
 
-	std::string sendingMaster (int deck) { return network + " master: " + (deck == 0 ? "A" : "B"); }
+	std::string sendingMaster (int deck) { return network + " master: " + std::string (1, (char) ('A' + deck)); }
 
 	std::string masterTooltip() { return "This deck gives the beat to the DJ network (its tempo master)"; }
 

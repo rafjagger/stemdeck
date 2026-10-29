@@ -24,8 +24,33 @@ TEST (DeckInstance, NamesFollowTheLetter)
 // A is player 6 (the two-deck app's), B 5: a CDJ-3000 numbers players 1-6
 // (manual p. 113), and a number outside that range is one no CDJ or DJM
 // expects.
+TEST (DeckInstance, AnyLetterIsTheTruthsDeckNumber)
+{
+	EXPECT_EQ ((DeckInstance { 'C' }).oscDeck(), 3);
+	EXPECT_EQ ((DeckInstance { 'D' }).oscDeck(), 4);
+	EXPECT_EQ ((DeckInstance { 'Z' }).oscDeck(), 26);
+	EXPECT_EQ ((DeckInstance { 'Z' }).jackClientName(), "StemDeck-Z");
+	EXPECT_EQ ((DeckInstance { 'Z' }).title(), "StemDeck Z");
+}
+
 TEST (DeckInstance, ProLinkPlayerFollowsTheLetter)
 {
 	EXPECT_EQ ((DeckInstance { 'A' }).proLinkDevice(), 6);
 	EXPECT_EQ ((DeckInstance { 'B' }).proLinkDevice(), 5);
 }
+
+// C and D are players 4 and 3 (CDJ numbers run 1-6). A letter beyond D has no
+// number: 0 says so, and the instance stays off the link instead of borrowing
+// one that belongs to another deck.
+TEST (DeckInstance, ProLinkPlayersForCAndD)
+{
+	EXPECT_EQ ((DeckInstance { 'C' }).proLinkDevice(), 4);
+	EXPECT_EQ ((DeckInstance { 'D' }).proLinkDevice(), 3);
+}
+
+TEST (DeckInstance, ALetterBeyondDHasNoPlayerNumber)
+{
+	EXPECT_EQ ((DeckInstance { 'E' }).proLinkDevice(), 0);
+	EXPECT_EQ ((DeckInstance { 'Z' }).proLinkDevice(), 0);
+}
+

@@ -26,12 +26,14 @@ namespace Theme
 
 	inline juce::Colour deck (int index)
 	{
-		return index == 0 ? juce::Colour (0xff4a9eff) : juce::Colour (0xffff8a3d);
+		// Two colours for any number of decks: A, C, E ... blue, B, D ... orange,
+		// so neighbours always differ.
+		return (index & 1) == 0 ? juce::Colour (0xff4a9eff) : juce::Colour (0xffff8a3d);
 	}
 
 	inline juce::String deckName (int index)
 	{
-		return index == 0 ? "A" : "B";
+		return juce::String::charToString ((juce::juce_wchar) ('A' + index));
 	}
 
 	// A panel's or tile's corner: a share of its shorter side.

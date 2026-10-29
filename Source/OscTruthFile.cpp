@@ -80,10 +80,13 @@ namespace osctruth
 		const auto optionalPattern = [&truth] (const char* key) {
 			return truth["addresses"][key]["pattern"].toString().toStdString();
 		};
+		std::optional<std::pair<int, int>> deckRange;
+		if (const auto* range = truth["addresses"]["stemdeck.deck-hello"]["deck"].getArray(); range != nullptr && range->size() == 2)
+			deckRange = std::make_pair ((int) range->getReference (0), (int) range->getReference (1));
 		return { patternOf ("stemdeck.bus"), patternOf ("stemdeck.buses"), patternOf ("stemdeck.recall"),
 				 patternOf ("vu"), patternOf ("device.hello"), meters, ahead,
 				 optionalPattern ("stemdeck.pointer"), optionalPattern ("prodj.live"),
-				 optionalPattern ("stemdeck.3d"), optionalPattern ("stemdeck.deck-hello") };
+				 optionalPattern ("stemdeck.3d"), optionalPattern ("stemdeck.deck-hello"), optionalPattern ("stemdeck.tempo"), deckRange };
 	}
 
 	MeterParameters readMeterParameters (const std::string& path, std::string& error)

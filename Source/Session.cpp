@@ -198,10 +198,11 @@ std::optional<OneDeckSession> OneDeckSession::load (const juce::File& file)
 
 OneDeckSession importFromTwoDeck (const Session& session, char letter)
 {
-	// Only 'A' and 'B' arrive here: the launch-option parser is the gate (R11).
-	jassert (letter == 'A' || letter == 'B');
+	// The two-deck session holds decks A and B; a letter beyond them starts
+	// with an empty deck and shares the library and the jobs (Ruling A8).
 	OneDeckSession one;
-	one.deck = session.decks[letter == 'B' ? 1 : 0];
+	if (letter == 'A' || letter == 'B')
+		one.deck = session.decks[letter == 'B' ? 1 : 0];
 	one.deck.faderDb = 0.0;
 	for (auto& stem : one.deck.stems)
 		stem.buses = 0;

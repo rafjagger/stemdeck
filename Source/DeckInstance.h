@@ -12,10 +12,12 @@ struct DeckInstance
 
 	std::string jackClientName() const; // "StemDeck-A"
 	std::string sessionDir() const;     // "A", under ~/.config/StemDeck/
-	int oscDeck() const;                // A -> 1, B -> 2 (the truth's {deck} range)
+	int oscDeck() const;                // A -> 1, B -> 2 ... Z -> 26 (the truth's {deck})
 	std::string title() const;          // "StemDeck A"
 	// Its player number on the link: two instances on one host share the
 	// settings file, and a receiver drops its own number's beats. A is 6 (the
-	// two-deck app's), B is 5: inside the CDJ-3000's 1-6 (manual p. 113).
+	// two-deck app's), B is 5, C 4, D 3: inside the CDJ-3000's 1-6 (manual
+	// p. 113). A letter beyond D has none: 0, and the instance stays off the
+	// link.
 	int proLinkDevice() const;
 };

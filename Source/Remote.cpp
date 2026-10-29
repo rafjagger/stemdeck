@@ -141,9 +141,56 @@ namespace remote
 		return stemdeckOscPort + oscDeck - 1;
 	}
 
+	std::string deckOutsideTruth (const Words& words, int oscDeck)
+	{
+		if (! words.deckRange)
+			return {};
+		const auto [first, last] = *words.deckRange;
+		if (oscDeck >= first && oscDeck <= last)
+			return {};
+		return "deck " + std::string (1, (char) ('A' + oscDeck - 1)) + " (" + std::to_string (oscDeck)
+			   + ") is outside the truth's decks " + std::to_string (first) + " to " + std::to_string (last)
+			   + ": Core will not hear its hello, tempo or 3D -- it plays on";
+	}
+
 	std::string deckHelloAddress (const Words& words, int oscDeck)
 	{
 		return words.deckHello.empty() ? std::string() : fill (words.deckHello, { { "deck", oscDeck } });
+	}
+
+	std::optional<TempoSend> tempoMessage (const Words& words, int oscDeck, const Tempo& tempo)
+	{
+		if (words.deckTempo.empty())
+			return std::nullopt;
+		return TempoSend { fill (words.deckTempo, { { "deck", oscDeck } }), (float) tempo.bpm,
+						   tempo.playing ? 1 : 0, tempo.master ? 1 : 0 };
+	}
+
+	double tempoOf (bool loaded, double gridBpm, double rate)
+	{
+		return loaded && gridBpm > 0.0 ? gridBpm * rate : 0.0;
+	}
+
+	std::optional<Tempo> TempoReport::next (const Tempo& now, double nowMs)
+	{
+		if (! sent)
+		{
+			sent = now;
+			sentAtMs = nowMs;
+			return now;
+		}
+		const auto gap = nowMs - sentAtMs;
+		if (gap < minGapMs)
+			return std::nullopt;
+		// The epsilon keeps a step of exactly 0.01 out, which doubles would
+		// otherwise put just above it.
+		const auto changed = now.playing != sent->playing || now.master != sent->master
+							 || std::abs (now.bpm - sent->bpm) > bpmDeadband + 1e-9;
+		if (! changed && gap < repeatMs)
+			return std::nullopt;
+		sent = now;
+		sentAtMs = nowMs;
+		return now;
 	}
 
 	std::vector<Outgoing> oneDeckSends (const Words& words, int oscDeck, const std::string& host)

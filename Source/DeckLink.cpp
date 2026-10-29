@@ -3,6 +3,7 @@
 #include "DeckLink.h"
 
 #include "OscTruthFile.h"
+#include "PlayerTempo.h"
 
 #include <iostream>
 
@@ -34,6 +35,8 @@ void DeckLink::start (const std::string& path, const juce::String& hash)
 				  << (error.empty() ? std::string ("the truth names no core, mixer or stemdeck osc") : error) << std::endl;
 		return;
 	}
+	if (const auto outside = remote::deckOutsideTruth (words, oscDeck); ! outside.empty())
+		std::cerr << "StemDeck: " << outside << std::endl;
 	const auto listenPort = remote::deckListenPort (endpoints.ownPort, oscDeck);
 	if (! receiver.connect (listenPort))
 	{
@@ -44,21 +47,44 @@ void DeckLink::start (const std::string& path, const juce::String& hash)
 	toCore.connect (endpoints.coreHost, endpoints.corePort);
 
 	sayHello();
-	startTimer (helloEveryMs);
+	startTimer (tickMs);
+}
+
+void DeckLink::followPlayer (const StemDeckPlayer& followed, std::function<bool()> master)
+{
+	player = &followed;
+	isMaster = std::move (master);
 }
 
 void DeckLink::sayHello()
 {
-	if (ticks % deviceHelloEvery == 0)
+	if (ticks % (helloEveryTicks * deviceHelloEvery) == 0)
 		toCore.send (juce::OSCMessage (juce::String (words.hello), juce::String ("stemdeck"), truthHash));
 	for (const auto& send : remote::oneDeckSends (words, oscDeck, host.toStdString()))
 		toCore.send (juce::OSCMessage (juce::String (send.address), juce::String (send.text)));
 }
 
+// The report keeps its own clock (a change at once, else every 2 s); the hello
+// above keeps the host and the device hello.
+void DeckLink::sendTempo()
+{
+	if (player == nullptr || words.deckTempo.empty())
+		return;
+	const auto tempo = tempoReport.next (tempoOfPlayer (*player, isMaster && isMaster()),
+										 juce::Time::getMillisecondCounterHiRes());
+	if (! tempo)
+		return;
+	if (const auto send = remote::tempoMessage (words, oscDeck, *tempo))
+		toCore.send (juce::OSCMessage (juce::String (send->address), send->bpm, (juce::int32) send->playing,
+									   (juce::int32) send->master));
+}
+
 void DeckLink::timerCallback()
 {
 	++ticks;
-	sayHello();
+	if (ticks % helloEveryTicks == 0)
+		sayHello();
+	sendTempo();
 }
 
 void DeckLink::oscMessageReceived (const juce::OSCMessage& message)

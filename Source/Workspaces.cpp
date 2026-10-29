@@ -1,4 +1,5 @@
 #include "Workspaces.h"
+#include "SpawnOutput.h"
 
 #include <juce_core/juce_core.h>
 
@@ -37,19 +38,8 @@ SwitcherGeometry switcherGeometry (int windowWidth)
 
 I3Runner systemI3Runner()
 {
-	return [] (const std::vector<std::string>& argv)
-	{
-		juce::StringArray command;
-		for (const auto& word : argv)
-			command.add (word);
-
-		juce::ChildProcess i3;
-		if (! i3.start (command))
-			return std::string();
-		auto output = i3.readAllProcessOutput().toStdString();
-		i3.waitForProcessToFinish (1000);
-		return output;
-	};
+	// Every 500 ms from the panel's poller: spawned, never forked (SpawnOutput.h).
+	return [] (const std::vector<std::string>& argv) { return spawnForOutput (argv, 1000); };
 }
 
 void goToWorkspace (const I3Runner& i3, int number)

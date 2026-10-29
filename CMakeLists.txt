@@ -134,6 +134,7 @@ target_sources(StemDeck PRIVATE
     Source/FolderStep.cpp
     Source/AudioPanel.cpp
     Source/Workspaces.cpp
+    Source/SpawnOutput.cpp
     Source/KeyboardPolicy.cpp
     Source/OnScreenKeyboard.cpp
     Source/WorkspacePanel.cpp

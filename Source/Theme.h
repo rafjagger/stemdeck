@@ -12,10 +12,16 @@ namespace Theme
 	inline const juce::Colour text         { 0xffdcdcdc };
 	inline const juce::Colour textDim      { 0xff8b8e94 };
 	inline const juce::Colour play         { 0xff3ec46d };
+	// REPEAT and CONTINUE: the play mode, a dimmer PLAY.
+	inline const juce::Colour playMode     { play.darker (0.3f) };
 	inline const juce::Colour cue          { 0xffe8a33d };
 	inline const juce::Colour mute         { 0xffd04545 };
 	inline const juce::Colour loop         { 0xff5fb0ff };
 	inline const juce::Colour aux          { 0xff9b6bff };
+
+	// An empty slot (a set of fewer than four files): its column and its
+	// lane's number at this alpha -- there, findable, plainly not playing.
+	inline constexpr float emptySlotAlpha = 0.3f;
 
 	inline juce::Colour stem (int index)
 	{

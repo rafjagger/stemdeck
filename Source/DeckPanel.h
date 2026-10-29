@@ -10,6 +10,7 @@
 #include "StemThumbnails.h"
 #include "Waveforms.h"
 #include "JogWheel.h"
+#include "PlayMode.h"
 #include "Session.h"
 #include "SurfaceLayout.h"
 
@@ -60,6 +61,13 @@ public:
 
 	std::function<void (bool enabled)> onSyncToggled;
 
+	// The play mode (PlayMode.h): REPEAT and, on the one-deck screen only,
+	// CONTINUE -- one of them lit at most, their state their light.
+	playmode::Mode playMode() const;
+	void setPlayMode (playmode::Mode);
+	void toggleRepeat() { setPlayMode (playmode::toggledRepeat (playMode())); }
+	void toggleContinue();   // nothing where there is no CONTINUE
+
 	// Previous / next track in the loaded track's folder (MainComponent says
 	// which way there is one, and what a press does under Auto DJ).
 	std::function<void (int direction)> onStep;
@@ -99,6 +107,7 @@ public:
 	juce::TextButton& loopOutKey() { return loopOutButton; }
 	juce::TextButton& loopOffKey() { return loopOffButton; }
 	juce::TextButton& repeatKey() { return repeatButton; }
+	juce::TextButton& continueKey() { return continueButton; }
 	std::function<void (GridAction, double seconds)> onGridEdit;
 
 	void saveState (DeckSession& state) const;
@@ -130,6 +139,8 @@ private:
 	juce::TextButton previousButton { juce::String::fromUTF8 ("|\xe2\x97\x80") }, nextButton { juce::String::fromUTF8 ("\xe2\x96\xb6|") };
 	HoldKey cueButton { "CUE" };
 	juce::TextButton playButton { "PLAY" }, loopOffButton { "LOOP OFF" }, repeatButton { "REPEAT" };
+	juce::TextButton continueButton { "CONTINUE" };   // the one-deck column's only
+	bool hasContinue() const { return transportPlace == surface::Transport::elsewhere; }
 	// The one-deck foot's loop block; their state is their light, never their text.
 	juce::TextButton loopButton { "LOOP" }, loopInButton { "IN" }, loopOutButton { "OUT" };
 	juce::TextButton syncButton { "SYNC" }, masterButton { "MASTER" }, vinylButton { "VINYL" };

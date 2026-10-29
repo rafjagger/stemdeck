@@ -51,7 +51,8 @@ StemColumn::StemColumn (StemDeckPlayer& p, DeckSpatialPorts& spatialPorts, int s
 	stateLabel.setColour (juce::Label::textColourId, Theme::textDim);
 	stateLabel.setJustificationType (juce::Justification::centred);
 	stateLabel.setMinimumHorizontalScale (0.6f);
-	setStemName ("STEM " + juce::String (stem + 1));   // until a set says
+	// The slot's number, never a name: anything can be in a track (2026-10-29).
+	nameLabel.setText (juce::String (stem + 1), juce::dontSendNotification);
 	addAndMakeVisible (nameLabel);
 	addAndMakeVisible (stateLabel);
 
@@ -108,9 +109,9 @@ StemColumn::StemColumn (StemDeckPlayer& p, DeckSpatialPorts& spatialPorts, int s
 	refresh();
 }
 
-void StemColumn::setStemName (const juce::String& name)
+void StemColumn::setLoaded (bool loaded)
 {
-	nameLabel.setText (name.toUpperCase(), juce::dontSendNotification);
+	setAlpha (loaded ? 1.0f : Theme::emptySlotAlpha);
 }
 
 void StemColumn::showShares()

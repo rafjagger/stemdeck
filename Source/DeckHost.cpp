@@ -6,6 +6,8 @@
 #include "GridEdit.h"
 #include "SectionAnalysis.h"
 
+#include <utility>
+
 namespace
 {
 double nowSeconds() { return juce::Time::getMillisecondCounterHiRes() / 1000.0; }
@@ -51,7 +53,50 @@ juce::String DeckHost::load (const StemSet& newSet)
 	if (const auto error = deckPlayer.load (newSet); error.isNotEmpty())
 		return error;
 
-	setId = newSet.files[0].getFullPathName();
+	stagedSet.reset();
+	seenHandovers = deckPlayer.handovers();
+	takeOn (newSet);
+	return {};
+}
+
+juce::String DeckHost::stageNext (const StemSet& next)
+{
+	const auto grid = analysisCache.find (next);
+	if (auto error = deckPlayer.stageNext (next, grid ? *grid : BeatGrid {}); error.isNotEmpty())
+		return error;
+	stagedSet = next;
+	return {};
+}
+
+void DeckHost::clearStaged()
+{
+	deckPlayer.clearStaged();
+	stagedSet.reset();
+}
+
+juce::String DeckHost::stagedSetId() const
+{
+	return stagedSet ? stagedSet->firstFile().getFullPathName() : juce::String();
+}
+
+// The player swapped the staged set in on the audio thread: it is the
+// loaded one now, and the played-out one is freed here.
+bool DeckHost::followHandover()
+{
+	const auto handovers = deckPlayer.handovers();
+	if (handovers == seenHandovers)
+		return false;
+	seenHandovers = handovers;
+	deckPlayer.releaseRetired();
+	if (stagedSet)
+		takeOn (*std::exchange (stagedSet, std::nullopt));
+	return true;
+}
+
+// The set the player holds now, and its grid: from the cache, else analysed.
+void DeckHost::takeOn (const StemSet& newSet)
+{
+	setId = newSet.firstFile().getFullPathName();
 	set = newSet;
 	++generation;
 	features.reset();
@@ -75,7 +120,6 @@ juce::String DeckHost::load (const StemSet& newSet)
 	{
 		startAnalysis();
 	}
-	return {};
 }
 
 void DeckHost::startAnalysis()
@@ -180,8 +224,9 @@ void DeckHost::rebuildSections()
 	}
 
 	const auto& names = set->stemNames;
-	const auto roles = sections::rolesFor ({ names[0].toStdString(), names[1].toStdString(),
-											 names[2].toStdString(), names[3].toStdString() });
+	const auto roles = set->isComplete() ? sections::rolesFor ({ names[0].toStdString(), names[1].toStdString(),
+																   names[2].toStdString(), names[3].toStdString() })
+										 : sections::oneMixRoles;   // what SectionAnalysis measured
 	bars = sections::classify (sections::barLevels (*features, grid.bpm, grid.firstBeat, roles));
 }
 

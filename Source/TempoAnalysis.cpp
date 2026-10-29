@@ -1,4 +1,5 @@
 #include "TempoAnalysis.h"
+#include "Sections.h"
 #include "FileLock.h"
 
 namespace
@@ -240,6 +241,9 @@ std::optional<BarPhase::Stems> TempoAnalysis::readStems (const StemSet& set, juc
 
 	for (int i = 0; i < StemSet::numStems; ++i)
 	{
+		if (! set.hasStem (i))
+			continue;
+
 		readers[(size_t) i].reset (formatManager.createReaderFor (set.files[(size_t) i]));
 
 		if (readers[(size_t) i] == nullptr)
@@ -248,6 +252,9 @@ std::optional<BarPhase::Stems> TempoAnalysis::readStems (const StemSet& set, juc
 		sampleRate = readers[(size_t) i]->sampleRate;
 		length = juce::jmax (length, readers[(size_t) i]->lengthInSamples);
 	}
+
+	if (length == 0)
+		return std::nullopt;
 
 	// Each stem to mono, decimated to ~11 kHz (averaging as a crude low-pass).
 	const auto decimation = juce::jmax (1, juce::roundToInt (sampleRate / analysisRate));
@@ -269,6 +276,8 @@ std::optional<BarPhase::Stems> TempoAnalysis::readStems (const StemSet& set, juc
 		for (size_t s = 0; s < readers.size(); ++s)
 		{
 			auto& reader = readers[s];
+			if (reader == nullptr)
+				continue;   // an empty slot stays zeros
 			auto& mono = stems.mono[s];
 			reader->read (&buffer, 0, numSamples, start, true, true);
 			const auto* left = buffer.getReadPointer (0);
@@ -289,6 +298,9 @@ std::optional<BarPhase::Stems> TempoAnalysis::readStems (const StemSet& set, juc
 			}
 		}
 	}
+
+	if (! set.isComplete())
+		sections::foldIntoOneMix (stems.mono);
 
 	return stems;
 }

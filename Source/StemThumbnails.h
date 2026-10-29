@@ -25,7 +25,12 @@ public:
 	void setSet (const StemSet& set)
 	{
 		for (int i = 0; i < StemSet::numStems; ++i)
-			thumbnails[i]->setSource (new juce::FileInputSource (set.files[(size_t) i]));
+		{
+			if (set.hasStem (i))
+				thumbnails[i]->setSource (new juce::FileInputSource (set.files[(size_t) i]));
+			else
+				thumbnails[i]->clear();   // an empty slot draws an empty lane
+		}
 
 		sendChangeMessage();
 	}

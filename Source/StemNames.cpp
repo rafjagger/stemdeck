@@ -1,7 +1,9 @@
 #include "StemNames.h"
 
+#include <algorithm>
 #include <array>
 #include <cctype>
+#include <map>
 
 namespace
 {
@@ -75,12 +77,104 @@ std::string sanitiseName (const std::string& name, const std::string& fallback)
 	return clean.find_first_not_of ("_ ") == std::string::npos ? fallback : clean;
 }
 
-std::string stemLaneLabel (const std::string& name, int stem)
+std::optional<int> numberedSlot (const std::string& suffix)
 {
-	const auto number = std::to_string (stem + 1);
-	if (name.empty())
-		return number;
-	if (std::isdigit ((unsigned char) name[0]))
-		return name;
-	return number + " " + name;
+	if (suffix.size() < 3 || suffix[0] < '1' || suffix[0] > '4')
+		return std::nullopt;
+	if (std::string (" -_.").find (suffix[1]) == std::string::npos)
+		return std::nullopt;
+	if (suffix.find_first_not_of (" -_.", 1) == std::string::npos)
+		return std::nullopt;
+	return suffix[0] - '1';
+}
+
+namespace
+{
+	struct Member
+	{
+		size_t index;
+		std::string suffix;
+	};
+
+	StemGrouping loneFile (const std::vector<std::string>& baseNames, size_t index)
+	{
+		StemGrouping set;
+		set.name = baseNames[index];
+		set.slots[0] = index;
+		set.stemNames[0] = baseNames[index];
+		return set;
+	}
+
+	// Two or three members, each naming a slot of its own: file n on slot n.
+	std::optional<StemGrouping> numberedSet (const std::string& prefix, const std::vector<Member>& members)
+	{
+		if (members.size() < 2 || members.size() > 3)
+			return std::nullopt;
+
+		StemGrouping set;
+		set.name = prefix;
+		for (const auto& member : members)
+		{
+			const auto slot = numberedSlot (member.suffix);
+			if (! slot || set.slots[(size_t) *slot])
+				return std::nullopt;
+			set.slots[(size_t) *slot] = member.index;
+			set.stemNames[(size_t) *slot] = member.suffix;
+		}
+		return set;
+	}
+}
+
+std::vector<StemGrouping> groupStemFiles (const std::vector<std::string>& baseNames,
+										  const std::function<bool (const std::string&, const std::string&)>& lessSuffix)
+{
+	std::vector<StemGrouping> sets;
+	std::map<std::string, std::vector<Member>> groups;
+
+	for (size_t i = 0; i < baseNames.size(); ++i)
+	{
+		std::string prefix, suffix;
+		if (splitStemName (baseNames[i], prefix, suffix))
+			groups[prefix].push_back ({ i, suffix });
+		else
+			sets.push_back (loneFile (baseNames, i));
+	}
+
+	for (auto& [prefix, members] : groups)
+	{
+		if (members.size() == 4)
+		{
+			std::sort (members.begin(), members.end(), [&lessSuffix] (const Member& a, const Member& b)
+			{
+				return lessSuffix (a.suffix, b.suffix);
+			});
+			StemGrouping set;
+			set.name = prefix;
+			for (size_t s = 0; s < members.size(); ++s)
+			{
+				set.slots[s] = members[s].index;
+				set.stemNames[s] = members[s].suffix;
+			}
+			sets.push_back (set);
+		}
+		else if (auto numbered = numberedSet (prefix, members))
+		{
+			sets.push_back (*numbered);
+		}
+		else
+		{
+			for (const auto& member : members)
+				sets.push_back (loneFile (baseNames, member.index));
+		}
+	}
+	return sets;
+}
+
+std::string loadedSlotsText (const std::array<bool, 4>& loaded)
+{
+	std::string text;
+	for (size_t s = 0; s < loaded.size(); ++s)
+		if (loaded[s])
+			text += (text.empty() ? "" : " ") + std::to_string (s + 1);
+	return text;
 }

@@ -14,7 +14,8 @@
 // no JUCE, testable.
 //
 //   col 0:  row 0 CUE, row 1 PLAY, row 2 LOOP, row 3 LOOP IN, row 4 LOOP OUT
-//           (the screen's loop block on end, DeckLoop.h), row 5 dark
+//           (the screen's loop block on end, DeckLoop.h), row 5 CONTINUE
+//           (PlayMode.h; REPEAT stays the screen's)
 //   col 9:  row 0 SHIFT (held), rows 1-5 dark
 //   stem s (0-3): pad columns 2s+1 and 2s+2
 //       row 2  ORBIT  PING
@@ -31,7 +32,7 @@ namespace panel1
 
 	struct Control
 	{
-		enum class Kind { none, cue, play, shift, loop, loopIn, loopOut, orbit, ping, rise, scat, stemCue, stemMute, lengthDown, lengthUp };
+		enum class Kind { none, cue, play, shift, loop, loopIn, loopOut, continuePlay, orbit, ping, rise, scat, stemCue, stemMute, lengthDown, lengthUp };
 		Kind kind = Kind::none;
 		int stem = -1;
 	};
@@ -46,7 +47,7 @@ namespace panel1
 
 	struct Event
 	{
-		enum class Type { cueDown, cueUp, play, shiftDown, shiftUp, loop, loopIn, loopOut, shot, stemCue, stemMute, lengthDown, lengthUp, gain, threeD, aux };
+		enum class Type { cueDown, cueUp, play, shiftDown, shiftUp, loop, loopIn, loopOut, continuePlay, shot, stemCue, stemMute, lengthDown, lengthUp, gain, threeD, aux };
 		Type type = Type::play;
 		int stem = -1;
 		motionlite::Shape shape = motionlite::Shape::orbit;   // shot
@@ -80,11 +81,12 @@ namespace panel1
 	{
 		std::array<StemLeds, 4> stems {};
 		std::array<Rgb, 4> stemColours {};
-		Rgb deckColour, cueColour, playColour, muteColour, loopColour;
+		Rgb deckColour, cueColour, playColour, muteColour, loopColour, playModeColour;
 		bool playing = false, atCue = false, shift = false;
 		// The loop keys' lights, as the screen's: looping, the deck's own
 		// state (StemDeckPlayer::hasLoop); the IN mark, DeckLoop's.
 		bool looping = false, loopInMarked = false;
+		bool continuing = false;   // CONTINUE on
 	};
 
 	// Every LED as wanted. Armed pads blink with a period of 500 ms.

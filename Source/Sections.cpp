@@ -214,6 +214,21 @@ namespace sections
 		return roles;
 	}
 
+	void foldIntoOneMix (std::array<std::vector<float>, numStems>& stems)
+	{
+		size_t longest = 0;
+		for (const auto& stem : stems)
+			longest = std::max (longest, stem.size());
+
+		stems[0].resize (longest, 0.0f);
+		for (size_t s = 1; s < stems.size(); ++s)
+		{
+			for (size_t i = 0; i < stems[s].size(); ++i)
+				stems[0][i] += stems[s][i];
+			stems[s].assign (longest, 0.0f);
+		}
+	}
+
 	std::vector<BarLevels> barLevels (const Features& features, double bpm, double firstBeat, StemRoles roles)
 	{
 		std::vector<BarLevels> bars;

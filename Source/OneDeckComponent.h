@@ -59,6 +59,10 @@ public:
 
 private:
 	void loadSet (const StemSet&);
+	void showLoaded (const StemSet&);
+	// CONTINUE (PlayMode.h): stages the next set of the library's list near
+	// the end, and takes on the one the player handed over to. Every tick.
+	void followContinue();
 	void loadById (const juce::String& setId);
 	void step (int direction);
 	void findSteps();
@@ -133,6 +137,7 @@ private:
 	ProLinkReceiver link;
 	ProLinkSender linkSender;   // reads the player: stopped before it goes
 	int linkRetryCountdown = 0;
+	juce::String refusedStage;   // a set the player could not open: not tried again every tick
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (OneDeckComponent)
 };

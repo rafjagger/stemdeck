@@ -1,6 +1,8 @@
 find_package(GTest REQUIRED)
 add_executable(stemdeck-tests
     Smoke.cpp
+    PlayMode.cpp
+    ${CMAKE_SOURCE_DIR}/Source/PlayMode.cpp
     CueLight.cpp
     ${CMAKE_SOURCE_DIR}/Source/CueLight.cpp
     CuePlay.cpp
@@ -208,10 +210,12 @@ add_executable(stemdeck-spatial-tests
     spatial/OneDeckSync.cpp
     spatial/PlayerTempo.cpp
     spatial/PlayerLoop.cpp
+    spatial/PlayerContinue.cpp
     spatial/StemCreatorLock.cpp
     spatial/AnalysisCache.cpp
     spatial/Recorder.cpp
     spatial/RecorderControls.cpp
+    spatial/EmptySlots.cpp
     ${CMAKE_SOURCE_DIR}/Source/Recorder.cpp
     ${CMAKE_SOURCE_DIR}/Source/RecorderControls.cpp
     ${CMAKE_SOURCE_DIR}/Source/RecordTarget.cpp
@@ -227,6 +231,10 @@ add_executable(stemdeck-spatial-tests
     ${CMAKE_SOURCE_DIR}/Source/StemJob.cpp
     ${CMAKE_SOURCE_DIR}/Source/ProcessGroup.cpp
     ${CMAKE_SOURCE_DIR}/Source/StemNames.cpp
+    ${CMAKE_SOURCE_DIR}/Source/StemSet.cpp
+    ${CMAKE_SOURCE_DIR}/Source/LibraryPath.cpp
+    ${CMAKE_SOURCE_DIR}/Source/StemLevels.cpp
+    ${CMAKE_SOURCE_DIR}/Source/StemHandover.cpp
     ${CMAKE_SOURCE_DIR}/Source/TempoAnalysis.cpp
     ${CMAKE_SOURCE_DIR}/Source/SectionAnalysis.cpp
     ${CMAKE_SOURCE_DIR}/Source/Sections.cpp
@@ -265,6 +273,7 @@ add_executable(stemdeck-spatial-tests
     ${CMAKE_SOURCE_DIR}/Source/LevelMeter.cpp
     ${CMAKE_SOURCE_DIR}/Source/MeterBallistics.cpp
     ${CMAKE_SOURCE_DIR}/Source/DeckPanel.cpp
+    ${CMAKE_SOURCE_DIR}/Source/PlayMode.cpp
     ${CMAKE_SOURCE_DIR}/Source/Waveforms.cpp
     ${CMAKE_SOURCE_DIR}/Source/JogWheel.cpp
     ${CMAKE_SOURCE_DIR}/Source/CueLight.cpp

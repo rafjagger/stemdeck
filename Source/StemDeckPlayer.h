@@ -65,6 +65,25 @@ public:
 	void setRepeat (bool shouldRepeat) { repeat = shouldRepeat; }
 	bool isRepeating() const { return repeat.load(); }
 
+	// CONTINUE (PlayMode.h): at the end of the track, the staged set takes
+	// over on the audio thread at the end frame and plays from its start,
+	// its grid with it. REPEAT wins; a loop never reaches the end. The staged
+	// set decodes beside the playing one (both are held until the change);
+	// the one played out is freed by releaseRetired(), never by the audio
+	// thread. A load drops what is staged.
+	void setContinue (bool on) { continuing = on; }
+	bool isContinuing() const { return continuing.load(); }
+	// An error, or empty. Refused while the loaded set still decodes: its
+	// jobs would be stopped, and a short set is staged on the next try.
+	juce::String stageNext (const StemSet& set, BeatGrid grid = {});
+	void clearStaged();
+	bool hasStaged() const;
+	bool isStagedReady() const;
+	int handovers() const { return handoverCount.load(); }   // changes counted
+	void releaseRetired();
+	// Stopped at its end in CONTINUE with nothing staged: true once.
+	bool takeRanOut() { return ranOut.exchange (false); }
+
 	void setPosition (double seconds);
 	double getPosition() const;
 	// When the audio thread last moved the position, in
@@ -178,7 +197,19 @@ private:
 		std::atomic<int> pending { 0 };   // stems still decoding
 		std::atomic<bool> ready { false };
 		std::atomic<juce::int64>& bytes;
+		BeatGrid grid;   // a staged set's, taken on at the change
+		// Its decoding stops: a staged set dropped. Not by stopping the pool's
+		// jobs, which may be decoding the set just handed over to as well.
+		std::atomic<bool> cancelled { false };
 	};
+
+	// Opens a set's stems: mapped, or readers handed back to be decoded. An error, or empty.
+	using Readers = std::array<std::shared_ptr<juce::AudioFormatReader>, StemSet::numStems>;
+	juce::String open (const StemSet& set, LoadedSet& into, Readers& toDecode);
+	static void startDecoding (juce::ThreadPool& pool, const std::shared_ptr<LoadedSet>& set, const Readers& toDecode);
+	// At the end of the track with a set staged: it becomes the loaded one.
+	// Audio thread, setLock held; false (nothing changed) if it cannot.
+	bool handOver();
 
 	// The outgoing side of a seam: the track as it went on behind the loop's
 	// end, `done` frames of the fade-out gone. Audio thread only.
@@ -258,6 +289,13 @@ private:
 	mutable juce::CriticalSection setLock;
 	std::shared_ptr<LoadedSet> loaded;
 	std::atomic<juce::int64> lengthInSamples { 0 };
+	// CONTINUE's, under setLock: the set to go on with, and the one played
+	// out, kept for the message thread to free. Staged sets decode in their
+	// own pool, so staging never stops the loaded set's decoding.
+	std::shared_ptr<LoadedSet> staged, retired;
+	juce::ThreadPool stagedDecoders { juce::ThreadPoolOptions{}.withThreadName ("Stem staging").withNumberOfThreads (numStems) };
+	std::atomic<int> handoverCount { 0 };
+	std::atomic<bool> continuing { false }, ranOut { false };
 
 	std::atomic<bool> playing { false }, repeat { false };
 	std::atomic<juce::int64> readPosition { 0 };

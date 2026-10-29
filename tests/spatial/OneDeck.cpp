@@ -909,3 +909,210 @@ TEST_F (OneDeck, PaintsTheAuxGhostMark)
 	EXPECT_EQ (differingPixels (without, knobOf()), 0) << "and goes again";
 	view.setLookAndFeel (nullptr);
 }
+
+// CONTINUE beside REPEAT in the deck column, one play mode: each key turns
+// the other off, and the player follows. The session keeps it.
+TEST_F (OneDeck, ContinueStandsBesideRepeatAndTheyAreExclusive)
+{
+	OneDeckView view (audio, formats, 0);
+	view.setSize (rigViewWidth, rigViewHeight);
+	auto& panel = view.deckPanel();
+	auto& repeat = panel.repeatKey();
+	auto& continuePlay = panel.continueKey();
+
+	EXPECT_TRUE (continuePlay.isVisible());
+	EXPECT_EQ (continuePlay.getParentComponent(), &panel);
+	EXPECT_EQ (continuePlay.getY(), repeat.getY());
+	EXPECT_EQ (continuePlay.getHeight(), repeat.getHeight());
+	EXPECT_LT (repeat.getRight(), continuePlay.getX()) << "REPEAT | CONTINUE";
+	EXPECT_EQ (continuePlay.getButtonText(), "CONTINUE") << "its state is its light, not its text";
+
+	continuePlay.onClick();   // a tap, as the button runs it
+	EXPECT_TRUE (continuePlay.getToggleState());
+	EXPECT_TRUE (player().isContinuing());
+	EXPECT_EQ (continuePlay.getButtonText(), "CONTINUE");
+
+	repeat.onClick();   // a tap, as the button runs it
+	EXPECT_TRUE (repeat.getToggleState());
+	EXPECT_FALSE (continuePlay.getToggleState()) << "REPEAT turned CONTINUE off";
+	EXPECT_TRUE (player().isRepeating());
+	EXPECT_FALSE (player().isContinuing());
+
+	panel.toggleContinue();   // the panel's key
+	EXPECT_FALSE (repeat.getToggleState()) << "CONTINUE turned REPEAT off";
+	EXPECT_FALSE (player().isRepeating());
+	EXPECT_TRUE (player().isContinuing());
+
+	DeckSession saved;
+	view.saveState (saved);
+	EXPECT_TRUE (saved.continuePlay);
+	EXPECT_FALSE (saved.repeat);
+
+	panel.toggleContinue();
+	EXPECT_EQ (panel.playMode(), playmode::Mode::single);
+	view.restoreState (saved);
+	EXPECT_EQ (panel.playMode(), playmode::Mode::continuous);
+	EXPECT_TRUE (player().isContinuing());
+}
+
+// A page test must paint: CONTINUE's own pixels change when it lights, and
+// REPEAT's go dark; for the eye, the column at the rig's size in
+// STEMDECK_SNAPSHOT_DIR when set.
+TEST_F (OneDeck, PaintsTheContinueKeyLitAndDark)
+{
+	DJLookAndFeel look;
+	OneDeckView view (audio, formats, 0);
+	view.setLookAndFeel (&look);
+	view.setSize (rigViewWidth, rigViewHeight);
+	view.setSet (set);
+	player().clearLoop();
+	auto& panel = view.deckPanel();
+	const auto areaOf = [&] (juce::Component& key) { return view.getLocalArea (&panel, key.getBounds()); };
+	const auto keyRow = areaOf (panel.repeatKey()).getUnion (areaOf (panel.continueKey()));
+
+	panel.setPlayMode (playmode::Mode::repeat);
+	const auto repeating = snapshotOf (view);
+	panel.setPlayMode (playmode::Mode::continuous);
+	const auto continuing = snapshotOf (view);
+	panel.setPlayMode (playmode::Mode::single);
+	const auto single = snapshotOf (view);
+
+	for (const auto* image : { &repeating, &continuing, &single })
+		EXPECT_GT (lumaVariance (image->getClippedImage (keyRow)), 50.0);
+	const auto continueArea = areaOf (panel.continueKey()), repeatArea = areaOf (panel.repeatKey());
+	EXPECT_GT (differingPixels (single.getClippedImage (continueArea), continuing.getClippedImage (continueArea)), 100) << "CONTINUE is lit";
+	EXPECT_GT (differingPixels (repeating.getClippedImage (repeatArea), continuing.getClippedImage (repeatArea)), 100) << "REPEAT went dark";
+	EXPECT_EQ (differingPixels (single.getClippedImage (repeatArea), continuing.getClippedImage (repeatArea)), 0) << "REPEAT dark as in single";
+
+	const auto directory = juce::SystemStats::getEnvironmentVariable ("STEMDECK_SNAPSHOT_DIR", {});
+	if (directory.isNotEmpty())
+	{
+		const auto write = [&] (const char* name, const juce::Image& image)
+		{
+			const auto file = juce::File (directory).getChildFile (juce::String (name) + ".png");
+			ASSERT_TRUE (file.getParentDirectory().createDirectory().wasOk());
+			file.deleteFile();
+			juce::FileOutputStream stream (file);
+			ASSERT_TRUE (stream.openedOk());
+			ASSERT_TRUE (juce::PNGImageFormat().writeImageToStream (image, stream));
+		};
+		write ("one-deck-continue-on", continuing);
+		write ("one-deck-repeat-on", repeating);
+		write ("one-deck-play-mode-off", single);
+	}
+	view.setLookAndFeel (nullptr);
+}
+
+//==============================================================================
+// The slots are numbered, not named (2026-10-29): "anything can be in a
+// track". An empty slot -- a set of fewer than four files -- is drawn dim.
+namespace
+{
+// The mean luma of `area` in `image`.
+double meanLuma (const juce::Image& image, juce::Rectangle<int> area)
+{
+	const juce::Image::BitmapData pixels (image, juce::Image::BitmapData::readOnly);
+	area = area.getIntersection (image.getBounds());
+	double sum = 0.0;
+	for (int y = area.getY(); y < area.getBottom(); ++y)
+		for (int x = area.getX(); x < area.getRight(); ++x)
+		{
+			const auto colour = pixels.getPixelColour (x, y);
+			sum += (colour.getRed() + colour.getGreen() + colour.getBlue()) / 3.0;
+		}
+	return area.isEmpty() ? 0.0 : sum / (double) (area.getWidth() * area.getHeight());
+}
+}
+
+TEST_F (OneDeck, TheStemHeadersShowTheSlotNumbersNotTheNames)
+{
+	DJLookAndFeel look;
+	OneDeckView view (audio, formats, 0);
+	view.setLookAndFeel (&look);
+	view.setSize (rigViewWidth, rigViewHeight);
+	view.setSet (set);   // named drums, bass, vocals, synth
+	for (int s = 0; s < stems; ++s)
+	{
+		EXPECT_EQ (view.column (s).header().getText(), juce::String (s + 1));
+		EXPECT_EQ (view.column (s).getAlpha(), 1.0f) << "slot " << s + 1 << " is loaded";
+	}
+	const auto image = snapshotOf (view);
+	for (int s = 0; s < stems; ++s)
+	{
+		const auto header = view.getLocalArea (&view.column (s), view.column (s).header().getBounds());
+		EXPECT_GT (lumaVariance (image.getClippedImage (header)), 50.0) << "the number is painted on slot " << s + 1;
+	}
+	view.setLookAndFeel (nullptr);
+}
+
+TEST_F (OneDeck, EmptySlotsArePaintedDim)
+{
+	StemSet lone;
+	lone.name = "lone";
+	lone.files[0] = folder.getChildFile ("lone.wav");
+	twodeck::writeNoiseStem (lone.files[0], 7);
+	lone.stemNames[0] = "lone";
+
+	DJLookAndFeel look;
+	OneDeckView view (audio, formats, 0);
+	view.setLookAndFeel (&look);
+	view.setSize (rigViewWidth, rigViewHeight);
+	view.setSet (set);
+	const auto full = snapshotOf (view);
+
+	ASSERT_EQ (audio.host().load (lone), juce::String());
+	view.setSet (lone);
+	const auto shortOfFour = snapshotOf (view);
+	EXPECT_EQ (view.column (0).getAlpha(), 1.0f);
+	for (int s = 1; s < stems; ++s)
+	{
+		EXPECT_LT (view.column (s).getAlpha(), 1.0f) << "slot " << s + 1 << " is empty";
+		EXPECT_EQ (view.column (s).header().getText(), juce::String (s + 1)) << "an empty slot keeps its number";
+		const auto header = view.getLocalArea (&view.column (s), view.column (s).header().getBounds());
+		EXPECT_LT (meanLuma (shortOfFour, header), meanLuma (full, header)) << "slot " << s + 1 << " is drawn dim";
+	}
+	const auto first = view.getLocalArea (&view.column (0), view.column (0).header().getBounds());
+	EXPECT_EQ (differingPixels (full.getClippedImage (first), shortOfFour.getClippedImage (first)), 0) << "slot 1 as before";
+
+	view.setSet (set);
+	for (int s = 0; s < stems; ++s)
+		EXPECT_EQ (view.column (s).getAlpha(), 1.0f) << "a full set lights slot " << s + 1 << " again";
+	view.setLookAndFeel (nullptr);
+}
+
+// For the maintainer's eye: a set of one, two and four files at the rig's
+// size in STEMDECK_SNAPSHOT_DIR.
+TEST_F (OneDeck, WritesSetsOfOneTwoAndFourFilesForReview)
+{
+	const auto directory = juce::SystemStats::getEnvironmentVariable ("STEMDECK_SNAPSHOT_DIR", {});
+	if (directory.isEmpty())
+		GTEST_SKIP() << "STEMDECK_SNAPSHOT_DIR not set";
+
+	StemSet one, two;
+	one.name = "Lone Stereo Track";
+	one.files[0] = folder.getChildFile ("Lone Stereo Track.wav");
+	twodeck::writeNoiseStem (one.files[0], 3);
+	two.name = "Two Files";
+	two.files[0] = folder.getChildFile ("Two Files - 1 - drums.wav");
+	two.files[1] = folder.getChildFile ("Two Files - 2 - rest.wav");
+	twodeck::writeNoiseStem (two.files[0], 4);
+	twodeck::writeNoiseStem (two.files[1], 5);
+
+	DJLookAndFeel look;
+	OneDeckView view (audio, formats, 0);
+	view.setLookAndFeel (&look);
+	view.setSize (rigViewWidth, rigViewHeight);
+	for (const auto& [shown, file] : { std::pair { &one, "slots-1-file" }, std::pair { &two, "slots-2-files" }, std::pair { &set, "slots-4-files" } })
+	{
+		ASSERT_EQ (audio.host().load (*shown), juce::String());
+		view.setSet (*shown);
+		player().setBeatGrid ({ 120.0, 0.0 });
+		const auto out = juce::File (directory).getChildFile (juce::String (file) + ".png");
+		ASSERT_TRUE (out.getParentDirectory().createDirectory().wasOk());
+		out.deleteFile();
+		juce::FileOutputStream stream (out);
+		ASSERT_TRUE (stream.openedOk());
+		ASSERT_TRUE (juce::PNGImageFormat().writeImageToStream (snapshotOf (view), stream));
+	}
+	view.setLookAndFeel (nullptr);
+}

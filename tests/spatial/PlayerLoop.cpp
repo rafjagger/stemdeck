@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include <gtest/gtest.h>
 
+#include "../SyntheticStems.h"
 #include "StemDeckPlayer.h"
 
 #include <algorithm>
@@ -11,10 +12,11 @@
 #include <stdexcept>
 #include <vector>
 
-// A loop played as a CDJ plays it: the seam is a cut at the sample, with at
-// most a few milliseconds of both sides crossfaded -- no fade out and in, no
-// dip -- and the playhead never runs past the loop's end, however many passes
-// and whatever tempo, with key lock on or off.
+// A loop played as a CDJ plays it: the seam is a cut at the sample -- the
+// loop's start heard exactly from its first frame, nothing from before it,
+// at most a micro-fade of what is cut off behind the end -- with no click and
+// no dip, and the playhead never runs past the loop's end, however many
+// passes and whatever tempo, with key lock on or off.
 namespace
 {
 constexpr double rate = 44100.0;
@@ -32,26 +34,28 @@ constexpr int window = 4096, hop = 256;
 constexpr double trackSeconds = 40.0;
 constexpr double pi = 3.14159265358979323846;
 
-void writeStem (const juce::File& file, bool tone)
+// The four tones, mixed, at 44.1 kHz.
+std::vector<float> toneMix()
 {
-	const auto length = (int) (trackSeconds * rate);
+	std::vector<float> x ((size_t) (trackSeconds * rate));
+	for (size_t i = 0; i < x.size(); ++i)
+		for (const auto bin : toneBins)
+			x[i] += amplitude * (float) std::sin (2.0 * pi * binHz * bin * (double) i / rate);
+	return x;
+}
+
+void writeStem (const juce::File& file, const std::vector<float>& samples, double fileRate)
+{
+	const auto length = (int) samples.size();
 	juce::AudioBuffer<float> audio (2, length);
-	audio.clear();
-	if (tone)
-		for (int i = 0; i < length; ++i)
-		{
-			float v = 0.0f;
-			for (const auto bin : toneBins)
-				v += amplitude * (float) std::sin (2.0 * pi * binHz * bin * i / rate);
-			audio.setSample (0, i, v);
-			audio.setSample (1, i, v);
-		}
+	for (int ch = 0; ch < 2; ++ch)
+		audio.copyFrom (ch, 0, samples.data(), length);
 
 	juce::WavAudioFormat wav;
 	std::unique_ptr<juce::OutputStream> stream = file.createOutputStream();
 	auto writer = stream == nullptr ? nullptr
 	                                : wav.createWriterFor (stream, juce::AudioFormatWriterOptions{}
-	                                                                   .withSampleRate (rate)
+	                                                                   .withSampleRate (fileRate)
 	                                                                   .withNumChannels (2)
 	                                                                   .withBitsPerSample (32));
 	if (writer == nullptr || ! writer->writeFromAudioSampleBuffer (audio, 0, length))
@@ -80,25 +84,29 @@ std::string name (const Case& c)
 
 void PrintTo (const Case& c, std::ostream* os) { *os << name (c); }
 
-class PlayerLoop : public ::testing::TestWithParam<Case>
+class LoopFixture : public ::testing::Test
 {
 protected:
 	void SetUp() override
 	{
 		ASSERT_TRUE (folder.createDirectory().wasOk());
 		formats.registerBasicFormats();
-		set.name = "tone";
+	}
+
+	void TearDown() override { folder.deleteRecursively(); }
+
+	void load (const std::array<std::vector<float>, StemSet::numStems>& stems, double fileRate)
+	{
+		set.name = "loop";
 		for (int s = 0; s < StemSet::numStems; ++s)
 		{
 			set.files[(size_t) s] = folder.getChildFile ("stem" + juce::String (s) + ".wav");
 			set.stemNames[(size_t) s] = "stem" + juce::String (s);
-			writeStem (set.files[(size_t) s], true);   // four stems with music, as a track has
+			writeStem (set.files[(size_t) s], stems[(size_t) s], fileRate);
 		}
 		ASSERT_EQ (player.load (set), juce::String());
 		player.prepareToPlay (block, rate);
 	}
-
-	void TearDown() override { folder.deleteRecursively(); }
 
 	// `passes` passes of the loop, played from its start.
 	Render play (double loopStart, double loopEnd, int passes)
@@ -131,6 +139,26 @@ protected:
 	StemDeckPlayer player { formats };
 };
 
+// Tones on all four stems, as a track has music on all four.
+class PlayerLoop : public LoopFixture, public ::testing::WithParamInterface<Case>
+{
+protected:
+	void SetUp() override
+	{
+		LoopFixture::SetUp();
+		const auto tones = toneMix();
+		load ({ tones, tones, tones, tones }, rate);
+	}
+};
+
+double steepestStep (const std::vector<float>& x, size_t from)
+{
+	double steepest = 0.0;
+	for (size_t i = std::max<size_t> (from, 1); i < x.size(); ++i)
+		steepest = std::max (steepest, (double) std::abs (x[i] - x[i - 1]));
+	return steepest;
+}
+
 double rmsDb (const std::vector<float>& x, size_t from)
 {
 	double sum = 0.0;
@@ -140,14 +168,14 @@ double rmsDb (const std::vector<float>& x, size_t from)
 }
 }
 
-TEST_P (PlayerLoop, SeamlessAndNeverPastItsEnd)
+TEST_P (PlayerLoop, NoDipAndNeverPastItsEnd)
 {
 	const auto c = GetParam();
 	player.setSpeed (c.speed);
 	player.setKeyLock (c.keyLock);
 
 	// Half a period off the lowest tone's: the seam joins it to itself upside
-	// down, the hardest case for a cut.
+	// down, the hardest case for a cut and for the level.
 	const auto period = rate / (binHz * toneBins[0]);
 	auto loopSamples = std::round (c.loopSeconds * rate);
 	loopSamples += std::round (std::fmod (1.5 * period - std::fmod (loopSamples, period), period));
@@ -165,9 +193,8 @@ TEST_P (PlayerLoop, SeamlessAndNeverPastItsEnd)
 
 	// From the second pass on: every window of the output (seams included)
 	// within 0.5 dB of the body's level -- the median window. Away from rate
-	// 1 the stretcher holds a steady tone about 0.6 dB under the file's own
-	// and starts at the file's (each seam starts it again), so no window may
-	// rise above the louder of the two.
+	// 1 the stretcher holds a steady tone about 0.6 dB under the file's own,
+	// so no window may rise above the louder of the two.
 	const auto settled = (size_t) (0.3 * rate);
 	std::vector<double> levels;
 	for (size_t i = settled; i + window < r.left.size(); i += hop)
@@ -180,25 +207,14 @@ TEST_P (PlayerLoop, SeamlessAndNeverPastItsEnd)
 	const auto toneDb = 10.0 * std::log10 ((double) toneBins.size() * amplitude * amplitude / 2.0);
 	// With key lock away from rate 1 the stretcher's window straddles the
 	// seam, where the four tones jump in phase, and its frames there cancel
-	// a little: about 0.7 dB over a 93 ms window on these steady tones (0.8
-	// with a bare cut, 2bd3b58; a longer fade only loses more). Music snapped
-	// to the grid meets the seam on a beat, where Rubber Band resets its
-	// phases anyway. Everywhere else: 0.5 dB.
+	// a little: up to 1 dB over a 93 ms window on these steady tones, met
+	// upside down (any fade at the seam only loses more). Music snapped to
+	// the grid meets the seam on a beat, where Rubber Band resets its phases
+	// anyway. Everywhere else: 0.5 dB.
 	const auto allowedDip = c.keyLock && std::abs (c.speed - 1.0) > 1e-9 ? 1.0 : 0.5;
 	EXPECT_GT (*lowest, bodyDb - allowedDip) << name (c) << ": a dip at the seam";
 	EXPECT_LT (*highest, std::max (bodyDb, toneDb) + 0.5) << name (c) << ": a bump at the seam";
 	EXPECT_NEAR (bodyDb, toneDb, 1.0) << name (c) << ": the tone's own level";
-
-	// No step between samples beyond twice the mix's own steepest: the
-	// seam is as smooth as the music either side of it.
-	double heardHzSum = 0.0;
-	for (const auto bin : toneBins)
-		heardHzSum += binHz * bin * (c.keyLock ? 1.0 : c.speed);
-	const auto ownStep = amplitude * 2.0 * pi * heardHzSum / rate;
-	double steepest = 0.0;
-	for (size_t i = settled; i < r.left.size(); ++i)
-		steepest = std::max (steepest, (double) std::abs (r.left[i] - r.left[i - 1]));
-	EXPECT_LT (steepest, 2.0 * ownStep) << name (c) << ": a click at the seam";
 }
 
 INSTANTIATE_TEST_SUITE_P (LengthsTemposAndKeyLock, PlayerLoop,
@@ -295,4 +311,143 @@ TEST_F (PlayerLoopSeek, ASeamCostsNoMoreThanTheBlocksAroundIt)
 	// no block of the loop does more than the steady state's.
 	EXPECT_LE (looping.mostWork, steady.mostWork) << "no stretcher work at the seam";
 	EXPECT_LT (looping.slowest, 2.0 * steady.slowest + 0.2) << "ms";
+}
+
+
+//==============================================================================
+namespace
+{
+// Music on the grid: the synthetic stems (kick on the beat, hats off it,
+// bass, a pad) at 120 BPM, the downbeat at 0.25 s, 8 kHz.
+class PlayerLoopMusic : public LoopFixture, public ::testing::WithParamInterface<Case>
+{
+protected:
+	void SetUp() override
+	{
+		LoopFixture::SetUp();
+		const auto music = synthetic::fromScript ("FFFFFFFFFFFFFFFF");
+		load ({ music.samples[0], music.samples[1], music.samples[2], music.samples[3] }, synthetic::sampleRate);
+	}
+};
+}
+
+// No click: around every seam no step between samples beyond what the
+// music itself makes -- the same stretch played on without a loop.
+TEST_P (PlayerLoopMusic, TheSeamClicksNoMoreThanTheMusic)
+{
+	const auto c = GetParam();
+	player.setSpeed (c.speed);
+	player.setKeyLock (c.keyLock);
+	const auto start = synthetic::firstBeat + 4 * 4 * synthetic::beat;   // the fifth bar's downbeat
+	const auto end = start + c.loopSeconds;
+	constexpr int passes = 24;
+
+	player.setPosition (start);
+	player.play();
+	const auto plain = play (start, end, passes);
+	player.pause();
+
+	player.setLoop (start, end);
+	player.play();
+	const auto looped = play (start, end, passes);
+	EXPECT_GE (looped.wraps, passes - 1) << name (c);
+
+	const auto settled = (size_t) (0.3 * rate);
+	const auto own = steepestStep (plain.left, settled), atSeams = steepestStep (looped.left, settled);
+	std::printf ("%s: steepest %.4f, without the loop %.4f\n", name (c).c_str(), atSeams, own);
+	EXPECT_LT (atSeams, 1.25 * own) << name (c) << ": a click at the seam";
+}
+
+INSTANTIATE_TEST_SUITE_P (BeatsTemposAndKeyLock, PlayerLoopMusic,
+	::testing::Values (Case { 0.5, 1.0, false }, Case { 1.0, 1.0, false }, Case { 2.0, 1.0, false },
+					   Case { 1.0, 0.94, false }, Case { 1.0, 1.08, false },
+					   Case { 0.5, 1.0, true }, Case { 1.0, 1.0, true }, Case { 2.0, 1.0, true },
+					   Case { 1.0, 0.94, true }, Case { 1.0, 1.08, true }));
+
+//==============================================================================
+namespace
+{
+constexpr double markedStart = 3.0, markedLength = 0.5;
+constexpr float marker = 0.9f;   // above anything the tones reach (0.6)
+
+// Tones on stem 0, and in the 4096 frames before the loop's start a marker
+// no tone reaches: if it is ever heard, the seam reached before the start.
+class PlayerLoopExact : public LoopFixture
+{
+protected:
+	void SetUp() override
+	{
+		LoopFixture::SetUp();
+		tones = toneMix();
+		const auto at = (size_t) std::llround (markedStart * rate);
+		std::fill (tones.begin() + (long) at - 4096, tones.begin() + (long) at, marker);
+		const std::vector<float> silence (tones.size(), 0.0f);
+		load ({ tones, silence, silence, silence }, rate);
+	}
+
+	std::vector<float> tones;
+};
+}
+
+// After every seam the loop's start is heard exactly, from its first frame
+// and at full level; the only other thing there is what was cut off behind
+// the end, fading out over StemDeckPlayer::seamFade frames. Plain path,
+// rate 1: the output is the file's own frames, a fixed latency later.
+TEST_F (PlayerLoopExact, TheLoopsStartIsHeardExactlyAndNothingBeforeIt)
+{
+	const auto start = (std::int64_t) std::llround (markedStart * rate);
+	const auto length = (std::int64_t) std::llround (markedLength * rate);
+	const auto end = start + length;
+	player.setLoop ((double) start / rate, (double) end / rate);
+	player.play();
+	constexpr int passes = 6;
+	const auto r = play (markedStart, markedStart + markedLength, passes);
+
+	// What a CDJ plays: the loop's frames over and over; after each seam the
+	// frames behind the end under them, fading out.
+	const auto fade = StemDeckPlayer::seamFade;
+	const auto expected = [&] (std::int64_t k)
+	{
+		const auto pass = k / length, i = k % length;
+		auto v = tones[(size_t) (start + i)];
+		if (pass > 0 && i < fade)
+			v += 0.5f * (1.0f + std::cos ((float) pi * ((float) i + 0.5f) / (float) fade)) * tones[(size_t) (end + i)];
+		return v;
+	};
+
+	// The fixed latency of the deck's resampler: where the output matches best.
+	const auto errorAt = [&] (int lag, std::int64_t from, std::int64_t to)
+	{
+		double worst = 0.0;
+		for (auto n = from; n < to && n < (std::int64_t) r.left.size(); ++n)
+			worst = std::max (worst, (double) std::abs (r.left[(size_t) n] - expected (n - lag)));
+		return worst;
+	};
+	int lag = 0;
+	for (int candidate = 1; candidate < 64; ++candidate)
+		if (errorAt (candidate, 1024, 4096) < errorAt (lag, 1024, 4096))
+			lag = candidate;
+
+	const auto worst = errorAt (lag, 1024, (std::int64_t) r.left.size());
+	EXPECT_LT (worst, 1.0e-3) << "the loop as a CDJ plays it, latency " << lag;
+
+	float loudest = 0.0f;
+	for (const auto v : r.left)
+		loudest = std::max (loudest, std::abs (v));
+	EXPECT_LT (loudest, 0.8f) << "nothing from before the loop's start";
+}
+
+// The same with key lock: the stretcher changes every frame, but nothing
+// from before the start may reach the ear.
+TEST_F (PlayerLoopExact, NothingBeforeTheStartWithKeyLockEither)
+{
+	player.setSpeed (0.94);
+	player.setKeyLock (true);
+	player.setLoop (markedStart, markedStart + markedLength);
+	player.play();
+	const auto r = play (markedStart, markedStart + markedLength, 12);
+	float loudest = 0.0f;
+	for (size_t i = (size_t) (0.1 * rate); i < r.left.size(); ++i)
+		loudest = std::max (loudest, std::abs (r.left[i]));
+	EXPECT_LT (loudest, 0.8f) << "nothing from before the loop's start";
 }

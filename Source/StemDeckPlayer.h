@@ -25,6 +25,17 @@ public:
 	static constexpr int numStems = StemSet::numStems;
 	static constexpr int numOutputChannels = numStems * 2;
 
+	// The loop's seam, in what is read -- before the stretchers, so they
+	// read one stream and never start again. From the seam on, the loop's
+	// start plays exactly as it is, at full level from its first frame, as
+	// on a CDJ; the track as it went on behind the end is added under it,
+	// fading out over seamFade frames (a raised cosine) -- a micro-fade of
+	// the outgoing side only. Nothing from before the loop's start is ever
+	// heard. 0, a bare cut: on music snapped to the grid it clicks no more
+	// than the music does (tests/spatial/PlayerLoop.cpp), and 16 or 32 only
+	// cost level under key lock -- measured 2026-10-29.
+	static constexpr int seamFade = 0;
+
 	explicit StemDeckPlayer (juce::AudioFormatManager& formatManager);
 	~StemDeckPlayer() override;
 
@@ -149,6 +160,14 @@ private:
 		double sampleRate = 44100.0;
 	};
 
+	// The outgoing side of a seam: the track as it went on behind the loop's
+	// end, `done` frames of the fade-out gone. Audio thread only.
+	struct SeamTail
+	{
+		juce::int64 from = 0;
+		int done = 1 << 30;   // past any fade: none
+	};
+
 	// Reads the stems at the playhead; this is what the resampler pulls from.
 	struct StemReader : public juce::AudioSource
 	{
@@ -167,6 +186,7 @@ private:
 		std::int64_t jumpFrom (std::int64_t position) override;
 		StemDeckPlayer& owner;
 		const int stem;
+		SeamTail seam;
 	};
 
 	// A deck's stretchers, one per stem, built and swapped as one.
@@ -189,7 +209,7 @@ private:
 
 	void readStems (const juce::AudioSourceChannelInfo& info);
 	juce::int64 inLoop (juce::int64 position) const;
-	void readStemLooped (int stem, float* const* dest, int count, juce::int64 position, juce::int64 start, juce::int64 end);
+	void addSeamTail (int stem, float* const* dest, int count, const SeamTail& tail);
 	void readRun (float* const* dest, int count, juce::int64 position);
 	void readStemRun (int stem, float* const* dest, int count, juce::int64 position);
 	void renderPreMute (int stem, const juce::AudioSourceChannelInfo& info);
@@ -265,13 +285,8 @@ private:
 	int fadeRemaining = 0, fadeLength = 1;
 	juce::AudioBuffer<float> fadeBuffer;
 
-	// The loop's seam, in what is read -- before the stretchers, so they see
-	// one continuous signal: the last seamLength frames before the loop's
-	// end crossfade (equal power) into the frames before its start, and the
-	// read goes on from the start. 128 frames, 2.9 ms at 44.1 kHz. Audio
-	// thread only: the frames before the start, one stem at a time.
-	static constexpr int seamLength = 128;
-	juce::AudioBuffer<float> seamScratch { 2, seamLength };
+	juce::AudioBuffer<float> seamScratch { 2, juce::jmax (1, seamFade) };
+	SeamTail plainSeam;   // the plain path's
 	std::array<KeyLockInput, numStems> keyLockInputs { { { *this, 0 }, { *this, 1 }, { *this, 2 }, { *this, 3 } } };
 	KeyLockSource keyLockSource { *this };
 	juce::ResamplingAudioSource keyLockResampler { &keyLockSource, false, numOutputChannels };

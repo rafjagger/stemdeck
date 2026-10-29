@@ -481,7 +481,7 @@ void StemLibrary::paintCell (juce::Graphics& g, int row, int columnId, int width
 	switch (columnId)
 	{
 		case nameColumn:   text = set.name; break;
-		case stemsColumn:  { juce::StringArray n; for (const auto& s : set.displayNames()) n.add (s); text = n.joinIntoString (" / "); break; }
+		case stemsColumn:  { juce::StringArray n; for (const auto& s : set.stemNames) n.add (s); text = n.joinIntoString (" / "); break; }
 		case bpmColumn:    { const auto bpm = bpmOf (set); text = bpm > 0.0 ? juce::String (bpm, 2) : juce::String(); break; }
 		case lengthColumn: text = Theme::formatTime (set.lengthSeconds).upToLastOccurrenceOf (".", false, false); break;
 		case artistColumn: text = set.artist; break;

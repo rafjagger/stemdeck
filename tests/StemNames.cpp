@@ -82,38 +82,3 @@ TEST (StemNames, ALaneLabelCarriesTheStemsNumber)
 	EXPECT_EQ (stemLaneLabel ("Vox", 3), "4 Vox");
 	EXPECT_EQ (stemLaneLabel ("", 2), "3");
 }
-
-TEST (StemNames, TheSeparatorsSpace4FilesAreOneSetInBusOrder)
-{
-	const std::array<std::string, 4> names { "low", "tops", "music", "vocals" };
-	for (int stem = 0; stem < 4; ++stem)
-	{
-		const auto base = "Big Party - " + std::to_string (stem + 1) + " - " + names[(size_t) stem];
-		std::string prefix, suffix;
-		ASSERT_TRUE (splitStemName (base, prefix, suffix)) << base;
-		EXPECT_EQ (prefix, "Big Party");
-		EXPECT_EQ (suffix, std::to_string (stem + 1) + " - " + names[(size_t) stem]);
-	}
-}
-
-TEST (StemNames, Space4StemsAreShownByTheirJobInCapitals)
-{
-	const auto shown = stemDisplayNames ({ "1 - low", "2 - tops", "3 - music", "4 - vocals" });
-	EXPECT_EQ (shown, (std::array<std::string, 4> { "LOW", "TOPS", "MUSIC", "VOCALS" }));
-}
-
-TEST (StemNames, OldSetsShowTheirNamesWithoutTheNumber)
-{
-	EXPECT_EQ (stemDisplayNames ({ "1 - drums", "2 - bass", "3 - other", "4 - vocals" }),
-			   (std::array<std::string, 4> { "drums", "bass", "other", "vocals" }));
-	EXPECT_EQ (stemDisplayNames ({ "1.drums", "2.bass", "3.other", "4.vocals" }),
-			   (std::array<std::string, 4> { "drums", "bass", "other", "vocals" }));
-}
-
-TEST (StemNames, NamesWithoutANumberedNameStayAsTheyAre)
-{
-	EXPECT_EQ (stemDisplayNames ({ "DUB", "001", "02", "Pads" }),
-			   (std::array<std::string, 4> { "DUB", "001", "02", "Pads" }));
-	EXPECT_EQ (stemDisplayNames ({ "1 - low", "2 - tops", "3 - other", "4 - vocals" })[0], "low")
-		<< "only the whole space4 set is shown in capitals";
-}

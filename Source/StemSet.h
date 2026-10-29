@@ -1,7 +1,6 @@
 #pragma once
 
 #include <JuceHeader.h>
-#include "StemNames.h"
 #include <array>
 #include <vector>
 
@@ -23,22 +22,6 @@ struct StemSet
 	std::array<juce::File, numStems> files;
 	std::array<juce::String, numStems> stemNames;
 	double lengthSeconds = 0.0; // from the first stem's header
-
-	// The stems' names as shown on screen (stemDisplayNames, StemNames.h):
-	// "drums" for "1 - drums", LOW ... VOCALS for a space4 set. Inline: the
-	// test targets that build the deck views do not link StemSet.cpp.
-	std::array<juce::String, numStems> displayNames() const
-	{
-		std::array<std::string, numStems> suffixes;
-		for (size_t s = 0; s < suffixes.size(); ++s)
-			suffixes[s] = stemNames[s].toStdString();
-
-		const auto shown = stemDisplayNames (suffixes);
-		std::array<juce::String, numStems> names;
-		for (size_t s = 0; s < names.size(); ++s)
-			names[s] = juce::String (shown[s]);
-		return names;
-	}
 
 	// Scans a folder (recursively) for complete four-stem sets, sorted by
 	// artist, album and name; artist and album come from the folders the set

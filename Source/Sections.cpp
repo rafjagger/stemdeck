@@ -1,5 +1,4 @@
 #include "Sections.h"
-#include "StemNames.h"
 
 #include <algorithm>
 #include <cctype>
@@ -195,10 +194,9 @@ namespace sections
 		for (int s = 0; s < numStems; ++s)
 		{
 			const auto& name = stemNames[(size_t) s];
-			// space4: TOPS carries the drum attacks, LOW the low end (kick + bass).
-			if (! drums && (contains (name, "drum") || contains (name, "kick") || stemWord (name) == "tops"))
+			if (! drums && (contains (name, "drum") || contains (name, "kick")))
 				drums = s;
-			else if (! bass && (contains (name, "bass") || stemWord (name) == "low"))
+			else if (! bass && contains (name, "bass"))
 				bass = s;
 		}
 

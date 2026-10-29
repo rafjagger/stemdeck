@@ -219,7 +219,6 @@ TEST_F (EmptySlots, TheEncodersOfEmptySlotsPutOutExactZeros)
 	auto& settings = audio.host().spatialPorts().settings();
 	for (int s = 0; s < stems; ++s)
 	{
-		settings.threeD[(size_t) s] = 0.5f;
 		settings.aux[(size_t) s] = 1.0f;
 	}
 	player.setLoop (0.5, 2.5);

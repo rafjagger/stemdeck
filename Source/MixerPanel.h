@@ -89,7 +89,7 @@ public:
 	void setFaderBounds (juce::Rectangle<int> area);
 
 	// The deck's spatial engine, if it has one: a right-click or a long press
-	// on a stem's knob then opens that stem's 3D, direction, width and
+	// on a stem's knob then opens that stem's direction, width and
 	// one-shots (StemSpatialPopup). Without one (IEM refused) nothing opens.
 	void setSpatial (DeckSpatialPorts* engine) { spatial = engine; }
 	void openSpatial (int stem);

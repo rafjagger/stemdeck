@@ -317,7 +317,6 @@ void DeckHost::gather (DeckSession& deck) const
 		deck.stems[s].lengthBars = ports.motion().lengthBars ((int) s);
 		if (spatial == nullptr)
 		{
-			deck.stems[s].threeD = restoredSpatial[s].threeD;
 			deck.stems[s].azimuth = restoredSpatial[s].azimuth;
 			deck.stems[s].elevation = restoredSpatial[s].elevation;
 			deck.stems[s].width = restoredSpatial[s].width;
@@ -325,7 +324,6 @@ void DeckHost::gather (DeckSession& deck) const
 			continue;
 		}
 		const auto& controls = ports.settings();
-		deck.stems[s].threeD = controls.threeD[s].load();
 		deck.stems[s].azimuth = controls.azimuth[s].load();
 		deck.stems[s].elevation = controls.elevation[s].load();
 		deck.stems[s].width = controls.width[s].load();
@@ -345,7 +343,6 @@ void DeckHost::restoreSpatial (const DeckSession& deck)
 	auto& controls = ports.settings();
 	for (size_t s = 0; s < deck.stems.size(); ++s)
 	{
-		controls.threeD[s].store ((float) deck.stems[s].threeD);
 		controls.azimuth[s].store ((float) deck.stems[s].azimuth);
 		controls.elevation[s].store ((float) deck.stems[s].elevation);
 		controls.width[s].store ((float) deck.stems[s].width);

@@ -8,7 +8,7 @@
 namespace
 {
 	constexpr int refreshHz = 30;
-	// Shares of the popup's height: four slider rows, the pads, the length row.
+	// Shares of the popup's height: three slider rows, the pads, the length row.
 	constexpr float sliderRowShare = 0.065f, padRowShare = 0.11f, lengthRowShare = 0.08f, gapShare = 0.015f;
 
 	void setUp (juce::Slider& slider, juce::Label& label, const juce::String& name, juce::Range<double> range, double step,
@@ -35,13 +35,11 @@ StemSpatialPopup::StemSpatialPopup (DeckSpatial::Controls& c, int stem, DeckMoti
 	  stemColour (findColour (juce::Slider::rotarySliderFillColourId))
 {
 	const auto s = stemIndex;
-	setUp (threeDSlider, threeDLabel, "3D", { 0.0, 1.0 }, 0.01, controls.threeD[s].load(), {}, controls.threeD[s], *this);
 	setUp (azimuthSlider, azimuthLabel, "AZ", { -180.0, 180.0 }, 1.0, controls.azimuth[s].load(), " deg", controls.azimuth[s], *this);
 	setUp (elevationSlider, elevationLabel, "EL", { -90.0, 90.0 }, 1.0, controls.elevation[s].load(), " deg", controls.elevation[s], *this);
 	setUp (widthSlider, widthLabel, "WIDTH", { 0.0, 360.0 }, 1.0, controls.width[s].load(), " deg", controls.width[s], *this);
 
 	// Double-click returns to the value a fresh stem has.
-	threeDSlider.setDoubleClickReturnValue (true, 0.0);
 	azimuthSlider.setDoubleClickReturnValue (true, 0.0);
 	elevationSlider.setDoubleClickReturnValue (true, 0.0);
 	widthSlider.setDoubleClickReturnValue (true, spatial::Pose{}.width);
@@ -128,8 +126,8 @@ void StemSpatialPopup::resized()
 	const auto rowHeight = juce::roundToInt (height * sliderRowShare);
 	const auto labelWidth = area.getWidth() / 5;
 
-	for (auto [label, slider] : { std::pair { &threeDLabel, &threeDSlider }, std::pair { &azimuthLabel, &azimuthSlider },
-								  std::pair { &elevationLabel, &elevationSlider }, std::pair { &widthLabel, &widthSlider } })
+	for (auto [label, slider] : { std::pair { &azimuthLabel, &azimuthSlider }, std::pair { &elevationLabel, &elevationSlider },
+								  std::pair { &widthLabel, &widthSlider } })
 	{
 		auto row = area.removeFromTop (rowHeight);
 		label->setBounds (row.removeFromLeft (labelWidth));

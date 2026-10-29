@@ -256,8 +256,7 @@ void DeckSpatial::readControls()
 	{
 		const auto i = (size_t) s;
 		auto& stem = *stemNodes[i];
-		const float threeD = spatial::effectiveThreeD (deckThreeD, state.threeD[i].load (std::memory_order_relaxed),
-		                                                 state.envelope[i].load (std::memory_order_relaxed));
+		const float threeD = spatial::effectiveThreeD (deckThreeD, state.envelope[i].load (std::memory_order_relaxed));
 		stem.moving.setTargetValue (spatial::movingGain (threeD));
 		stem.mute.setTargetValue (state.muted[i].load (std::memory_order_relaxed) ? 0.0f : 1.0f);
 		stem.cue.setTargetValue (state.cued[i].load (std::memory_order_relaxed) ? 1.0f : 0.0f);

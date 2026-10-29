@@ -34,12 +34,12 @@ public:
 	struct Controls   // written from any thread, read once per block
 	{
 		Controls() { for (auto& w : width) w = spatial::Pose{}.width; }   // inline: the GUI tests build one without IEM
-		std::array<std::atomic<float>, stems> threeD {}, azimuth {}, elevation {}, width {};   // width default 60
+		std::array<std::atomic<float>, stems> azimuth {}, elevation {}, width {};   // width default 60
 		std::array<std::atomic<float>, stems> aux {};   // each stem's send to the aux bus, 0..1
 		std::array<std::atomic<bool>, stems> muted {}, cued {};
 		std::atomic<float> deckThreeD { 1.0f }, phonesLevel { 1.0f }, phonesMix { 0.0f };
 		std::atomic<bool> phonesDecoderOn { false };   // the app sets it from spatial::phonesDecoderRuns
-		std::array<std::atomic<float>, stems> envelope {};   // a one-shot's 3D envelope; 0 = none
+		std::array<std::atomic<float>, stems> envelope {};   // a one-shot's 3D envelope, times deckThreeD; 0 = none, steady
 		std::atomic<bool> playing { true };   // false, silent and settled, the deck stands (R14)
 	};
 

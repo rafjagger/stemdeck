@@ -13,21 +13,32 @@ TEST (StemSpatialPopup, SlidersWriteTheControls)
 	StemSpatialPopup popup (controls, 2);
 	popup.setSize (400, 200);
 
-	popup.threeD().setValue (0.75, juce::sendNotificationSync);
 	popup.azimuth().setValue (-90.0, juce::sendNotificationSync);
 	popup.elevation().setValue (30.0, juce::sendNotificationSync);
 	popup.width().setValue (200.0, juce::sendNotificationSync);
 
-	EXPECT_FLOAT_EQ (controls.threeD[2].load(), 0.75f);
 	EXPECT_FLOAT_EQ (controls.azimuth[2].load(), -90.0f);
 	EXPECT_FLOAT_EQ (controls.elevation[2].load(), 30.0f);
 	EXPECT_FLOAT_EQ (controls.width[2].load(), 200.0f);
 
 	for (int other : { 0, 1, 3 })   // only that stem's
 	{
-		EXPECT_FLOAT_EQ (controls.threeD[(size_t) other].load(), 0.0f);
+		EXPECT_FLOAT_EQ (controls.azimuth[(size_t) other].load(), 0.0f);
 		EXPECT_FLOAT_EQ (controls.width[(size_t) other].load(), 60.0f);
 	}
+}
+
+// The stem's own 3D is gone (2026-10-29): direction and width only.
+TEST (StemSpatialPopup, HasNo3DRow)
+{
+	juce::ScopedJuceInitialiser_GUI init;
+	DeckSpatial::Controls controls;
+	StemSpatialPopup popup (controls, 0);
+	juce::StringArray rows;
+	for (auto* child : popup.getChildren())
+		if (auto* label = dynamic_cast<juce::Label*> (child))
+			rows.add (label->getText());
+	EXPECT_EQ (rows, juce::StringArray ({ "AZ", "EL", "WIDTH" }));
 }
 
 TEST (StemSpatialPopup, StartsFromTheControlsAndKeepsIEMsRanges)
@@ -40,7 +51,6 @@ TEST (StemSpatialPopup, StartsFromTheControlsAndKeepsIEMsRanges)
 
 	EXPECT_DOUBLE_EQ (popup.azimuth().getValue(), 45.0);
 	EXPECT_DOUBLE_EQ (popup.width().getValue(), 120.0);
-	EXPECT_DOUBLE_EQ (popup.threeD().getMaximum(), 1.0);
 	EXPECT_DOUBLE_EQ (popup.azimuth().getMinimum(), -180.0);
 	EXPECT_DOUBLE_EQ (popup.elevation().getMaximum(), 90.0);
 	EXPECT_DOUBLE_EQ (popup.width().getMaximum(), 360.0);
@@ -53,9 +63,9 @@ TEST (StemSpatialPopup, PaintsEveryState)
 {
 	juce::ScopedJuceInitialiser_GUI init;
 	DeckSpatial::Controls controls;
-	for (const auto threeD : { 0.0f, 1.0f })
+	for (const auto width : { 0.0f, 360.0f })
 	{
-		controls.threeD[0] = threeD;
+		controls.width[0] = width;
 		StemSpatialPopup popup (controls, 0);
 		popup.setSize (400, 200);
 		const auto image = popup.createComponentSnapshot (popup.getLocalBounds());

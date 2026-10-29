@@ -105,13 +105,11 @@ TEST (Session, SpatialStateRoundTrips)
 {
 	Session session;
 	auto& stem = session.decks[1].stems[2];
-	stem.threeD = 0.75;
 	stem.azimuth = -120.5;
 	stem.elevation = 33.0;
 	stem.width = 200.0;
 
 	const auto back = throughXml (session).decks[1].stems[2];
-	EXPECT_DOUBLE_EQ (back.threeD, 0.75);
 	EXPECT_DOUBLE_EQ (back.azimuth, -120.5);
 	EXPECT_DOUBLE_EQ (back.elevation, 33.0);
 	EXPECT_DOUBLE_EQ (back.width, 200.0);
@@ -122,14 +120,13 @@ TEST (Session, AnOlderSessionHasDefaultSpatialState)
 	auto xml = Session().toXml();
 	for (auto* deck : xml->getChildWithTagNameIterator ("Deck"))
 		for (auto* stem : deck->getChildWithTagNameIterator ("Stem"))
-			for (const auto* name : { "threeD", "azimuth", "elevation", "width" })
+			for (const auto* name : { "azimuth", "elevation", "width" })
 				stem->removeAttribute (name);
 
 	const auto back = Session::fromXml (*xml);
 	for (const auto& deck : back.decks)
 		for (const auto& stem : deck.stems)
 		{
-			EXPECT_DOUBLE_EQ (stem.threeD, 0.0);
 			EXPECT_DOUBLE_EQ (stem.azimuth, 0.0);
 			EXPECT_DOUBLE_EQ (stem.elevation, 0.0);
 			EXPECT_DOUBLE_EQ (stem.width, 60.0);
@@ -141,23 +138,62 @@ TEST (Session, GarbageSpatialValuesAreClamped)
 	auto xml = Session().toXml();
 	auto* deck = xml->getChildByName ("Deck");
 	auto* first = deck->getChildByName ("Stem");
-	first->setAttribute ("threeD", 7.0);
 	first->setAttribute ("azimuth", 400.0);
 	first->setAttribute ("elevation", 120.0);
 	first->setAttribute ("width", -5.0);
 	auto* second = first->getNextElementWithTagName ("Stem");
-	second->setAttribute ("threeD", -2.0);
 	second->setAttribute ("elevation", -120.0);
 	second->setAttribute ("width", 400.0);
 
 	const auto back = Session::fromXml (*xml).decks[0];
-	EXPECT_DOUBLE_EQ (back.stems[0].threeD, 1.0);
 	EXPECT_DOUBLE_EQ (back.stems[0].azimuth, 40.0);
 	EXPECT_DOUBLE_EQ (back.stems[0].elevation, 90.0);
 	EXPECT_DOUBLE_EQ (back.stems[0].width, 0.0);
-	EXPECT_DOUBLE_EQ (back.stems[1].threeD, 0.0);
 	EXPECT_DOUBLE_EQ (back.stems[1].elevation, -90.0);
 	EXPECT_DOUBLE_EQ (back.stems[1].width, 360.0);
+}
+
+// The per-stem 3D went on 2026-10-29 (a stem's 3D is the deck's times its
+// action's envelope): a session that stored one still loads, everything else
+// in it as stored, and a saved session no longer writes one.
+TEST (Session, AStoredStem3DIsIgnored)
+{
+	Session session;
+	session.decks[0].stems[1].azimuth = 30.0;
+	session.decks[0].stems[1].aux = 0.0;
+	session.decks[0].stems[1].gainDb = -3.0;
+	auto xml = session.toXml();
+	for (auto* deck : xml->getChildWithTagNameIterator ("Deck"))
+		for (auto* stem : deck->getChildWithTagNameIterator ("Stem"))
+		{
+			EXPECT_FALSE (stem->hasAttribute ("threeD")) << "not written any more";
+			stem->setAttribute ("threeD", 0.8);   // as an older StemDeck wrote it
+		}
+
+	const auto back = Session::fromXml (*xml);
+	EXPECT_DOUBLE_EQ (back.decks[0].stems[1].azimuth, 30.0);
+	EXPECT_DOUBLE_EQ (back.decks[0].stems[1].gainDb, -3.0);
+	EXPECT_FALSE (back.toXml()->getChildByName ("Deck")->getChildByName ("Stem")->hasAttribute ("threeD"))
+		<< "read, not carried";
+}
+
+TEST (OneDeckSession, AStoredStem3DIsIgnored)
+{
+	OneDeckSession session;
+	session.deck.stems[2].width = 90.0;
+	session.deck.stems[2].aux = 0.4;
+	auto xml = session.toXml();
+	auto* deck = xml->getChildByName ("Deck");
+	ASSERT_NE (deck, nullptr);
+	for (auto* stem : deck->getChildWithTagNameIterator ("Stem"))
+	{
+		EXPECT_FALSE (stem->hasAttribute ("threeD"));
+		stem->setAttribute ("threeD", 1.0);
+	}
+
+	const auto back = OneDeckSession::fromXml (*xml);
+	EXPECT_DOUBLE_EQ (back.deck.stems[2].width, 90.0);
+	EXPECT_DOUBLE_EQ (back.deck.stems[2].aux, 0.4);
 }
 
 TEST (Session, LengthRoundTripsAndOldSessionsHaveFour)
@@ -211,7 +247,6 @@ namespace
 		s.decks[0].playing = true;
 		s.decks[0].faderDb = -6.0;
 		s.decks[0].stems[1].buses = 5u;
-		s.decks[0].stems[1].threeD = 0.7;
 		s.decks[0].stems[1].azimuth = 45.0;
 		s.decks[0].stems[1].lengthBars = 8.0;
 		s.decks[0].stems[2].cue = true;
@@ -243,7 +278,6 @@ TEST (OneDeckSession, RoundTrips)
 	in.deck.stems[3].gainDb = -4.5;
 	in.deck.stems[3].muted = true;
 	in.deck.stems[3].cue = true;
-	in.deck.stems[3].threeD = 0.5;
 	in.deck.stems[3].azimuth = -90.0;
 	in.deck.stems[3].elevation = 20.0;
 	in.deck.stems[3].width = 120.0;
@@ -260,7 +294,6 @@ TEST (OneDeckSession, RoundTrips)
 	EXPECT_EQ (st.gainDb, -4.5);
 	EXPECT_TRUE (st.muted);
 	EXPECT_TRUE (st.cue);
-	EXPECT_EQ (st.threeD, 0.5);
 	EXPECT_EQ (st.azimuth, -90.0);
 	EXPECT_EQ (st.elevation, 20.0);
 	EXPECT_EQ (st.width, 120.0);
@@ -280,7 +313,6 @@ TEST (OneDeckSession, ImportTakesDeckAForAAndBForB)
 	EXPECT_EQ (a.deck.setId, "setA");
 	EXPECT_EQ (a.deck.position, 12.5);
 	EXPECT_TRUE (a.deck.playing);
-	EXPECT_EQ (a.deck.stems[1].threeD, 0.7);
 	EXPECT_EQ (a.deck.stems[1].azimuth, 45.0);
 	EXPECT_EQ (a.deck.stems[1].lengthBars, 8.0);
 	EXPECT_TRUE (a.deck.stems[2].cue);
@@ -375,7 +407,7 @@ TEST (Session, TwoDeckXmlKeepsItsAttributeOrder)
 	const auto xml = twoDeckSession().toXml();
 	const juce::StringArray deckOrder { "index", "set", "position", "playing", "cue", "loopStart", "loopEnd",
 		"repeat", "tempo", "tempoRange", "vinyl", "sync", "keyLock", "fader" };
-	const juce::StringArray stemOrder { "gain", "muted", "buses", "cue", "threeD", "azimuth", "elevation", "width", "lengthBars" };
+	const juce::StringArray stemOrder { "gain", "muted", "buses", "cue", "azimuth", "elevation", "width", "lengthBars" };
 	const auto names = [] (const juce::XmlElement& e)
 	{
 		juce::StringArray out;

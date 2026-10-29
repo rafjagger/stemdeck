@@ -53,7 +53,6 @@ void DeckSpatialPorts::copySettings (bool withPose)
 	controls.phonesDecoderOn.store (userSettings.phonesDecoderOn.load (std::memory_order_relaxed), std::memory_order_relaxed);
 	for (size_t s = 0; s < (size_t) DeckSpatial::stems; ++s)
 	{
-		copy (userSettings.threeD[s], controls.threeD[s]);
 		copy (userSettings.aux[s], controls.aux[s]);
 		if (! withPose)
 			continue;

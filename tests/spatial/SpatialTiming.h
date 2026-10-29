@@ -54,7 +54,7 @@ inline TimingRow measure (const char* name, int blocks, bool cued, bool phones, 
 	{
 		for (int s = 0; s < DeckSpatial::stems; ++s)
 		{
-			c.threeD[(size_t) s] = 1.0f;
+			c.envelope[(size_t) s] = 1.0f;
 			c.cued[(size_t) s] = cued && s < playingStems;
 		}
 		c.phonesDecoderOn = phones;

@@ -269,16 +269,16 @@ TEST (MotionLite, LengthClampsAndAppliesToTheNextTrigger)
 	EXPECT_EQ (running.progress(), (std::pair<int, int> { 1, 8 }));   // 2 bars next time
 }
 
-TEST (MotionLite, ThreeDGoesBackToThePot)
+TEST (MotionLite, ThreeDRisesToTheDecksAndGoesBackToSteady)
 {
 	auto motion = started (Shape::rise);
 	motion.advance (at (8.0), 4.0);   // 8 beats in after this block
 	const auto mid = motion.advance (at (16.0), 4.0);
 	EXPECT_FLOAT_EQ (mid.envelope, 1.0f);
-	EXPECT_FLOAT_EQ (spatial::effectiveThreeD (1.0f, 0.3f, mid.envelope), 1.0f);
+	EXPECT_FLOAT_EQ (spatial::effectiveThreeD (0.8f, mid.envelope), 0.8f);
 	const auto after = motion.advance (at (24.0), 0.0);
 	EXPECT_FLOAT_EQ (after.envelope, 0.0f);
-	EXPECT_FLOAT_EQ (spatial::effectiveThreeD (1.0f, 0.3f, after.envelope), 0.3f);
+	EXPECT_EQ (spatial::effectiveThreeD (0.8f, after.envelope), 0.0f);
 }
 
 TEST (MotionLite, SetHomeMovesAnIdleStemAtOnceAndARunningShotFollows)

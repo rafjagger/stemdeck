@@ -16,7 +16,7 @@ class StemDeckPlayer;
 // binaural cue, and phones carrying that cue, both from the deck's one
 // decoder (R2) -- and no AUX: the AUX bus stays the AUX. A -bformat instance
 // has 43: B-format, the 16-channel AUX bus, the 9-channel cue and phones.
-// Mute, cue and transport follow the player each block. Each stem's 3D, home
+// Mute, cue and transport follow the player each block. Each stem's AUX, home
 // and width, the deck 3D and the phones (level, CUE<->MIX, decoder on) are the
 // settings, copied each block: nobody changes the deck-wide ones in two-deck
 // mode, so there deck 3D stays 1 and StemDeck's phones decoder off. The

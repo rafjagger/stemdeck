@@ -42,8 +42,6 @@ protected:
 		audio.prepareToPlay (block, rate);
 		ASSERT_EQ (audio.host().load (set), juce::String());
 		player().setLoop (0.5, 2.5);   // the noise is 3 s long; the tests play longer
-		for (int s = 0; s < stems; ++s)
-			settings().threeD[(size_t) s] = 0.5f;   // a share on the encoders, a share in the bed
 	}
 
 	void TearDown() override
@@ -386,7 +384,7 @@ TEST_F (OneDeck, WritesTheRigSizedScreenForReview)
 	view.setLookAndFeel (nullptr);
 }
 
-// GAIN is the player's stem gain (its bottom exact silence, R4), 3D, WIDTH
+// GAIN is the player's stem gain (its bottom exact silence, R4), AUX, WIDTH
 // and the viewer's home the spatial settings -- never the played pose, which
 // is the audio thread's -- and CUE and MUTE the player's switches. Only the
 // column's own stem.
@@ -396,7 +394,7 @@ TEST_F (OneDeck, StemColumnKnobsDriveTheControls)
 	view.setSize (screenWidth, viewHeight);
 	auto& column = view.column (1);
 	const auto& played = audio.host().spatialPorts().deckSpatial()->controls();
-	const auto playedThreeD = played.threeD[1].load();
+	const auto playedWidth = played.width[1].load();
 
 	column.gain().setValue (-6.0, juce::sendNotificationSync);
 	EXPECT_FLOAT_EQ (player().getStemGain (1), juce::Decibels::decibelsToGain (-6.0f));
@@ -404,11 +402,9 @@ TEST_F (OneDeck, StemColumnKnobsDriveTheControls)
 	EXPECT_EQ (player().getStemGain (1), 0.0f);
 	EXPECT_EQ (column.gain().getMinimum(), (double) stemKnobMinimumDb);
 
-	column.threeD().setValue (0.8, juce::sendNotificationSync);
 	column.width().setValue (150.0, juce::sendNotificationSync);
-	EXPECT_FLOAT_EQ (settings().threeD[1].load(), 0.8f);
 	EXPECT_FLOAT_EQ (settings().width[1].load(), 150.0f);
-	EXPECT_EQ (played.threeD[1].load(), playedThreeD) << "the played pose is the audio thread's";
+	EXPECT_EQ (played.width[1].load(), playedWidth) << "the played pose is the audio thread's";
 
 	ASSERT_TRUE (column.viewer().onHomeChanged != nullptr);
 	column.viewer().onHomeChanged ({ 30.0f, 10.0f, 90.0f });
@@ -424,7 +420,6 @@ TEST_F (OneDeck, StemColumnKnobsDriveTheControls)
 
 	for (int other : { 0, 2, 3 })
 	{
-		EXPECT_FLOAT_EQ (settings().threeD[(size_t) other].load(), 0.5f);
 		EXPECT_FLOAT_EQ (settings().width[(size_t) other].load(), 60.0f);
 		EXPECT_FLOAT_EQ (player().getStemGain (other), 1.0f);
 		EXPECT_FALSE (player().isStemCued (other));
@@ -465,31 +460,34 @@ TEST_F (OneDeck, PitchDrivesTheSpeedAndTheSessionTempoIsRestored)
 	EXPECT_FALSE (saved.stems[0].cue);
 }
 
-// The stem's four knobs are a 2 x 2 block of one column width: GAIN, 3D on
-// top in that order, AUX, WIDTH below -- AUX under GAIN, WIDTH under 3D.
-TEST_F (OneDeck, StemColumnKnobsAreTwoByTwo)
+// The stem's three knobs sit as on the A³ Motion panel (2026-10-29): AUX
+// (the pot) top left, WIDTH (the lower encoder) under it in the same column,
+// GAIN (the upper encoder) offset to the right, its centre half-way between
+// theirs. The block starts at the top: there is no number and no state line.
+TEST_F (OneDeck, StemColumnKnobsSitAsOnTheDevice)
 {
-	OneDeckView view (audio, formats, 0);
-	view.setSize (screenWidth, viewHeight);
-	for (int stem = 0; stem < stems; ++stem)
+	for (const auto& [width, height] : { std::pair { screenWidth, viewHeight }, std::pair { rigViewWidth, rigViewHeight } })
 	{
-		auto& column = view.column (stem);
-		const auto gain = column.gain().getBounds(), threeD = column.threeD().getBounds();
-		const auto aux = column.aux().getBounds(), width = column.width().getBounds();
+		OneDeckView view (audio, formats, 0);
+		view.setSize (width, height);
+		for (int stem = 0; stem < stems; ++stem)
+		{
+			auto& column = view.column (stem);
+			const auto gain = column.gain().getBounds(), aux = column.aux().getBounds(), wide = column.width().getBounds();
 
-		EXPECT_EQ (gain.getY(), threeD.getY());
-		EXPECT_EQ (aux.getY(), width.getY());
-		EXPECT_LT (gain.getRight(), threeD.getX() + 1);
-		EXPECT_LT (aux.getRight(), width.getX() + 1);
-		EXPECT_EQ (gain.getX(), aux.getX());
-		EXPECT_EQ (threeD.getX(), width.getX());
-		EXPECT_LT (gain.getBottom(), aux.getY()) << "the lower row, captions between";
-		for (const auto& knob : { threeD, aux, width })
-			EXPECT_EQ (knob.getWidth(), gain.getWidth());
-		for (const auto& knob : { gain, threeD, aux, width })
-			EXPECT_TRUE (column.getLocalBounds().contains (knob)) << "stem " << stem;
-		EXPECT_EQ (column.threeD().getRight() - column.gain().getX(), column.width().getRight() - column.aux().getX());
-		EXPECT_GE (column.viewer().getY(), column.width().getBottom()) << "the block does not cover the viewer";
+			EXPECT_EQ (aux.getX(), wide.getX()) << "AUX over WIDTH, one column";
+			EXPECT_LT (aux.getBottom(), wide.getY()) << "its caption between";
+			EXPECT_GE (gain.getX(), aux.getRight()) << "GAIN to the right";
+			EXPECT_NEAR (gain.getCentreY(), (aux.getCentreY() + wide.getCentreY()) / 2, 1) << "half-way between";
+			for (const auto& knob : { aux, wide })
+				EXPECT_EQ (knob.getWidth(), gain.getWidth()) << "stem " << stem;
+			for (const auto& knob : { aux, wide })
+				EXPECT_EQ (knob.getHeight(), gain.getHeight()) << "stem " << stem;
+			for (const auto& knob : { gain, aux, wide })
+				EXPECT_TRUE (column.getLocalBounds().contains (knob)) << "stem " << stem;
+			EXPECT_LT (aux.getY(), column.getHeight() / 20) << "the block starts at the top";
+			EXPECT_GE (column.viewer().getY(), wide.getBottom()) << "the block does not cover the viewer";
+		}
 	}
 }
 
@@ -505,7 +503,7 @@ TEST_F (OneDeck, AuxKnobWritesTheStemsAux)
 
 	column.aux().setValue (0.4, juce::sendNotificationSync);
 	EXPECT_FLOAT_EQ (settings().aux[1].load(), 0.4f);
-	EXPECT_EQ (column.auxCaptionText(), "AUX 40") << "the readout matches 3D's";
+	EXPECT_EQ (column.auxCaptionText(), "AUX 40") << "the readout in percent";
 	for (int other : { 0, 2, 3 })
 		EXPECT_EQ (settings().aux[(size_t) other].load(), 0.0f);
 
@@ -514,24 +512,39 @@ TEST_F (OneDeck, AuxKnobWritesTheStemsAux)
 	EXPECT_DOUBLE_EQ (column.aux().getValue(), 0.7);
 }
 
-// The state line says it when the stem is sent to AUX, and only then.
-TEST_F (OneDeck, StemColumnStateLineSaysAuxWhenSent)
+// The column's only words are its captions and the length (2026-10-29): no
+// slot number, no state line ("home", "ORBIT 4 · 2/4", "... · armed"), no
+// "· AUX" -- whatever the stem does.
+TEST_F (OneDeck, StemColumnShowsNoNumberAndNoStateLine)
 {
 	OneDeckView view (audio, formats, 0);
 	view.setSize (screenWidth, viewHeight);
+	view.setSet (set);
+	player().setBeatGrid ({ 120.0, 0.0 });
 	auto& column = view.column (2);
-	column.refresh();
-	EXPECT_EQ (column.stateText(), "home");
+	const auto words = [&column]
+	{
+		column.refresh();
+		juce::StringArray out;
+		for (auto* child : column.getChildren())
+			if (auto* label = dynamic_cast<juce::Label*> (child))
+				out.add (label->getText());
+		out.sort (false);
+		return out;
+	};
+	const auto expected = [] (const char* aux) { auto out = juce::StringArray ({ "GAIN", aux, "WIDTH", "4 BARS" }); out.sort (false); return out; };
 
+	EXPECT_EQ (words(), expected ("AUX 0")) << "at rest";
+	column.oneShots().pad (motionlite::Shape::ping).onClick();
+	renderBlock();
+	ASSERT_EQ (audio.host().spatialPorts().motion().stemState (2), motionlite::PadState::armed);
+	EXPECT_EQ (words(), expected ("AUX 0")) << "armed";
+	view.shift().setToggleState (true, juce::dontSendNotification);
+	column.oneShots().pad (motionlite::Shape::orbit).onClick();
+	renderBlock();
+	ASSERT_EQ (audio.host().spatialPorts().motion().stemState (2), motionlite::PadState::running);
 	column.aux().setValue (0.4, juce::sendNotificationSync);
-	column.refresh();
-	EXPECT_EQ (column.stateText(), "home " + juce::String::fromUTF8 ("\xc2\xb7") + " AUX");
-
-	view.column (3).refresh();
-	EXPECT_EQ (view.column (3).stateText(), "home");
-	column.aux().setValue (0.0, juce::sendNotificationSync);
-	column.refresh();
-	EXPECT_EQ (column.stateText(), "home");
+	EXPECT_EQ (words(), expected ("AUX 40")) << "running and sent";
 }
 
 // The MAIN meter is the B-format's W, the AUX meter the aux bus's W and the
@@ -963,27 +976,6 @@ double meanLuma (const juce::Image& image, juce::Rectangle<int> area)
 }
 }
 
-TEST_F (OneDeck, TheStemHeadersShowTheSlotNumbersNotTheNames)
-{
-	DJLookAndFeel look;
-	OneDeckView view (audio, formats, 0);
-	view.setLookAndFeel (&look);
-	view.setSize (rigViewWidth, rigViewHeight);
-	view.setSet (set);   // named drums, bass, vocals, synth
-	for (int s = 0; s < stems; ++s)
-	{
-		EXPECT_EQ (view.column (s).header().getText(), juce::String (s + 1));
-		EXPECT_EQ (view.column (s).getAlpha(), 1.0f) << "slot " << s + 1 << " is loaded";
-	}
-	const auto image = snapshotOf (view);
-	for (int s = 0; s < stems; ++s)
-	{
-		const auto header = view.getLocalArea (&view.column (s), view.column (s).header().getBounds());
-		EXPECT_GT (lumaVariance (image.getClippedImage (header)), 50.0) << "the number is painted on slot " << s + 1;
-	}
-	view.setLookAndFeel (nullptr);
-}
-
 TEST_F (OneDeck, EmptySlotsArePaintedDim)
 {
 	StemSet lone;
@@ -1006,11 +998,10 @@ TEST_F (OneDeck, EmptySlotsArePaintedDim)
 	for (int s = 1; s < stems; ++s)
 	{
 		EXPECT_LT (view.column (s).getAlpha(), 1.0f) << "slot " << s + 1 << " is empty";
-		EXPECT_EQ (view.column (s).header().getText(), juce::String (s + 1)) << "an empty slot keeps its number";
-		const auto header = view.getLocalArea (&view.column (s), view.column (s).header().getBounds());
-		EXPECT_LT (meanLuma (shortOfFour, header), meanLuma (full, header)) << "slot " << s + 1 << " is drawn dim";
+		const auto knob = view.getLocalArea (&view.column (s), view.column (s).gain().getBounds());
+		EXPECT_LT (meanLuma (shortOfFour, knob), meanLuma (full, knob)) << "slot " << s + 1 << " is drawn dim";
 	}
-	const auto first = view.getLocalArea (&view.column (0), view.column (0).header().getBounds());
+	const auto first = view.getLocalArea (&view.column (0), view.column (0).gain().getBounds());
 	EXPECT_EQ (differingPixels (full.getClippedImage (first), shortOfFour.getClippedImage (first)), 0) << "slot 1 as before";
 
 	view.setSet (set);

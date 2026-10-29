@@ -9,6 +9,11 @@
 
 namespace appsettings
 {
+	namespace
+	{
+		constexpr const char* keyLockEngineKey = "keyLockEngine";
+	}
+
 	juce::PropertiesFile::Options options()
 	{
 		juce::PropertiesFile::Options options;
@@ -52,5 +57,15 @@ namespace appsettings
 	juce::PropertiesFile::Options instanceOptions (char letter)
 	{
 		return instanceOptions (options().getDefaultFile().getParentDirectory(), letter);
+	}
+
+	keylock::Engine keyLockEngine (const juce::PropertiesFile& settings)
+	{
+		return keylock::engineFrom (settings.getValue (keyLockEngineKey).toStdString());
+	}
+
+	void storeKeyLockEngine (juce::PropertiesFile& settings, keylock::Engine engine)
+	{
+		settings.setValue (keyLockEngineKey, juce::String (keylock::engineName (engine)));
 	}
 }

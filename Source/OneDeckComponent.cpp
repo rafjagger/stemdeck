@@ -50,6 +50,7 @@ OneDeckComponent::OneDeckComponent (DeckInstance deck, double pathLatencySeconds
 
 	auto& host = deckAudio.host();
 	host.onAnalysisStored = [this] { library.analysisChanged(); };
+	host.player().setKeyLockEngine (appsettings::keyLockEngine (instanceSettings()));
 	if (const auto error = deckAudio.createSpatial(); error.isNotEmpty())
 		spatialError = error;
 
@@ -546,6 +547,7 @@ void OneDeckComponent::showSettings()
 	values.phonesMode = phonesMode;
 	values.panelHere = panelOwnership.holds();
 	values.panelFollowsWorkspace = panelFollow.has_value();
+	values.keyLockEngine = deckAudio.host().player().keyLockEngine();
 
 	SettingsPanel::Actions actions;
 	actions.onLibraryFolder = [this] (const juce::File& folder) { library.setFolder (folder); };
@@ -556,6 +558,12 @@ void OneDeckComponent::showSettings()
 		phonesMode = mode;
 		instanceSettings().setValue (phonesModeKey, juce::String (spatial::phonesModeName (mode)));
 		updatePhonesDecoder();
+	};
+
+	actions.onKeyLockEngine = [this] (keylock::Engine engine)
+	{
+		appsettings::storeKeyLockEngine (instanceSettings(), engine);
+		deckAudio.host().player().setKeyLockEngine (engine);
 	};
 
 	actions.onPanelHere = [this] (bool here)

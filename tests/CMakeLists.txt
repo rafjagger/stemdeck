@@ -166,6 +166,7 @@ add_executable(stemdeck-gui-tests
     ${CMAKE_SOURCE_DIR}/Source/WorkspaceSwitch.cpp
     ${CMAKE_SOURCE_DIR}/Source/WorkspacePanel.cpp
     ${CMAKE_SOURCE_DIR}/Source/Workspaces.cpp
+    ${CMAKE_SOURCE_DIR}/Source/SpawnOutput.cpp
     StemViewer.cpp
     ${CMAKE_SOURCE_DIR}/Source/StemSpatialPopup.cpp
     ${CMAKE_SOURCE_DIR}/Source/OneShotKeys.cpp

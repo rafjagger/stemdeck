@@ -19,6 +19,8 @@ PartOf=a3-main.service
 
 [Service]
 Environment=DISPLAY=:0
+# A variable so a laptop drop-in can empty it (STEMDECK_WINDOW=) and run windowed.
+Environment=STEMDECK_WINDOW=--fullscreen
 # Its data folder: the fallback library (stems/, when no stemFolder is set)
 # is found here. Recordings are decided in code (Source/DataPaths.cpp). '-':
 # on the very first start the seed below makes the folder.
@@ -31,7 +33,7 @@ ExecStartPre=/usr/lib/stemdeck/a3-wait-for-the-screen
 ExecStartPre=/usr/bin/jack_wait -w
 # Its start takes the screen for a moment; put back what was showing.
 ExecStartPre=/usr/lib/stemdeck/rig-keep-the-screen.sh remember
-ExecStart=/usr/bin/stemdeck -bformat --deck %i --fullscreen
+ExecStart=/usr/bin/stemdeck -bformat --deck %i $STEMDECK_WINDOW
 ExecStartPost=/usr/lib/stemdeck/rig-keep-the-screen.sh restore
 Restart=on-failure
 # Exit 2 is a usage error (a refused flag or deck letter), not a transient

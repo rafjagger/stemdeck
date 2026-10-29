@@ -90,9 +90,17 @@ class TheTemplateUnit(unittest.TestCase):
         return [l for l in self.lines(unit) if l.startswith("ExecStartPre=")]
 
     def test_template_unit_starts_one_deck(self):
-        self.assertIn("ExecStart=/usr/bin/stemdeck -bformat --deck %i --fullscreen",
+        self.assertIn("ExecStart=/usr/bin/stemdeck -bformat --deck %i $STEMDECK_WINDOW",
                       self.lines(self.TEMPLATE))
         self.assertEqual(self.pre(self.TWO_DECK), self.pre(self.TEMPLATE))
+
+    def test_the_window_flag_is_one_variable_defaulting_to_fullscreen(self):
+        lines = self.lines(self.TEMPLATE)
+        self.assertIn("Environment=STEMDECK_WINDOW=--fullscreen", lines)
+        # Unbraced: systemd drops an empty unbraced variable, so a laptop
+        # drop-in with STEMDECK_WINDOW= passes no argument at all.
+        self.assertIn("ExecStart=/usr/bin/stemdeck -bformat --deck %i $STEMDECK_WINDOW", lines)
+        self.assertNotIn("--fullscreen", "\n".join(l for l in lines if l.startswith("ExecStart=")))
 
     def test_template_does_not_conflict_with_the_two_deck_unit(self):
         # 2026-10-27 rig: a3-main pulled stemdeck@A in REAPER mode; the conflict

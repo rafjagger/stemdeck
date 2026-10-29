@@ -614,6 +614,35 @@ TEST (Remote, OptionalDeckWordsAreReadFromTheTruth)
 	EXPECT_EQ (with.deckHello, "/stemdeck/{deck}/hello");
 }
 
+// Ruling A8: the parser takes any letter; the truth's {deck} range says which
+// decks Core hears. A deck outside it still starts, and says so.
+TEST (Remote, TheDeckRangeIsReadFromTheTruth)
+{
+	std::string error;
+	const auto old = truthWith (R"(, "stemdeck.deck-hello": {"pattern": "/stemdeck/{deck}/hello"})");
+	EXPECT_FALSE (osctruth::readRemoteWords (old, error).deckRange.has_value());
+	std::filesystem::remove (old);
+	const auto made = truthWith (R"(, "stemdeck.deck-hello": {"pattern": "/stemdeck/{deck}/hello", "deck": [1, 4]})");
+	const auto with = osctruth::readRemoteWords (made, error);
+	std::filesystem::remove (made);
+	ASSERT_TRUE (with.deckRange.has_value());
+	EXPECT_EQ (with.deckRange->first, 1);
+	EXPECT_EQ (with.deckRange->second, 4);
+}
+
+TEST (Remote, ADeckOutsideTheTruthsRangeIsSaid)
+{
+	auto w = deckWords();
+	EXPECT_TRUE (remote::deckOutsideTruth (w, 5).empty());   // no range: nothing to say
+	w.deckRange = std::make_pair (1, 4);
+	for (const int deck : { 1, 3, 4 })
+		EXPECT_TRUE (remote::deckOutsideTruth (w, deck).empty()) << deck;
+	const auto e = remote::deckOutsideTruth (w, 5);
+	EXPECT_NE (e.find ("deck E"), std::string::npos) << e;
+	EXPECT_NE (e.find ("1 to 4"), std::string::npos) << e;
+	EXPECT_NE (remote::deckOutsideTruth (w, 26).find ("deck Z"), std::string::npos);
+}
+
 // Two one-deck instances on one host cannot share a port: deck k listens on
 // the truth's stemdeck.osc port + (k - 1).
 TEST (Remote, DeckListenPortFollowsTheDeckNumber)

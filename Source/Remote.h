@@ -6,6 +6,7 @@
 #include <atomic>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 // StemDeck by remote control from the A3 Mixer (spec stemdeck-remote,
@@ -35,6 +36,9 @@ namespace remote
 		// `stemdeck.tempo`: the deck's tempo report. Optional likewise: empty
 		// in a truth from before it, and then nothing is sent.
 		std::string deckTempo;
+		// The truth's {deck} range of `stemdeck.deck-hello`: the decks Core
+		// hears. None in a truth without it.
+		std::optional<std::pair<int, int>> deckRange;
 	};
 
 	// One switch, 0-based inside StemDeck: deck 0-1, stem 0-3, bus 0-4 (1-4, AUX).
@@ -52,6 +56,10 @@ namespace remote
 	// The desk's 3D for this deck, 0..1; none for another deck, without the
 	// truth's word, or for NaN.
 	std::optional<float> parseDeckThreeD (const Words& words, const std::string& address, int oscDeck, float value);
+	// What to say when deck `oscDeck` lies outside the truth's deck range
+	// (Core will not hear it); empty inside the range or without one. The
+	// instance starts either way (Ruling A8).
+	std::string deckOutsideTruth (const Words& words, int oscDeck);
 	// The hello's address for the deck; empty when the truth has no word for it.
 	std::string deckHelloAddress (const Words& words, int oscDeck);
 

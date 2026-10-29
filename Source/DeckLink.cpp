@@ -35,6 +35,8 @@ void DeckLink::start (const std::string& path, const juce::String& hash)
 				  << (error.empty() ? std::string ("the truth names no core, mixer or stemdeck osc") : error) << std::endl;
 		return;
 	}
+	if (const auto outside = remote::deckOutsideTruth (words, oscDeck); ! outside.empty())
+		std::cerr << "StemDeck: " << outside << std::endl;
 	const auto listenPort = remote::deckListenPort (endpoints.ownPort, oscDeck);
 	if (! receiver.connect (listenPort))
 	{

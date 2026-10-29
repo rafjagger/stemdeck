@@ -141,6 +141,18 @@ namespace remote
 		return stemdeckOscPort + oscDeck - 1;
 	}
 
+	std::string deckOutsideTruth (const Words& words, int oscDeck)
+	{
+		if (! words.deckRange)
+			return {};
+		const auto [first, last] = *words.deckRange;
+		if (oscDeck >= first && oscDeck <= last)
+			return {};
+		return "deck " + std::string (1, (char) ('A' + oscDeck - 1)) + " (" + std::to_string (oscDeck)
+			   + ") is outside the truth's decks " + std::to_string (first) + " to " + std::to_string (last)
+			   + ": Core will not hear its hello, tempo or 3D -- it plays on";
+	}
+
 	std::string deckHelloAddress (const Words& words, int oscDeck)
 	{
 		return words.deckHello.empty() ? std::string() : fill (words.deckHello, { { "deck", oscDeck } });

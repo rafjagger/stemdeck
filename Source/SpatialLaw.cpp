@@ -36,10 +36,9 @@ namespace spatial
 		return static_cast<float> (std::pow (10.0, decibels / 20.0));
 	}
 
-	float effectiveThreeD (float deckThreeD, float stemThreeD, float envelope)
+	float effectiveThreeD (float deckThreeD, float envelope)
 	{
-		const float stem = clamp01 (stemThreeD), env = clamp01 (envelope);
-		return clamp01 (deckThreeD) * (stem > env ? stem : env);
+		return clamp01 (deckThreeD) * clamp01 (envelope);
 	}
 
 	float auxGain (float aux)

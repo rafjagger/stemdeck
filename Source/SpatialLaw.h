@@ -22,8 +22,9 @@ namespace spatial
 	// (below 1e-9): -40 dB just above 0 up to 0 dB at 1. NaN counts as 0.
 	float movingGain (float effectiveThreeD);
 
-	// clamp01 (deck) * max (clamp01 (stem), clamp01 (envelope)).
-	float effectiveThreeD (float deckThreeD, float stemThreeD, float envelope);
+	// clamp01 (deck) * clamp01 (envelope): a stem has no 3D of its own, so at
+	// rest it is steady and an action lifts it to the deck's 3D and back.
+	float effectiveThreeD (float deckThreeD, float envelope);
 
 	// A stem's AUX send: linear 0..1, exact silence at 0 (below 1e-9). NaN counts as 0.
 	float auxGain (float aux);

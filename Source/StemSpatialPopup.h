@@ -12,8 +12,8 @@
 
 class DeckMotion;
 
-// One stem's place in its deck's spatial engine: 3D, direction (azimuth,
-// elevation) and width, four sliders writing DeckSpatial::Controls, and the
+// One stem's place in its deck's spatial engine: direction (azimuth,
+// elevation) and width, three sliders writing DeckSpatial::Controls, and the
 // viewer showing and dragging the same direction and width. With the deck's
 // DeckMotion it also carries the one-shot pads (ORBIT, PING, RISE, SCAT; idle,
 // armed, running), the length keys and SHIFT (the next press starts now, then
@@ -26,7 +26,6 @@ public:
 	StemSpatialPopup (DeckSpatial::Controls&, int stem, DeckMotion* = nullptr);
 	~StemSpatialPopup() override;
 
-	juce::Slider& threeD() { return threeDSlider; }
 	juce::Slider& azimuth() { return azimuthSlider; }
 	juce::Slider& elevation() { return elevationSlider; }
 	juce::Slider& width() { return widthSlider; }
@@ -60,8 +59,8 @@ private:
 	DeckMotion* motion;
 	juce::Colour stemColour;
 
-	juce::Slider threeDSlider, azimuthSlider, elevationSlider, widthSlider;
-	juce::Label threeDLabel, azimuthLabel, elevationLabel, widthLabel;
+	juce::Slider azimuthSlider, elevationSlider, widthSlider;
+	juce::Label azimuthLabel, elevationLabel, widthLabel;
 	StemViewer stemViewer;
 	std::unique_ptr<OneShotKeys> oneShots;   // with a DeckMotion
 	juce::TextButton shiftKey;

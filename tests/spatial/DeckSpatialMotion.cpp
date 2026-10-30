@@ -8,8 +8,8 @@
 // player plays, the ports advance each stem's motion once per block.
 using namespace twodeck;
 
-// ORBIT on stem 0, one bar at 120 BPM (2 s), SHIFT: starts at once. Pot 3D
-// is 0, so the stem moves only inside the shot's envelope: a quarter round in
+// ORBIT on stem 0, one bar at 120 BPM (2 s), SHIFT: starts at once. A stem
+// moves only inside the shot's envelope: a quarter round in
 // (beat 1, azimuth +90, left) the cue leans left, three quarters in (beat 3,
 // azimuth -90, right) it leans right, and after the bar the stem is home.
 TEST_F (DeckSpatialMotion, AnOrbitMovesTheCue)
@@ -49,7 +49,6 @@ TEST_F (DeckSpatialMotion, AShotLeavesTheHomeAlone)
 	ports.settings().azimuth[1] = -40.0f;
 	ports.settings().elevation[1] = 20.0f;
 	ports.settings().width[1] = 90.0f;
-	ports.settings().threeD[1] = 0.5f;
 	player.setBeatGrid ({ 120.0, 0.0 });
 	player.play();
 	renderBlock();
@@ -57,13 +56,37 @@ TEST_F (DeckSpatialMotion, AShotLeavesTheHomeAlone)
 	EXPECT_EQ (played.azimuth[1].load(), -40.0f);
 	EXPECT_EQ (played.elevation[1].load(), 20.0f);
 	EXPECT_EQ (played.width[1].load(), 90.0f);
-	EXPECT_EQ (played.threeD[1].load(), 0.5f);
 
 	ASSERT_TRUE (ports.motion().press (1, motionlite::Shape::rise, true, 1));
 	renderBlocks (blocksFor (1.0));
 	EXPECT_GT (played.elevation[1].load(), 20.0f);
 	EXPECT_EQ (ports.settings().elevation[1].load(), 20.0f);
 	EXPECT_EQ (ports.motion().posePlayed (1).elevation, played.elevation[1].load());
+}
+
+// No stem 3D of its own (2026-10-29): at rest a stem is the steady bed only;
+// an action's envelope lifts it to the deck's 3D and lets it back down.
+TEST_F (DeckSpatialMotion, AStemAtRestIsSteadyAndAShotRisesToTheDecks3D)
+{
+	ports.settings().deckThreeD = 0.5f;
+	setAllStems (false, false, 1.0f);
+	player.setBeatGrid ({ 120.0, 0.0 });
+	auto& motion = ports.motion();
+	ASSERT_TRUE (motion.lengthDown (1));
+	ASSERT_TRUE (motion.lengthDown (1));   // 1 bar: 2 s
+	player.play();
+	renderBlocks (blocksFor (0.2));
+	auto& spatial = *ports.deckSpatial();
+	EXPECT_EQ (spatial.movingGainNow (1), 0.0f) << "at rest: steady";
+
+	ASSERT_TRUE (motion.press (1, motionlite::Shape::rise, true, 1));
+	renderBlocks (blocksFor (1.0));   // beat 2 of 4: the envelope is at 1
+	EXPECT_FLOAT_EQ (spatial.controls().envelope[1].load(), 1.0f);
+	EXPECT_NEAR (spatial.movingGainNow (1), spatial::movingGain (0.5f), 1e-5) << "risen to the deck's 3D";
+
+	renderBlocks (blocksFor (1.4));   // past the bar
+	EXPECT_EQ (motion.stemState (1), motionlite::PadState::idle);
+	EXPECT_EQ (spatial.movingGainNow (1), 0.0f) << "back to steady";
 }
 
 // A press queued while the audio stood (a device change, a restart) is not

@@ -67,28 +67,6 @@ juce::String OneShotKeys::lengthName (double bars)
 	return barsNumber (bars) + (bars > 1.0 ? " BARS" : " BAR");
 }
 
-juce::String OneShotKeys::stateLine (const DeckMotion& deckMotion, int stemIndex)
-{
-	const auto dot = juce::String::fromUTF8 (" \xc2\xb7 ");
-	for (int p = 0; p < shapeCount; ++p)
-	{
-		const auto shape = (motionlite::Shape) p;
-		if (deckMotion.padState (stemIndex, shape) != motionlite::PadState::running)
-			continue;
-		auto line = shapeName (shape) + " " + barsNumber (deckMotion.lengthBars (stemIndex));
-		if (const auto progress = deckMotion.progress (stemIndex))
-			line << dot << progress->first << "/" << progress->second;
-		return line;
-	}
-	for (int p = 0; p < shapeCount; ++p)
-	{
-		const auto shape = (motionlite::Shape) p;
-		if (deckMotion.padState (stemIndex, shape) == motionlite::PadState::armed)
-			return shapeName (shape) + " " + barsNumber (deckMotion.lengthBars (stemIndex)) + dot + "armed";
-	}
-	return "home";
-}
-
 void OneShotKeys::press (motionlite::Shape shape)
 {
 	const auto now = takeShift != nullptr && takeShift();

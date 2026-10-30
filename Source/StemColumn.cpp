@@ -11,10 +11,11 @@
 namespace
 {
 	// Shares of the column's height, top to bottom; the viewer takes what is left.
-	constexpr float nameShare = 0.06f, stateShare = 0.045f, knobShare = 0.085f, captionShare = 0.035f;   // one row of the knob block; two rows
+	// The knob block is two knob rows, each with its caption under it.
+	constexpr float knobShare = 0.11f, captionShare = 0.035f;
 	constexpr float keyRowShare = 0.08f, gapShare = 0.012f;
 	// Text a share of the line it stands in.
-	constexpr float nameFont = 0.8f, lineFont = 0.85f;
+	constexpr float lineFont = 0.85f;
 
 	void setUpKnob (juce::Slider& knob, juce::Range<double> range, double step, double fresh, const juce::String& suffix)
 	{
@@ -45,39 +46,21 @@ StemColumn::StemColumn (StemDeckPlayer& p, DeckSpatialPorts& spatialPorts, int s
 	const auto s = (size_t) stem;
 	auto& settings = ports.settings();
 
-	nameLabel.setColour (juce::Label::textColourId, colour);
-	nameLabel.setJustificationType (juce::Justification::centred);
-	nameLabel.setMinimumHorizontalScale (0.6f);
-	stateLabel.setColour (juce::Label::textColourId, Theme::textDim);
-	stateLabel.setJustificationType (juce::Justification::centred);
-	stateLabel.setMinimumHorizontalScale (0.6f);
-	// The slot's number, never a name: anything can be in a track (2026-10-29).
-	nameLabel.setText (juce::String (stem + 1), juce::dontSendNotification);
-	addAndMakeVisible (nameLabel);
-	addAndMakeVisible (stateLabel);
-
 	stemgain::setUp (gainKnob);
 	gainKnob.onValueChange = [this] { player.setStemGain (stem, stemgain::gainOf (gainKnob.getValue())); };
-	setUpKnob (threeDKnob, { 0.0, 1.0 }, 0.01, 0.0, {});
-	threeDKnob.setValue (settings.threeD[s].load(), juce::dontSendNotification);
-	threeDKnob.onValueChange = [this, s]
-	{
-		ports.settings().threeD[s].store ((float) threeDKnob.getValue());
-		showShares();
-	};
 	setUpKnob (auxKnob, { 0.0, 1.0 }, 0.01, 0.0, {});
 	auxKnob.setValue (settings.aux[s].load(), juce::dontSendNotification);
 	auxKnob.onValueChange = [this, s]
 	{
 		ports.settings().aux[s].store ((float) auxKnob.getValue());
-		showShares();
+		showAuxShare();
 	};
 	setUpKnob (widthKnob, { 0.0, 360.0 }, 1.0, spatial::Pose{}.width, juce::String::fromUTF8 ("\xc2\xb0"));
 	widthKnob.setValue (settings.width[s].load(), juce::dontSendNotification);
 	widthKnob.onValueChange = [this, s] { ports.settings().width[s].store ((float) widthKnob.getValue()); };
 
-	for (auto [knob, caption, text] : { std::tuple { &gainKnob, &gainCaption, "GAIN" }, std::tuple { &threeDKnob, &threeDCaption, "3D" },
-										std::tuple { &auxKnob, &auxCaption, "AUX" }, std::tuple { &widthKnob, &widthCaption, "WIDTH" } })
+	for (auto [knob, caption, text] : { std::tuple { &gainKnob, &gainCaption, "GAIN" }, std::tuple { &auxKnob, &auxCaption, "AUX" },
+										std::tuple { &widthKnob, &widthCaption, "WIDTH" } })
 	{
 		knob->setColour (juce::Slider::rotarySliderFillColourId, colour);
 		caption->setText (text, juce::dontSendNotification);
@@ -87,7 +70,7 @@ StemColumn::StemColumn (StemDeckPlayer& p, DeckSpatialPorts& spatialPorts, int s
 		addAndMakeVisible (knob);
 		addAndMakeVisible (caption);
 	}
-	showShares();
+	showAuxShare();
 
 	stemViewer.setColour (StemViewer::stemColourId, colour);
 	stemViewer.onHomeChanged = [this] (spatial::Pose pose) { homeDragged (pose); };
@@ -114,14 +97,9 @@ void StemColumn::setLoaded (bool loaded)
 	setAlpha (loaded ? 1.0f : Theme::emptySlotAlpha);
 }
 
-void StemColumn::showShares()
+void StemColumn::showAuxShare()
 {
-	const auto share = [] (const juce::String& name, const juce::Slider& knob)
-	{
-		return name + " " + juce::String (juce::roundToInt (knob.getValue() * 100.0));
-	};
-	threeDCaption.setText (share ("3D", threeDKnob), juce::dontSendNotification);
-	auxCaption.setText (share ("AUX", auxKnob), juce::dontSendNotification);
+	auxCaption.setText ("AUX " + juce::String (juce::roundToInt (auxKnob.getValue() * 100.0)), juce::dontSendNotification);
 }
 
 void StemColumn::homeDragged (spatial::Pose pose)
@@ -140,21 +118,12 @@ void StemColumn::refresh()
 	const auto& motion = ports.motion();
 	const auto s = (size_t) stem;
 	const spatial::Pose home { settings.azimuth[s].load(), settings.elevation[s].load(), settings.width[s].load() };
-	const auto state = motion.stemState (stem);
-
-	auto line = OneShotKeys::stateLine (motion, stem);
-	if (settings.aux[s].load() > 0.0f)   // the amount is on the knob's caption
-		line << juce::String::fromUTF8 (" \xc2\xb7 ") << "AUX";
-	stateLabel.setText (line, juce::dontSendNotification);
-	stateLabel.setColour (juce::Label::textColourId, state == motionlite::PadState::running ? colour
-													 : state == motionlite::PadState::armed ? Theme::text : Theme::textDim);
-	stemViewer.setShown (home, motion.posePlayed (stem), state);
+	stemViewer.setShown (home, motion.posePlayed (stem), motion.stemState (stem));
 	keys.refresh();
 
-	follow (threeDKnob, settings.threeD[s].load());
 	follow (auxKnob, settings.aux[s].load());
 	follow (widthKnob, settings.width[s].load());
-	showShares();
+	showAuxShare();
 	cueKey.setToggleState (player.isStemCued (stem), juce::dontSendNotification);
 	muteKey.setToggleState (player.isStemMuted (stem), juce::dontSendNotification);
 }
@@ -189,29 +158,6 @@ void StemColumn::paint (juce::Graphics& g)
 	g.fillRect (card.withHeight (juce::jmax (2.0f, (float) getHeight() * gapShare / 2.0f)));
 }
 
-void StemColumn::setAuxGhost (std::optional<double> position)
-{
-	if (position == ghost)
-		return;
-	ghost = position;
-	repaint (auxKnob.getBounds());
-}
-
-// A short tick across the knob's ring at the pot's place, in the text colour.
-void StemColumn::paintOverChildren (juce::Graphics& g)
-{
-	if (! ghost)
-		return;
-	const auto bounds = auxKnob.getBounds().toFloat();
-	const auto radius = juce::jmin (bounds.getWidth(), bounds.getHeight()) / 2.0f;
-	const auto& rotary = auxKnob.getRotaryParameters();
-	const auto angle = rotary.startAngleRadians + (float) *ghost * (rotary.endAngleRadians - rotary.startAngleRadians);
-	const auto centre = bounds.getCentre();
-	const auto direction = juce::Point<float> (std::sin (angle), -std::cos (angle));
-	g.setColour (Theme::text);
-	g.drawLine (juce::Line<float> (centre + direction * (radius * 0.55f), centre + direction * radius), juce::jmax (2.0f, radius * 0.12f));
-}
-
 void StemColumn::resized()
 {
 	const auto height = (float) getHeight();
@@ -220,29 +166,7 @@ void StemColumn::resized()
 	auto area = getLocalBounds().reduced (gap * 2, gap * 2);
 	area.removeFromTop (gap);   // below the colour line
 
-	const auto placeText = [] (juce::Label& label, juce::Rectangle<int> bounds, float share, bool bold)
-	{
-		label.setBounds (bounds);
-		label.setFont (juce::FontOptions ((float) bounds.getHeight() * share, bold ? juce::Font::bold : juce::Font::plain));
-	};
-	placeText (nameLabel, area.removeFromTop (row (nameShare)), nameFont, true);
-	placeText (stateLabel, area.removeFromTop (row (stateShare)), lineFont, false);
-	area.removeFromTop (gap);
-
-	// Two by two, each knob with its caption under it: GAIN, 3D; AUX, WIDTH.
-	const auto knobWidth = area.getWidth() / 2;
-	const auto placeRow = [&] (juce::Slider& left, juce::Label& leftCaption, juce::Slider& right, juce::Label& rightCaption)
-	{
-		auto knobs = area.removeFromTop (row (knobShare));
-		auto captions = area.removeFromTop (row (captionShare));
-		for (auto [knob, caption] : { std::pair { &left, &leftCaption }, std::pair { &right, &rightCaption } })
-		{
-			knob->setBounds (knobs.removeFromLeft (knobWidth).reduced (gap / 2, 0));
-			placeText (*caption, captions.removeFromLeft (knobWidth), lineFont, false);
-		}
-	};
-	placeRow (gainKnob, gainCaption, threeDKnob, threeDCaption);
-	placeRow (auxKnob, auxCaption, widthKnob, widthCaption);
+	placeKnobs (area, gap);
 	area.removeFromTop (gap);
 
 	// From the foot up: the length, CUE | MUTE, the pads two by two.
@@ -256,7 +180,8 @@ void StemColumn::resized()
 	const auto arrowWidth = lengthRow.getWidth() / 4;
 	keys.lengthDown().setBounds (lengthRow.removeFromLeft (arrowWidth));
 	keys.lengthUp().setBounds (lengthRow.removeFromRight (arrowWidth));
-	placeText (keys.length(), lengthRow, lineFont * 0.6f, false);
+	keys.length().setBounds (lengthRow);
+	keys.length().setFont (juce::FontOptions ((float) lengthRow.getHeight() * lineFont * 0.6f));
 	area.removeFromBottom (gap);
 	pair (area.removeFromBottom (row (keyRowShare)), cueKey, muteKey);
 	area.removeFromBottom (gap);
@@ -267,4 +192,29 @@ void StemColumn::resized()
 
 	const auto side = juce::jmin (area.getWidth(), area.getHeight());
 	stemViewer.setBounds (area.withSizeKeepingCentre (side, side));
+}
+
+// As on the panel: AUX (the pot) over WIDTH (the lower encoder) on the left,
+// GAIN (the upper encoder) to the right, its centre half-way between theirs.
+void StemColumn::placeKnobs (juce::Rectangle<int>& area, int gap)
+{
+	const auto height = (float) getHeight();
+	const auto half = area.getWidth() / 2;
+	// A knob is round: no taller than its half of the column is wide.
+	const auto knobHeight = juce::jmin (juce::roundToInt (height * knobShare), half);
+	const auto captionHeight = juce::roundToInt (height * captionShare);
+	const auto cell = knobHeight + captionHeight;
+	auto block = area.removeFromTop (2 * cell);
+	auto left = block.removeFromLeft (half);
+	auto right = block.withWidth (half).withTrimmedTop (cell / 2).withHeight (cell);
+
+	const auto place = [gap] (juce::Slider& knob, juce::Label& caption, juce::Rectangle<int> r, int knobPart)
+	{
+		knob.setBounds (r.removeFromTop (knobPart).reduced (gap / 2, 0));
+		caption.setBounds (r);
+		caption.setFont (juce::FontOptions ((float) r.getHeight() * lineFont));
+	};
+	place (auxKnob, auxCaption, left.removeFromTop (cell), knobHeight);
+	place (widthKnob, widthCaption, left, knobHeight);
+	place (gainKnob, gainCaption, right, knobHeight);
 }

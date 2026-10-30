@@ -25,11 +25,17 @@ TEST (SpatialLaw, MovingGainIsExactSilenceAtZero)
     EXPECT_EQ (spatial::movingGain (std::numeric_limits<float>::quiet_NaN()), 0.0f);
 }
 
-TEST (SpatialLaw, EffectiveThreeDMultipliesTheDeck)
+// No stem 3D of its own (2026-10-29): a stem at rest is steady, an action
+// rises to the deck's 3D and back.
+TEST (SpatialLaw, EffectiveThreeDIsTheDeckTimesTheEnvelope)
 {
-    EXPECT_FLOAT_EQ (spatial::effectiveThreeD (0.5f, 0.8f, 0.0f), 0.4f);
-    EXPECT_EQ (spatial::effectiveThreeD (0.0f, 0.8f, 1.0f), 0.0f);
-    EXPECT_FLOAT_EQ (spatial::effectiveThreeD (0.5f, 0.2f, 1.0f), 0.5f);
+    EXPECT_EQ (spatial::effectiveThreeD (1.0f, 0.0f), 0.0f) << "at rest: steady";
+    EXPECT_FLOAT_EQ (spatial::effectiveThreeD (0.5f, 1.0f), 0.5f);
+    EXPECT_FLOAT_EQ (spatial::effectiveThreeD (0.5f, 0.5f), 0.25f);
+    EXPECT_EQ (spatial::effectiveThreeD (0.0f, 1.0f), 0.0f);
+    EXPECT_FLOAT_EQ (spatial::effectiveThreeD (2.0f, -1.0f), 0.0f) << "each clamped to 0..1";
+    EXPECT_FLOAT_EQ (spatial::effectiveThreeD (2.0f, 3.0f), 1.0f);
+    EXPECT_EQ (spatial::effectiveThreeD (std::numeric_limits<float>::quiet_NaN(), 1.0f), 0.0f);
 }
 
 TEST (SpatialLaw, PhonesWeightsAreEqualPower)

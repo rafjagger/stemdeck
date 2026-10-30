@@ -161,16 +161,17 @@ namespace panel1
 			if (encoder.delta != 0)
 			{
 				Event event;
-				event.type = knob.threeD ? Event::Type::threeD : Event::Type::gain;
+				event.type = knob.width ? Event::Type::width : Event::Type::gain;
 				event.stem = knob.stem;
 				event.value = (double) encoder.delta;
 				events.push_back (event);
 			}
-			// Only the upper encoder's push means something: MUTE, as on the two-deck panel.
-			if (tracker.push (i, encoder.key).pressed && ! knob.threeD)
+			// Only the upper encoder's push means something: MUTE, as on the two-deck panel, and
+			// twice quickly a GAIN reset -- so it is its own event, not the MUTE pad's.
+			if (tracker.push (i, encoder.key).pressed && ! knob.width)
 			{
 				Event event;
-				event.type = Event::Type::stemMute;
+				event.type = Event::Type::gainPush;
 				event.stem = knob.stem;
 				events.push_back (event);
 			}
@@ -214,20 +215,22 @@ namespace panel1
 		for (int stem = 0; stem < stems; ++stem)
 		{
 			const auto& s = state.stems[(size_t) stem];
+			// A stem's keys rest in its own colour, so its two columns read as that stem.
+			const auto stemRest = panel::base (state.stemColours[(size_t) stem]);
 			const auto stemColour = lit (state.stemColours[(size_t) stem]);
 			for (const auto kind : { Kind::orbit, Kind::ping, Kind::rise, Kind::scat })
 			{
 				const auto pad = s.pads[(size_t) shapeOf (kind)];
 				const auto face = pad == motionlite::PadState::running ? stemColour
 								  : pad == motionlite::PadState::armed && blinkOn (nowSeconds) ? stemColour
-								  : rest;
+								  : stemRest;
 				light (out, { kind, stem }, face);
 			}
-			light (out, { Kind::stemCue, stem }, s.cued ? lit (state.cueColour) : rest);
-			light (out, { Kind::stemMute, stem }, s.muted ? lit (state.muteColour) : rest);
-			const auto dim = panel::scaled (rest, dimNumerator, dimDenominator);
-			light (out, { Kind::lengthDown, stem }, s.shortest ? dim : rest);
-			light (out, { Kind::lengthUp, stem }, s.longest ? dim : rest);
+			light (out, { Kind::stemCue, stem }, s.cued ? lit (state.cueColour) : stemRest);
+			light (out, { Kind::stemMute, stem }, s.muted ? lit (state.muteColour) : stemRest);
+			const auto dim = panel::scaled (stemRest, dimNumerator, dimDenominator);
+			light (out, { Kind::lengthDown, stem }, s.shortest ? dim : stemRest);
+			light (out, { Kind::lengthUp, stem }, s.longest ? dim : stemRest);
 		}
 		return out;
 	}

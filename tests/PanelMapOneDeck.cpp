@@ -121,13 +121,13 @@ TEST (PanelMapOneDeck, CellOfAnUnassignedControlIsNowhere)
 	EXPECT_EQ (panel1::cellOf ({ Kind::shift, -1 }), (Cell { 0, 9 }));
 }
 
-TEST (PanelMapOneDeck, UpperEncoderIsGainLowerIs3D)
+TEST (PanelMapOneDeck, UpperEncoderIsGainLowerIsWidth)
 {
 	for (int encoder = 0; encoder < panel::encoderCount; ++encoder)
 	{
 		const auto knob = panel1::encoderStem (encoder);
 		EXPECT_EQ (knob.stem, encoder % 4);
-		EXPECT_EQ (knob.threeD, encoder < 4) << encoder;
+		EXPECT_EQ (knob.width, encoder < 4) << encoder;
 	}
 	EXPECT_EQ (panel1::encoderStem (8).stem, -1);
 	EXPECT_EQ (panel1::encoderStem (-1).stem, -1);
@@ -210,25 +210,25 @@ TEST (PanelMapOneDeck, LengthStemCueAndMuteKeys)
 	EXPECT_EQ (mute.at (0).stem, 2);
 }
 
-TEST (PanelMapOneDeck, EncodersTurnGainAnd3DAndPushMutesOnlyFromTheUpperOne)
+TEST (PanelMapOneDeck, EncodersTurnGainAndWidthAndOnlyTheUpperOnePushes)
 {
 	InputDecoder decoder;
 	auto frame = idleFrame();
 	frame.encoders[5].delta = 3;    // upper, stem 1: gain
-	frame.encoders[2].delta = -2;   // lower, stem 2: 3D
+	frame.encoders[2].delta = -2;   // lower, stem 2: width
 	auto events = decoder.feed (frame);
 	ASSERT_EQ (events.size(), 2u);
 	const auto find = [&] (Event::Type type) { for (const auto& e : events) if (e.type == type) return e; return Event {}; };
 	EXPECT_EQ (find (Event::Type::gain).stem, 1);
 	EXPECT_EQ (find (Event::Type::gain).value, 3.0);
-	EXPECT_EQ (find (Event::Type::threeD).stem, 2);
-	EXPECT_EQ (find (Event::Type::threeD).value, -2.0);
+	EXPECT_EQ (find (Event::Type::width).stem, 2);
+	EXPECT_EQ (find (Event::Type::width).value, -2.0);
 
 	frame = idleFrame();
-	frame.encoders[6].key = KeyState::held;   // upper push, stem 2
+	frame.encoders[6].key = KeyState::held;   // upper push, stem 2: its own event (MUTE, twice = GAIN reset)
 	events = decoder.feed (frame);
 	ASSERT_EQ (events.size(), 1u);
-	EXPECT_EQ (events[0].type, Event::Type::stemMute);
+	EXPECT_EQ (events[0].type, Event::Type::gainPush);
 	EXPECT_EQ (events[0].stem, 2);
 
 	frame = idleFrame();
@@ -276,7 +276,7 @@ TEST (PanelMapOneDeck, PotsOnlyReportChanges)
 }
 
 //==============================================================================
-TEST (PanelMapOneDeckLeds, EverythingAtRestIsTheDeckColourAndUnassignedIsDark)
+TEST (PanelMapOneDeckLeds, TheDeckKeysRestInTheDeckColourAndUnassignedIsDark)
 {
 	const auto state = quietState();
 	const auto leds = panel1::leds (state, 0.0);
@@ -284,14 +284,28 @@ TEST (PanelMapOneDeckLeds, EverythingAtRestIsTheDeckColourAndUnassignedIsDark)
 	EXPECT_EQ (ledAtCell (leds, 0, 0), rest);   // CUE
 	EXPECT_EQ (ledAtCell (leds, 1, 0), rest);   // PLAY
 	EXPECT_EQ (ledAtCell (leds, 0, 9), rest);   // SHIFT
-	EXPECT_EQ (ledAtCell (leds, 2, 1), rest);
-	EXPECT_EQ (ledAtCell (leds, 4, 8), rest);
 	EXPECT_EQ (ledAtCell (leds, 1, 9), Rgb {});
 	for (int row = 2; row < 5; ++row)
 		EXPECT_EQ (ledAtCell (leds, row, 0), rest) << "the loop keys rest, " << row;
 	EXPECT_EQ (ledAtCell (leds, 5, 0), rest) << "CONTINUE rests";
 	for (int row = 2; row < panel::rows; ++row)
 		EXPECT_EQ (ledAtCell (leds, row, 9), Rgb {}) << row << ",9";
+}
+
+// The stem rows rest in their stem's colour (2026-10-29), so each pair of
+// columns reads as its stem: every key from the pads down to the length.
+TEST (PanelMapOneDeckLeds, EveryStemKeyRestsInItsStemsColour)
+{
+	const auto state = quietState();
+	const auto leds = panel1::leds (state, 0.0);
+	for (int stem = 0; stem < 4; ++stem)
+	{
+		const auto rest = panel::base (state.stemColours[(size_t) stem]);
+		ASSERT_NE (rest, panel::base (state.deckColour));
+		for (int row = panel::firstPadRow; row < panel::rows; ++row)
+			for (int side = 0; side < 2; ++side)
+				EXPECT_EQ (ledAtCell (leds, row, 2 * stem + 1 + side), rest) << "stem " << stem << ", row " << row << ", side " << side;
+	}
 }
 
 // CONTINUE: the last free key of the transport column, under LOOP OUT, lit
@@ -334,7 +348,7 @@ TEST (PanelMapOneDeckLeds, ARunningShotLightsInTheStemColour)
 	state.stems[2].pads[(size_t) Shape::rise] = PadState::running;
 	const auto leds = panel1::leds (state, 0.0);
 	EXPECT_EQ (ledAtCell (leds, 3, 5), panel::vivid (state.stemColours[2]));   // stem 2 RISE: col 5
-	EXPECT_EQ (ledAtCell (leds, 3, 6), panel::base (state.deckColour));        // its SCAT rests
+	EXPECT_EQ (ledAtCell (leds, 3, 6), panel::base (state.stemColours[2]));    // its SCAT rests
 }
 
 TEST (PanelMapOneDeckLeds, AnArmedShotBlinksEvery500Ms)
@@ -342,7 +356,7 @@ TEST (PanelMapOneDeckLeds, AnArmedShotBlinksEvery500Ms)
 	auto state = quietState();
 	state.stems[0].pads[(size_t) Shape::orbit] = PadState::armed;
 	const auto lit = panel::vivid (state.stemColours[0]);
-	const auto rest = panel::base (state.deckColour);
+	const auto rest = panel::base (state.stemColours[0]);
 	EXPECT_EQ (ledAtCell (panel1::leds (state, 10.0), 2, 1), lit);
 	EXPECT_EQ (ledAtCell (panel1::leds (state, 10.30), 2, 1), rest);
 	EXPECT_EQ (ledAtCell (panel1::leds (state, 10.50), 2, 1), lit);
@@ -358,16 +372,16 @@ TEST (PanelMapOneDeckLeds, CueAndMuteLightWhileOnAndTheEndsOfTheLengthRangeDim)
 	state.stems[3].longest = true;
 	state.stems[0].longest = true;
 	const auto leds = panel1::leds (state, 0.0);
-	const auto rest = panel::base (state.deckColour);
+	const auto restOf = [&state] (int stem) { return panel::base (state.stemColours[(size_t) stem]); };
 	EXPECT_EQ (ledAtCell (leds, 4, 3), panel::vivid (state.cueColour));
 	EXPECT_EQ (ledAtCell (leds, 4, 4), panel::vivid (state.muteColour));
-	EXPECT_EQ (ledAtCell (leds, 4, 1), rest);
+	EXPECT_EQ (ledAtCell (leds, 4, 1), restOf (0));
 
-	const auto dim = panel::scaled (rest, 1, 4);
-	EXPECT_EQ (ledAtCell (leds, 5, 7), dim);   // stem 3 shorter
-	EXPECT_EQ (ledAtCell (leds, 5, 8), dim);   // stem 3 longer
-	EXPECT_EQ (ledAtCell (leds, 5, 1), rest);  // stem 0 shorter still works
-	EXPECT_EQ (ledAtCell (leds, 5, 2), dim);   // stem 0 longer is at the end
+	const auto dimOf = [&] (int stem) { return panel::scaled (restOf (stem), 1, 4); };
+	EXPECT_EQ (ledAtCell (leds, 5, 7), dimOf (3));   // stem 3 shorter
+	EXPECT_EQ (ledAtCell (leds, 5, 8), dimOf (3));   // stem 3 longer
+	EXPECT_EQ (ledAtCell (leds, 5, 1), restOf (0));  // stem 0 shorter still works
+	EXPECT_EQ (ledAtCell (leds, 5, 2), dimOf (0));   // stem 0 longer is at the end
 }
 
 TEST (PanelMapOneDeckLeds, TransportAndShiftLightWhenOn)

@@ -9,16 +9,18 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include <functional>
-#include <optional>
 
 class DeckSpatialPorts;
 class StemDeckPlayer;
 
-// One stem of the one-deck screen (v4, spec section 9), top to bottom: its
-// name, the state line (home, armed, running with its beat count, the AUX
-// send when there is one), the knobs two by two (GAIN, 3D; AUX, WIDTH), the viewer (StemViewer: home dragged, a shot shown),
-// the one-shot pads two by two, CUE and MUTE, the length.
-// GAIN, CUE and MUTE are the player's; 3D, AUX, WIDTH and the home are the
+// One stem of the one-deck screen (v4, spec section 9), top to bottom: the
+// knobs as they sit on the A³ Motion panel (AUX the pot top left, WIDTH the
+// lower encoder under it, GAIN the upper encoder to the right, half-way
+// between them), the viewer (StemViewer: home dragged, a shot shown), the
+// one-shot pads two by two, CUE and MUTE, the length. No name, number or
+// state line (2026-10-29): the colour line on top is the stem, a running pad
+// carries its beat count.
+// GAIN, CUE and MUTE are the player's; AUX, WIDTH and the home are the
 // spatial settings (DeckSpatialPorts::settings), never the played pose.
 class StemColumn : public juce::Component
 {
@@ -27,7 +29,6 @@ public:
 
 	// Whether a file is on this slot; an empty one is drawn dim.
 	void setLoaded (bool);
-	juce::Label& header() { return nameLabel; }
 	// The owner's timer: the shot's state, the viewer, CUE and MUTE as the player has them.
 	void refresh();
 
@@ -36,38 +37,29 @@ public:
 	void restoreState (const StemMixState&);
 
 	juce::Slider& gain() { return gainKnob; }
-	juce::Slider& threeD() { return threeDKnob; }
 	juce::Slider& aux() { return auxKnob; }
 	juce::Slider& width() { return widthKnob; }
 	juce::TextButton& cue() { return cueKey; }
 	juce::TextButton& mute() { return muteKey; }
 	StemViewer& viewer() { return stemViewer; }
 	OneShotKeys& oneShots() { return keys; }
-	juce::String stateText() const { return stateLabel.getText(); }
 	juce::String auxCaptionText() const { return auxCaption.getText(); }
 
-	// Where the hardware pot for AUX stands while it has not picked the knob up (R13); none hides the mark.
-	void setAuxGhost (std::optional<double> position);
-	std::optional<double> auxGhost() const { return ghost; }
-	bool hasAuxGhost() const { return ghost.has_value(); }
-
 	void paint (juce::Graphics&) override;
-	void paintOverChildren (juce::Graphics&) override;
 	void resized() override;
 
 private:
 	void homeDragged (spatial::Pose);
-	void showShares();   // the 3D and AUX captions carry their values
+	void showAuxShare();   // the AUX caption carries its value
+	void placeKnobs (juce::Rectangle<int>& area, int gap);
 
 	StemDeckPlayer& player;
 	DeckSpatialPorts& ports;
 	const int stem;
 	const juce::Colour colour;
 
-	juce::Label nameLabel, stateLabel;
-	std::optional<double> ghost;
-	juce::Slider gainKnob, threeDKnob, auxKnob, widthKnob;
-	juce::Label gainCaption, threeDCaption, auxCaption, widthCaption;
+	juce::Slider gainKnob, auxKnob, widthKnob;
+	juce::Label gainCaption, auxCaption, widthCaption;
 	StemViewer stemViewer;
 	OneShotKeys keys;
 	juce::TextButton cueKey { "CUE" }, muteKey { "MUTE" };

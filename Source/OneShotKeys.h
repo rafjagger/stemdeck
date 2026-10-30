@@ -39,8 +39,6 @@ public:
 
 	static juce::String shapeName (motionlite::Shape);
 	static juce::String lengthName (double bars);   // "½ BAR", "1 BAR", "4 BARS"
-	// The stem's state in words: "ORBIT 4 · 2/4" running, "PING 2 · armed", "home".
-	static juce::String stateLine (const DeckMotion&, int stem);
 
 private:
 	void lookOfPad (motionlite::Shape);

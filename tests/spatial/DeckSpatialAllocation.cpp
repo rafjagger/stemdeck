@@ -131,7 +131,7 @@ TEST (DeckSpatialAllocation, ProcessDoesNotAllocate)
 					c.azimuth[(size_t) s] = -170.0f + 37.0f * (float) (phase + s);   // wraps past 180
 					c.elevation[(size_t) s] = (float) ((phase * 7 + s * 11) % 60);
 					c.width[(size_t) s] = 20.0f + 5.0f * (float) phase;
-					c.threeD[(size_t) s] = (float) ((phase + s) % 3) * 0.5f;
+					c.envelope[(size_t) s] = (float) ((phase + s) % 3) * 0.5f;
 					c.envelope[(size_t) s] = (phase % 4 == s) ? 1.0f : 0.0f;
 					c.muted[(size_t) s] = (phase + s) % 2 == 0;
 					c.cued[(size_t) s] = (phase + s) % 3 == 0;
@@ -275,7 +275,7 @@ TEST (DeckSpatialAllocation, AuxDoesNotAllocate)
 				{
 					c.aux[(size_t) s] = (float) ((b / 10 + s) % 4) * 0.4f;   // 0, 0.4, 0.8, 1.0 (clamped)
 					c.muted[(size_t) s] = (b / 10 + s) % 5 == 0;
-					c.threeD[(size_t) s] = (float) ((b / 10 + s) % 3) * 0.5f;
+					c.envelope[(size_t) s] = (float) ((b / 10 + s) % 3) * 0.5f;
 				}
 			const int offset = b * block;
 			std::array<const float*, 8> stems {};

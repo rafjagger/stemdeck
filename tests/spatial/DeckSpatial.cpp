@@ -65,7 +65,7 @@ void busyDeck (DeckSpatial::Controls& c)
 	const float threeD[] = { 0.0f, 0.3f, 0.7f, 1.0f };
 	for (int s = 0; s < DeckSpatial::stems; ++s)
 	{
-		c.threeD[(size_t) s] = threeD[s];
+		c.envelope[(size_t) s] = threeD[s];
 		c.azimuth[(size_t) s] = -120.0f + 70.0f * (float) s;
 		c.elevation[(size_t) s] = 10.0f * (float) s;
 		c.width[(size_t) s] = 30.0f + 20.0f * (float) s;
@@ -94,7 +94,7 @@ TEST (DeckSpatial, DeckThreeDZeroSilencesTheMovingPath)
 	const auto in = noiseOnStem (0);
 	auto deck = preparedDeck (block, [] (DeckSpatial::Controls& c)
 	{
-		c.threeD[0] = 1.0f;
+		c.envelope[0] = 1.0f;
 		c.deckThreeD = 0.0f;
 	});
 	const auto bed = bedReference (in.left (0), in.right (0));
@@ -112,7 +112,7 @@ TEST (DeckSpatial, ThreeDOneIsTheEncoderOnly)
 	const auto in = noiseOnStem (0);
 	auto deck = preparedDeck (block, [] (DeckSpatial::Controls& c)
 	{
-		c.threeD[0] = 1.0f;
+		c.envelope[0] = 1.0f;
 		c.azimuth[0] = 30.0f;
 		c.elevation[0] = 10.0f;
 		c.width[0] = 90.0f;
@@ -126,8 +126,8 @@ TEST (DeckSpatial, DeckThreeDMultiplies)
 {
 	juce::ScopedJuceInitialiser_GUI juceInitialiser;
 	const auto in = noiseOnStem (0);
-	auto halfDeck = preparedDeck (block, [] (DeckSpatial::Controls& c) { c.deckThreeD = 0.5f; c.threeD[0] = 1.0f; });
-	auto halfStem = preparedDeck (block, [] (DeckSpatial::Controls& c) { c.deckThreeD = 1.0f; c.threeD[0] = 0.5f; });
+	auto halfDeck = preparedDeck (block, [] (DeckSpatial::Controls& c) { c.deckThreeD = 0.5f; c.envelope[0] = 1.0f; });
+	auto halfStem = preparedDeck (block, [] (DeckSpatial::Controls& c) { c.deckThreeD = 1.0f; c.envelope[0] = 0.5f; });
 	const auto a = render (*halfDeck, in), b = render (*halfStem, in);
 	EXPECT_GT (halfDeck->movingGainNow (0), 0.0f);
 	EXPECT_EQ (halfDeck->movingGainNow (0), halfStem->movingGainNow (0));
@@ -143,7 +143,7 @@ TEST (DeckSpatial, MuteSilencesMainButNotCue)
 	{
 		// muted only after a while, so the ramp down is part of the run
 		auto& c = deck->controls();
-		c.threeD[0] = 0.5f;
+		c.envelope[0] = 0.5f;
 		c.cued[0] = true;
 		c.muted[0] = first >= oneSecond / 4;
 	} });
@@ -228,8 +228,8 @@ TEST (DeckSpatial, CueIsTheCuedStemsInIsolation)
 	juce::ScopedJuceInitialiser_GUI juceInitialiser;
 	const auto setUp = [] (DeckSpatial::Controls& c)
 	{
-		c.threeD[0] = 0.6f;
-		c.threeD[1] = 0.4f;
+		c.envelope[0] = 0.6f;
+		c.envelope[1] = 0.4f;
 		c.azimuth[1] = 90.0f;
 		c.cued[1] = true;
 	};
@@ -254,7 +254,7 @@ TEST (DeckSpatial, EnergyIsKeptAcross3D)
 		const float threeD[3] = { 0.0f, 0.5f, 1.0f };
 		for (int k = 0; k < 3; ++k)
 		{
-			auto deck = preparedDeck (block, [&] (DeckSpatial::Controls& c) { c.threeD[(size_t) stem] = threeD[k]; });
+			auto deck = preparedDeck (block, [&] (DeckSpatial::Controls& c) { c.envelope[(size_t) stem] = threeD[k]; });
 			levels[k] = rmsDb (render (*deck, in).bformat[0], settled);
 		}
 		EXPECT_NEAR (levels[1], levels[0], 1.5) << "stem " << stem << ", 3D 0.5 vs 0";
@@ -668,7 +668,7 @@ TEST (DeckSpatial, AuxZeroIsExactSilence)
 TEST (DeckSpatial, AuxTurnedToZeroSettlesToExactSilence)
 {
 	juce::ScopedJuceInitialiser_GUI juceInitialiser;
-	auto deck = preparedDeck (block, [] (DeckSpatial::Controls& c) { c.threeD[0] = 0.5f; c.aux[0] = 1.0f; });
+	auto deck = preparedDeck (block, [] (DeckSpatial::Controls& c) { c.envelope[0] = 0.5f; c.aux[0] = 1.0f; });
 	const int turnedOff = oneSecond / 4;
 	const auto out = render (*deck, noiseOnStem (0), { block, true, [&] (int first)
 	{
@@ -700,7 +700,7 @@ TEST (DeckSpatial, OneStemSentIsThatStemOnly)
 	juce::ScopedJuceInitialiser_GUI juceInitialiser;
 	const auto setPose = [] (DeckSpatial::Controls& c)
 	{
-		c.threeD[2] = 0.6f;
+		c.envelope[2] = 0.6f;
 		c.azimuth[2] = 40.0f;
 		c.elevation[2] = 15.0f;
 	};
@@ -718,7 +718,7 @@ TEST (DeckSpatial, AuxScalesWithTheSend)
 	const auto in = noiseOnStem (1);
 	const auto configure = [] (float aux)
 	{
-		return [aux] (DeckSpatial::Controls& c) { c.threeD[1] = 0.5f; c.azimuth[1] = -60.0f; c.aux[1] = aux; };
+		return [aux] (DeckSpatial::Controls& c) { c.envelope[1] = 0.5f; c.azimuth[1] = -60.0f; c.aux[1] = aux; };
 	};
 	auto full = preparedDeck (block, configure (1.0f)), half = preparedDeck (block, configure (0.5f));
 	const auto a = render (*full, in), b = render (*half, in);
@@ -731,7 +731,7 @@ TEST (DeckSpatial, AuxKeepsTheStemsPosition)
 {
 	juce::ScopedJuceInitialiser_GUI juceInitialiser;
 	const auto in = noiseOnStem (0);
-	auto deck = preparedDeck (block, [] (DeckSpatial::Controls& c) { c.threeD[0] = 1.0f; c.azimuth[0] = 90.0f; c.aux[0] = 1.0f; });
+	auto deck = preparedDeck (block, [] (DeckSpatial::Controls& c) { c.envelope[0] = 1.0f; c.azimuth[0] = 90.0f; c.aux[0] = 1.0f; });
 	const auto out = render (*deck, in);
 	// ACN 1 is Y, ACN 3 is X
 	const double mainRatio = std::pow (10.0, (rmsDb (out.bformat[1], settled) - rmsDb (out.bformat[3], settled)) / 20.0);
@@ -743,7 +743,7 @@ TEST (DeckSpatial, AuxKeepsTheStemsPosition)
 TEST (DeckSpatial, MutedStemSendsNoAux)
 {
 	juce::ScopedJuceInitialiser_GUI juceInitialiser;
-	auto deck = preparedDeck (block, [] (DeckSpatial::Controls& c) { c.threeD[0] = 0.5f; c.aux[0] = 1.0f; });
+	auto deck = preparedDeck (block, [] (DeckSpatial::Controls& c) { c.envelope[0] = 0.5f; c.aux[0] = 1.0f; });
 	const auto out = render (*deck, noiseOnStem (0), { block, true, [&] (int first)
 	{
 		deck->controls().muted[0] = first >= oneSecond / 4;
@@ -758,12 +758,12 @@ TEST (DeckSpatial, AuxIsPostThreeD)
 {
 	juce::ScopedJuceInitialiser_GUI juceInitialiser;
 	const auto in = noiseOnStem (0);
-	auto flat = preparedDeck (block, [] (DeckSpatial::Controls& c) { c.threeD[0] = 0.0f; c.aux[0] = 1.0f; });
+	auto flat = preparedDeck (block, [] (DeckSpatial::Controls& c) { c.envelope[0] = 0.0f; c.aux[0] = 1.0f; });
 	expectAuxEqualsMain (render (*flat, in), Rendered { bedReference (in.left (0), in.right (0)), {}, {}, {}, {} }, 1e-6f);
 
 	auto wide = preparedDeck (block, [] (DeckSpatial::Controls& c)
 	{
-		c.threeD[0] = 1.0f;
+		c.envelope[0] = 1.0f;
 		c.azimuth[0] = 30.0f;
 		c.width[0] = 90.0f;
 		c.aux[0] = 1.0f;
@@ -833,7 +833,7 @@ TEST (DeckSpatial, CueIsTheFirstNineChannelsOfTheThirdOrderCue)
 	// 3D 1 with a pose, so the higher orders are busy: the encoder alone
 	auto encoded = preparedDeck (block, [] (DeckSpatial::Controls& c)
 	{
-		c.threeD[0] = 1.0f;
+		c.envelope[0] = 1.0f;
 		c.azimuth[0] = 30.0f;
 		c.elevation[0] = 25.0f;
 		c.width[0] = 90.0f;
@@ -849,7 +849,7 @@ TEST (DeckSpatial, CueIsTheFirstNineChannelsOfTheThirdOrderCue)
 	expectCueIsFirstNineOf (render (*flat, in), bedReference (in.left (0), in.right (0)), 1e-6f);
 }
 
-// SD section 5: the cue is taken before MUTE, after GAIN and 3D (stem and deck).
+// SD section 5: the cue is taken before MUTE, after GAIN and 3D (the action's envelope times the deck's).
 TEST (DeckSpatial, CueIsPreMutePostThreeD)
 {
 	juce::ScopedJuceInitialiser_GUI juceInitialiser;
@@ -868,11 +868,11 @@ TEST (DeckSpatial, CueIsPreMutePostThreeD)
 	const float g = spatial::movingGain (0.5f);
 	const auto halfEach = sum (scaledBy (encoded, g), scaledBy (bed, 1.0f - g));
 
-	const auto mutedAndCued = [] (float stemThreeD, float deckThreeD)
+	const auto mutedAndCued = [] (float envelope, float deckThreeD)
 	{
 		return [=] (DeckSpatial::Controls& c)
 		{
-			c.threeD[0] = stemThreeD;
+			c.envelope[0] = envelope;
 			c.deckThreeD = deckThreeD;
 			c.azimuth[0] = -60.0f;
 			c.cued[0] = true;

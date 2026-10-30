@@ -46,7 +46,6 @@ namespace
 			if (withRouting)
 				stem->setAttribute ("buses", (int) mix.buses);
 			stem->setAttribute ("cue", mix.cue);
-			stem->setAttribute ("threeD", mix.threeD);
 			stem->setAttribute ("azimuth", mix.azimuth);
 			stem->setAttribute ("elevation", mix.elevation);
 			stem->setAttribute ("width", mix.width);
@@ -104,9 +103,9 @@ namespace
 			// cue send is its own attribute, absent (off) in a file without it.
 			deck.stems[s].cue = stem->getBoolAttribute ("cue");
 			// Absent in an older file: the defaults of StemMixState. Stored garbage is
-			// pulled into IEM's ranges here, so the engine never sees it.
+			// pulled into IEM's ranges here, so the engine never sees it. An older
+			// file's "threeD" (the stem's own 3D, gone 2026-10-29) is not read.
 			const StemMixState defaults;
-			deck.stems[s].threeD = juce::jlimit (0.0, 1.0, stem->getDoubleAttribute ("threeD", defaults.threeD));
 			deck.stems[s].azimuth = wrapDegrees (stem->getDoubleAttribute ("azimuth", defaults.azimuth));
 			deck.stems[s].elevation = juce::jlimit (-90.0, 90.0, stem->getDoubleAttribute ("elevation", defaults.elevation));
 			deck.stems[s].width = juce::jlimit (0.0, 360.0, stem->getDoubleAttribute ("width", defaults.width));

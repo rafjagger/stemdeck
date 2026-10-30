@@ -37,8 +37,8 @@ public:
 	// Never while advance() can run.
 	void dropPendingPresses();
 
-	// Audio thread, once per block: settings give each stem's home, 3D and
-	// width; played gets the pose, the width and the envelope. Allocation-free.
+	// Audio thread, once per block: settings give each stem's home and width;
+	// played gets the pose, the width and the envelope. Allocation-free.
 	void advance (const motionlite::Clock&, double blockSeconds, const DeckSpatial::Controls& settings,
 				  DeckSpatial::Controls& played);
 

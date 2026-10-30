@@ -45,3 +45,21 @@ TEST (AppSettings, TwoInstancesWritingInterleavedKeepTheirOwnKeys)
 	EXPECT_EQ (b.getValue ("phonesMode"), "on");
 	config.deleteRecursively();
 }
+
+// KEY quality is a device setting: written, saved, read back by the next
+// start; a file without it gives the light engine.
+TEST (AppSettings, TheKeyQualityPersistsAndReloads)
+{
+	const auto config = freshConfigDir ("keyquality");
+	{
+		juce::PropertiesFile a (appsettings::instanceOptions (config, 'A'));
+		EXPECT_EQ (appsettings::keyLockEngine (a), keylock::Engine::standard) << "the default";
+		appsettings::storeKeyLockEngine (a, keylock::Engine::high);
+		ASSERT_TRUE (a.saveIfNeeded());
+	}
+	juce::PropertiesFile a (appsettings::instanceOptions (config, 'A'));
+	EXPECT_EQ (appsettings::keyLockEngine (a), keylock::Engine::high);
+	juce::PropertiesFile b (appsettings::instanceOptions (config, 'B'));
+	EXPECT_EQ (appsettings::keyLockEngine (b), keylock::Engine::standard) << "per instance";
+	config.deleteRecursively();
+}

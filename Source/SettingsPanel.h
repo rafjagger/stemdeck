@@ -4,12 +4,13 @@
 
 #include "AutoDj.h"
 #include "FolderChoice.h"
+#include "KeyLock.h"
 #include "SpatialLaw.h"
 
 #include <optional>
 
 // StemDeck's settings: where the stem library lives, how long the Auto DJ
-// fades, whether tips show, and the way to the audio device. The folder is chosen, never typed
+// fades, the key lock's engine, whether tips show, and the way to the audio device. The folder is chosen, never typed
 // -- the rig's touch screen has no keyboard to type with (2026-09-30). OK and
 // Cancel are its own buttons: i3 gives a floating window no close button, so
 // the touch screen had no way out (2026-10-06). The audio device applies as
@@ -29,6 +30,7 @@ public:
 		// A -bformat instance: whether this deck holds the A³ Motion panel (one instance does).
 		std::optional<bool> panelHere;
 		bool panelFollowsWorkspace = false;   // R9: the workspace decides, the toggle only shows
+		keylock::Engine keyLockEngine = keylock::Engine::standard;
 	};
 
 	struct Actions
@@ -39,6 +41,7 @@ public:
 		std::function<void (bool shown)> onTips;
 		std::function<void (spatial::PhonesMode)> onPhonesMode;
 		std::function<void (bool here)> onPanelHere;
+		std::function<void (keylock::Engine)> onKeyLockEngine;
 	};
 
 	SettingsPanel (const Values& values, Actions actions);
@@ -64,6 +67,10 @@ private:
 	juce::Label phonesLabel { {}, "Phones decoder" };
 	juce::ComboBox phonesMode;
 	std::optional<spatial::PhonesMode> phonesModeShown;
+
+	juce::Label keyQualityLabel { {}, "KEY quality" };
+	juce::ComboBox keyQuality;
+	keylock::Engine keyQualityShown = keylock::Engine::standard;
 
 	juce::ToggleButton panelButton { "Panel: this deck" };
 	std::optional<bool> panelShown;

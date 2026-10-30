@@ -28,6 +28,7 @@ StemDeckPlayer::StemDeckPlayer (juce::AudioFormatManager& fm) : formatManager (f
 
 StemDeckPlayer::~StemDeckPlayer()
 {
+	standbyBuilder.removeAllJobs (true, 10000);
 	decoders.removeAllJobs (true, 10000);
 	clearStaged();
 	stagedDecoders.removeAllJobs (true, 10000);
@@ -203,9 +204,11 @@ bool StemDeckPlayer::isStagedReady() const
 void StemDeckPlayer::releaseRetired()
 {
 	std::shared_ptr<LoadedSet> old;
+	std::unique_ptr<Stretchers> oldStretchers;
 	{
 		const juce::ScopedLock sl (setLock);
 		std::swap (old, retired);
+		std::swap (oldStretchers, retiredStretchers);
 	}
 }
 
@@ -229,7 +232,21 @@ bool StemDeckPlayer::handOver()
 	loopStart = 0;
 	plainSeam = {};
 	readPosition = 0;
+	takeStandby();
 	++handoverCount;
+	return true;
+}
+
+// At CONTINUE's change, with setLock held on the audio thread: a standby
+// for the new set's rate takes over -- a pointer swap; the running
+// stretchers wait in retiredStretchers for releaseRetired().
+bool StemDeckPlayer::takeStandby()
+{
+	if (standby == nullptr || retiredStretchers != nullptr || ! standby->are (fileSampleRate.load(), engine.load()))
+		return false;
+
+	retiredStretchers = std::move (stretchers);
+	stretchers = std::move (standby);
 	return true;
 }
 
@@ -386,37 +403,115 @@ remote::Level StemDeckPlayer::popDeskLevel (int stem)
 	return deskLevels[(size_t) stem].pop();
 }
 
+// Switched on, it starts anew (crossfaded from the plain path): the
+// stretchers are built for the engine chosen. Already on, nothing changes
+// under the ear.
 void StemDeckPlayer::setKeyLock (bool on)
 {
-	if (on)
+	if (on && ! keyLock.load())
 		buildStretchers();
 
 	keyLock = on;
 }
 
-StemDeckPlayer::Stretchers::Stretchers (double fileRate) : sampleRate (fileRate)
+void StemDeckPlayer::setKeyLockEngine (keylock::Engine chosen)
 {
-	const auto alignment = KeyLockStretcher::measureAlignment (fileRate);
-	for (auto& stem : stems)
-		stem = std::make_unique<KeyLockStretcher> (2, fileRate, alignment);
+	if (engine.exchange (chosen) == chosen)
+		return;
+
+	dropStandby();   // one for the engine chosen before is no use now
+
+	{
+		const juce::ScopedLock sl (setLock);
+		if (stretchers == nullptr || stretchers->engine == chosen)
+			return;   // built when KEY is first switched on; or already this one
+	}
+
+	if (keylock::engineSwap (keyLock.load(), playing.load()) == keylock::EngineSwap::now)
+		buildStretchers();
+	else
+		prepareStandby();
 }
 
-// Builds (and measures) the stretchers for the loaded file's sample rate,
-// unless they are there; allocates, so never on the audio thread.
+std::optional<keylock::Engine> StemDeckPlayer::keyLockEngineInUse() const
+{
+	const juce::ScopedLock sl (setLock);
+	if (stretchers == nullptr)
+		return std::nullopt;
+	return stretchers->engine;
+}
+
+bool StemDeckPlayer::hasStandbyStretchers() const
+{
+	const juce::ScopedLock sl (setLock);
+	return standby != nullptr;
+}
+
+StemDeckPlayer::Stretchers::Stretchers (double fileRate, keylock::Engine chosen)
+	: sampleRate (fileRate), engine (chosen)
+{
+	const auto alignment = KeyLockStretcher::alignmentFor (fileRate, chosen);
+	for (auto& stem : stems)
+		stem = std::make_unique<KeyLockStretcher> (2, fileRate, chosen, alignment);
+}
+
+bool StemDeckPlayer::Stretchers::are (double fileRate, keylock::Engine wanted) const
+{
+	return engine == wanted && juce::approximatelyEqual (sampleRate, fileRate);
+}
+
+// Builds the stretchers for the loaded file's sample rate and the engine
+// chosen, unless they are there -- or waiting as the standby; allocates,
+// so never on the audio thread.
 void StemDeckPlayer::buildStretchers()
 {
 	const auto rate = fileSampleRate.load();
+	const auto chosen = engine.load();
+	std::unique_ptr<Stretchers> fresh;
 
-	if (stretchers != nullptr && juce::approximatelyEqual (stretchers->sampleRate, rate))
-		return;
+	{
+		const juce::ScopedLock sl (setLock);
+		if (stretchers != nullptr && stretchers->are (rate, chosen))
+			return;
+		if (standby != nullptr && standby->are (rate, chosen))
+			fresh = std::move (standby);
+	}
 
-	auto fresh = std::make_unique<Stretchers> (rate);
+	if (fresh == nullptr)
+		fresh = std::make_unique<Stretchers> (rate, chosen);
 
 	{
 		const juce::ScopedLock sl (setLock);
 		std::swap (stretchers, fresh);
 	}
 	// The old ones (now in fresh) go here, outside the lock.
+}
+
+// The standby, built on its own thread: for the rate playing and the engine
+// chosen, kept only if both still hold when it is done.
+void StemDeckPlayer::prepareStandby()
+{
+	const auto rate = fileSampleRate.load();
+	const auto chosen = engine.load();
+
+	standbyBuilder.addJob ([this, rate, chosen]
+	{
+		auto built = std::make_unique<Stretchers> (rate, chosen);
+		const juce::ScopedLock sl (setLock);
+		const bool wanted = engine.load() == chosen && juce::approximatelyEqual (fileSampleRate.load(), rate)
+						 && (stretchers == nullptr || ! stretchers->are (rate, chosen));
+		if (wanted)
+			std::swap (standby, built);
+		// What is in `built` now -- the unwanted one, or a standby it
+		// replaced -- is freed after the lock (declared before it).
+	});
+}
+
+void StemDeckPlayer::dropStandby()
+{
+	std::unique_ptr<Stretchers> dropped;
+	const juce::ScopedLock sl (setLock);
+	std::swap (dropped, standby);
 }
 
 void StemDeckPlayer::updateResamplingRatio()

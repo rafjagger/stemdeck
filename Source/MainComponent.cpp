@@ -116,6 +116,8 @@ MainComponent::MainComponent()
 	autoDjButton.setClickingTogglesState (true);
 	autoDjButton.setMouseClickGrabsKeyboardFocus (false);
 	autoDjButton.setColour (juce::TextButton::buttonOnColourId, Theme::play);
+	for (auto* player : players)
+		player->setKeyLockEngine (appsettings::keyLockEngine (settings()));
 	setAutoDjFade ({ settings().getIntValue ("autoDjOverlapBars", AutoDj::defaultMixBars),
 					 settings().getDoubleValue ("autoDjMixSeconds", AutoDj::defaultNoGridMixSeconds) });
 	autoDjButton.onClick = [this] { setAutoDj (autoDjButton.getToggleState()); };
@@ -1052,11 +1054,18 @@ void MainComponent::showSettings()
 	values.audioDeviceChoosable = ! audio->usingJack();
 	values.audioDeviceNote = audio->usingJack() ? "Under JACK: route with qjackctl or a patchbay" : juce::String();
 	values.tipsShown = tooltips != nullptr;
+	values.keyLockEngine = playerA.keyLockEngine();
 
 	SettingsPanel::Actions actions;
 	actions.onLibraryFolder = [this] (const juce::File& folder) { library.setFolder (folder); };
 	actions.onAutoDjFade = [this] (AutoDj::MixLength length) { setAutoDjFade (length); };
 	actions.onAudioDevice = [this] { audio->showDeviceSettings(); };
+	actions.onKeyLockEngine = [this] (keylock::Engine engine)
+	{
+		appsettings::storeKeyLockEngine (settings(), engine);
+		for (auto* player : players)
+			player->setKeyLockEngine (engine);
+	};
 	actions.onTips = [this] (bool shown)
 	{
 		settings().setValue (tips::settingKey, juce::String (tips::stored (shown)));

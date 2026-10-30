@@ -4,6 +4,8 @@
 
 #include <juce_data_structures/juce_data_structures.h>
 
+#include "KeyLock.h"
+
 // Where StemDeck keeps its settings (~/.config/StemDeck/StemDeck.settings)
 // and, beside them, the analysis cache. One place for both screens: a
 // -bformat instance shares the file with the two-deck app.
@@ -22,4 +24,9 @@ namespace appsettings
 	juce::File instanceSettingsFile (const juce::File& configDir, char letter);
 	juce::PropertiesFile::Options instanceOptions (const juce::File& configDir, char letter);
 	juce::PropertiesFile::Options instanceOptions (char letter);
+
+	// KEY quality (keylock::Engine), a device setting: in the instance's own
+	// file under -bformat, in the app's for the two-deck app. Unset: standard.
+	keylock::Engine keyLockEngine (const juce::PropertiesFile& settings);
+	void storeKeyLockEngine (juce::PropertiesFile& settings, keylock::Engine engine);
 }

@@ -131,4 +131,19 @@ namespace keylock
 
 		return input + samples * currentRate;
 	}
+
+	std::string engineName (Engine engine)
+	{
+		return engine == Engine::high ? "high" : "standard";
+	}
+
+	Engine engineFrom (const std::string& name)
+	{
+		return name == "high" ? Engine::high : Engine::standard;
+	}
+
+	EngineSwap engineSwap (bool keyLockOn, bool playing)
+	{
+		return keyLockOn && playing ? EngineSwap::atNextLoad : EngineSwap::now;
+	}
 }

@@ -29,7 +29,7 @@ SettingsPanel::SettingsPanel (const Values& values, Actions a)
 	  actions (std::move (a)),
 	  choice (values.libraryFolder.getFullPathName().toStdString())
 {
-	for (auto* heading : { &libraryLabel, &fadeLabel })
+	for (auto* heading : { &libraryLabel, &fadeLabel, &keyQualityLabel })
 	{
 		heading->setFont (juce::FontOptions (14.0f, juce::Font::bold));
 		addAndMakeVisible (heading);
@@ -83,6 +83,15 @@ SettingsPanel::SettingsPanel (const Values& values, Actions a)
 		addAndMakeVisible (phonesMode);
 	}
 
+	keyQualityShown = values.keyLockEngine;
+	keyQuality.addItem ("Standard (R2, light CPU)", (int) keylock::Engine::standard + 1);
+	keyQuality.addItem ("High (R3, more CPU)", (int) keylock::Engine::high + 1);
+	keyQuality.setSelectedId ((int) keyQualityShown + 1, juce::dontSendNotification);
+	keyQuality.setTooltip ("How KEY (key lock) stretches: High sounds cleaner while the tempo moves or stands away from 0 %, "
+						   "at two to three times the CPU. Takes effect at once while KEY is off or the deck is stopped; "
+						   "under a playing KEY, at the next track loaded.");
+	addAndMakeVisible (keyQuality);
+
 	panelShown = values.panelHere;
 	if (panelShown)
 	{
@@ -110,7 +119,7 @@ SettingsPanel::SettingsPanel (const Values& values, Actions a)
 	addAndMakeVisible (cancelButton);
 
 	showFolder();
-	setSize (520, panelShown ? 306 : 276);
+	setSize (520, panelShown ? 370 : 340);
 }
 
 void SettingsPanel::resized()
@@ -133,6 +142,10 @@ void SettingsPanel::resized()
 	fade.removeFromLeft (12);
 	fadeSeconds.setBounds (fade.removeFromLeft (80));
 	fadeSecondsUnit.setBounds (fade);
+	area.removeFromTop (8);
+	keyQualityLabel.setBounds (area.removeFromTop (22));
+	auto quality = area.removeFromTop (34);
+	keyQuality.setBounds (quality.withWidth (juce::jmin (quality.getWidth(), 320)));
 	area.removeFromTop (8);
 	if (panelShown)
 		panelButton.setBounds (area.removeFromTop (30));
@@ -176,6 +189,9 @@ void SettingsPanel::ok()
 	if (phonesModeShown && phonesMode.getSelectedId() > 0 && actions.onPhonesMode)
 		if (const auto chosen = (spatial::PhonesMode) (phonesMode.getSelectedId() - 1); chosen != *phonesModeShown)
 			actions.onPhonesMode (chosen);
+	if (keyQuality.getSelectedId() > 0 && actions.onKeyLockEngine)
+		if (const auto chosen = (keylock::Engine) (keyQuality.getSelectedId() - 1); chosen != keyQualityShown)
+			actions.onKeyLockEngine (chosen);
 	if (panelShown && panelButton.getToggleState() != *panelShown && actions.onPanelHere)
 		actions.onPanelHere (panelButton.getToggleState());
 	if (tipsButton.getToggleState() != tipsWereShown && actions.onTips)

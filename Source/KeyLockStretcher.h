@@ -8,7 +8,8 @@
 #include <vector>
 
 // Key lock for one stem: a Rubber Band stretcher, its reader and the
-// bookkeeping of where the ear is. A deck runs one per stem: R2 decides its
+// bookkeeping of where the ear is. R2 or R3, as KEY quality says
+// (keylock::Engine). A deck runs one per stem: R2 decides its
 // phase resets for all channels of a stretcher together, so in one shared
 // stretcher the tonal stems talked the drums out of their transients (a
 // click moved by up to 4 ms); apart, each stem keeps its own. Runs at the
@@ -32,16 +33,19 @@ public:
 		virtual std::int64_t jumpFrom (std::int64_t position) = 0;
 	};
 
-	// Builds and measures its alignment: allocates, a few milliseconds of
-	// work -- never on the audio thread.
-	KeyLockStretcher (int numChannels, double fileRate);
-	// With an alignment measured before, for the same sample rate.
-	KeyLockStretcher (int numChannels, double fileRate, const keylock::Alignment& known);
+	// Builds, with its alignment (alignmentFor): allocates, a few
+	// milliseconds of work -- never on the audio thread.
+	KeyLockStretcher (int numChannels, double fileRate, keylock::Engine engine = keylock::Engine::standard);
+	// With an alignment measured before, for the same engine and sample rate.
+	KeyLockStretcher (int numChannels, double fileRate, keylock::Engine engine, const keylock::Alignment& known);
 
 	// How the output lines up at `sampleRate`: measured on a stretcher of
-	// this kind, since it depends on the engine's window and hop sizes,
+	// this engine, since it depends on the engine's window and hop sizes,
 	// which depend on the rate and may change between Rubber Band releases.
-	static keylock::Alignment measureAlignment (double sampleRate);
+	static keylock::Alignment measureAlignment (double sampleRate, keylock::Engine engine);
+	// The same, measured once per engine and rate in this process and then
+	// remembered. Takes a lock: never on the audio thread.
+	static keylock::Alignment alignmentFor (double sampleRate, keylock::Engine engine);
 
 	// Start at `position`: the stretcher is filled with the audio before
 	// it, so the first block already plays from there.
@@ -59,6 +63,9 @@ public:
 	bool hasEnded() const { return ended; }
 
 	double getSampleRate() const { return sampleRate; }
+	keylock::Engine getEngine() const { return engine; }
+	// Rubber Band's own word for it: 2 (R2, Faster) or 3 (R3, Finer).
+	int engineVersion() const { return stretcher.getEngineVersion(); }
 	int getNumChannels() const { return numChannels; }
 	const keylock::Alignment& getAlignment() const { return alignment; }
 
@@ -74,6 +81,7 @@ private:
 
 	const int numChannels;
 	const double sampleRate;
+	const keylock::Engine engine;
 	RubberBand::RubberBandStretcher stretcher;
 	std::vector<std::vector<float>> inputStore, scratchStore;
 	std::vector<float*> inputs, scratch, offsetPointers;

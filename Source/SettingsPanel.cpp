@@ -124,6 +124,8 @@ SettingsPanel::SettingsPanel (const Values& values, Actions a)
 
 void SettingsPanel::resized()
 {
+	// The drop-downs take a share of the row, not a pixel count: about two thirds of the panel.
+	constexpr auto choiceShare = 0.65f;
 	auto area = getLocalBounds().reduced (12);
 	libraryLabel.setBounds (area.removeFromTop (22));
 	auto row = area.removeFromTop (34);
@@ -136,7 +138,7 @@ void SettingsPanel::resized()
 	fadeLabel.setBounds (area.removeFromTop (22));
 	phonesLabel.setBounds (fadeLabel.getBounds());
 	auto fade = area.removeFromTop (34);
-	phonesMode.setBounds (fade.withWidth (juce::jmin (fade.getWidth(), 320)));
+	phonesMode.setBounds (fade.withWidth (fade.proportionOfWidth (choiceShare)));
 	fadeBars.setBounds (fade.removeFromLeft (80));
 	fadeBarsUnit.setBounds (fade.removeFromLeft (60));
 	fade.removeFromLeft (12);
@@ -145,7 +147,7 @@ void SettingsPanel::resized()
 	area.removeFromTop (8);
 	keyQualityLabel.setBounds (area.removeFromTop (22));
 	auto quality = area.removeFromTop (34);
-	keyQuality.setBounds (quality.withWidth (juce::jmin (quality.getWidth(), 320)));
+	keyQuality.setBounds (quality.withWidth (quality.proportionOfWidth (choiceShare)));
 	area.removeFromTop (8);
 	if (panelShown)
 		panelButton.setBounds (area.removeFromTop (30));

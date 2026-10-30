@@ -13,6 +13,10 @@ if [ "$1" = "configure" ] && command -v systemctl >/dev/null 2>&1; then
 	for user in $(loginctl list-users --no-legend 2>/dev/null | awk '{print $2}'); do
 		systemctl --user --machine="$user@" daemon-reload 2>/dev/null || true
 	done
+	# Energy Efficient Ethernet off now; the udev rule covers later boots.
+	for port in /sys/class/net/eth* /sys/class/net/en*; do
+		[ -e "$port" ] && /usr/sbin/ethtool --set-eee "${port##*/}" eee off >/dev/null 2>&1 || true
+	done
 	echo "stemdeck: installed. A running StemDeck keeps the old version until"
 	echo "  systemctl --user restart stemdeck.service"
 fi

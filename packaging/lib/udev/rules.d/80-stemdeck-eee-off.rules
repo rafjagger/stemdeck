@@ -1,0 +1,9 @@
+# SPDX-FileCopyrightText: 2026 Raphael Eismann
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Energy Efficient Ethernet off on every wired port. systemd 257 (Debian 13,
+# the Pi deck host) ignores the .link drop-in's [EnergyEfficientEthernet]
+# section, and EEE on a small PoE switch made ptp4l fault ("timed out while
+# polling for tx timestamp"), so the deck sent nothing (2026-10-30).
+# A NIC without EEE makes ethtool fail; udev logs that and carries on.
+ACTION=="add", SUBSYSTEM=="net", KERNEL=="eth*|en*", RUN+="/usr/sbin/ethtool --set-eee $name eee off"

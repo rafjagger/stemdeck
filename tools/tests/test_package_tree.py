@@ -26,6 +26,7 @@ AES67_UNITS = ("a3-aes67-deck@.service", "stemdeck-aes67.service")
 AES67_TEMPLATES = ("pipewire-aes67-deck.conf.in", "pipewire-stemdeck-aes67.conf.in")
 EEE = "etc/systemd/network/99-default.link.d/stemdeck-eee.conf"
 USB_RULE = "usr/lib/udev/rules.d/90-stemdeck-usb.rules"
+EEE_RULE = "usr/lib/udev/rules.d/80-stemdeck-eee-off.rules"
 RATE_DROP_IN = "usr/share/stemdeck/10-stemdeck-rate.conf"
 A3_CORE_RATE = (REPO / "third_party/a3-core/platform-config/debian-x86_64/a3-core/home/aaa/.local/share"
                 "/a3-core/config/pipewire/pipewire.conf.d/10-a3-rate.conf")
@@ -73,6 +74,10 @@ class TheControlFile(unittest.TestCase):
         for package in EXTRA_DEPENDS:
             self.assertIn(package, depends)
 
+    def test_it_depends_on_ethtool_for_the_eee_rule(self):
+        depends = [d.strip() for d in self.fields["Depends"].split(",")]
+        self.assertIn("ethtool", depends)
+
     def test_the_binarys_libraries_are_left_to_shlibs(self):
         """Rubber Band's runtime is librubberband3 on forky (the NUCs) and
         librubberband2 on trixie (Raspberry Pi OS): a name written by hand
@@ -100,6 +105,14 @@ class TheMaintainerScripts(unittest.TestCase):
 
     def test_postinst_enables_for_every_user(self):
         self.assertIn("systemctl --global enable stemdeck.service", (DEBIAN / "postinst").read_text())
+
+    def test_postinst_switches_eee_off_on_the_wired_ports_now(self):
+        """No reboot: the udev rule only fires on the next add event. Errors are ignored."""
+        lines = [line for line in code_lines(DEBIAN / "postinst") if "ethtool" in line]
+        self.assertEqual(1, len(lines), lines)
+        self.assertIn("--set-eee", lines[0])
+        self.assertIn("eee off", lines[0])
+        self.assertIn("|| true", lines[0])
 
     def test_postinst_writes_into_no_home_and_restarts_nothing(self):
         for line in code_lines(DEBIAN / "postinst"):
@@ -159,6 +172,7 @@ class TheStagedTree(unittest.TestCase):
         "usr/share/stemdeck/links-core.json",
         RATE_DROP_IN,
         EEE,
+        EEE_RULE,
         USB_RULE,
         "usr/share/doc/stemdeck/copyright",
     }
@@ -226,6 +240,20 @@ class TheStagedTree(unittest.TestCase):
                                  (stage / "usr/share/stemdeck" / template).read_bytes())
         eee = (stage / EEE).read_text()
         self.assertIn("[EnergyEfficientEthernet]\nEnable=false\n", eee)
+
+    def test_package_ships_the_eee_off_rule(self):
+        """Debian 13's systemd 257 ignores the .link section; udev does the job there."""
+        stage = self.stage()
+        self.assertEqual((REPO / "packaging/lib/udev/rules.d/80-stemdeck-eee-off.rules").read_bytes(),
+                         (stage / EEE_RULE).read_bytes())
+        lines = [line for line in (stage / EEE_RULE).read_text().splitlines()
+                 if line.strip() and not line.startswith("#")]
+        self.assertEqual(1, len(lines), lines)
+        rule = lines[0]
+        self.assertIn('ACTION=="add"', rule)
+        self.assertIn('SUBSYSTEM=="net"', rule)
+        self.assertIn('KERNEL=="eth*|en*"', rule)
+        self.assertIn('RUN+="/usr/sbin/ethtool --set-eee $name eee off"', rule)
 
     def test_package_ships_the_usb_rule(self):
         """A USB block device with a filesystem is mounted for the recorder.

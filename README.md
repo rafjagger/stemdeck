@@ -11,9 +11,9 @@ It makes its own stems, too: drop a stereo track on the library and Demucs (`htd
 into drums, bass, other and vocals while the decks play on. See
 [Making stems from a stereo track](https://a3-audio.github.io/a3-doc/user/stemdeck.html#stemdeck-stem-creator).
 
-![Four StemDecks around the A³ desk and A³ Motion, each deck playing its own track](docs/a3-setup.jpg)
+![Four StemDecks around the A³ desk and A³ Motion, each deck playing its own track](https://a3-audio.github.io/img/a3-setup.jpg)
 
-![StemDeck main window](docs/stemdeck-main.png)
+![StemDeck main window](https://a3-audio.github.io/a3-doc/_images/stemdeck-one-deck-playing.png)
 
 **Documentation: [StemDeck](https://a3-audio.github.io/a3-doc/user/stemdeck.html)** and
 [StemDeck × A³ Motion](https://a3-audio.github.io/a3-doc/user/stemdeck-with-motion.html)

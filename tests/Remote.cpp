@@ -168,7 +168,7 @@ TEST (Remote, ATapGathersBlocksUntilItIsEmptied)
 	EXPECT_FLOAT_EQ (after.rms, 0.0f);
 }
 
-// One tick's meters go to the desk as one bundle (rafjagger/stemdeck#6): the
+// One tick's meters go to the desk as one bundle (a3-audio/a3-stemdeck#6): the
 // desk pays per datagram, and ten a tick from each StemDeck flooded it.
 namespace
 {
@@ -210,7 +210,7 @@ TEST (Remote, AnOlderTruthsBundleHasNoAuxPair)
 	EXPECT_EQ (bundle.back().address, "/vu/48");
 }
 
-// Two StemDecks write the same /vu/41-50 (rafjagger/stemdeck#6): a silent one
+// Two StemDecks write the same /vu/41-50 (a3-audio/a3-stemdeck#6): a silent one
 // sends nothing, so it does not overwrite the playing one's levels with zeros
 // -- except one zero bundle as it falls silent, so the desk's bars drop once.
 namespace

@@ -44,6 +44,11 @@ sudo apt install ffmpeg python3-venv
 tools/setup-separator.sh
 ```
 
+Stem sets for the library can also be made off the rig, on a rented cloud GPU, by
+[a3-stem-separator](https://github.com/a3-audio/a3-stem-separator): this repository's submodule
+`a3-stem-separator` (since 2026-10-31; `git submodule update --init a3-stem-separator`).
+StemDeck's build does not need it.
+
 ## Audio
 
 PipeWire is the only audio server; StemDeck is a JACK client of it. On a machine without the

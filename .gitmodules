@@ -1,3 +1,7 @@
 [submodule "third_party/a3-core"]
 	path = third_party/a3-core
 	url = https://github.com/a3-audio/a3-core
+
+[submodule "a3-stem-separator"]
+	path = a3-stem-separator
+	url = ../a3-stem-separator.git
